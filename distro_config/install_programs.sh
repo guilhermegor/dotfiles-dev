@@ -1203,7 +1203,7 @@ install_localsend() {
     print_status "section" "LOCALSEND"
     
     # Check if LocalSend is already installed
-    if command_exists localsend || flatpak list | grep -q "org.localsend.localsend_app"; then
+    if command_exists localsend || flatpak list 2>/dev/null | grep -q "org.localsend.localsend_app"; then
         print_status "info" "LocalSend already installed"
         return 0
     fi
@@ -1212,58 +1212,173 @@ install_localsend() {
     
     case "$PACKAGE_MANAGER" in
         apt)
-            print_status "info" "Downloading LocalSend..."
-            # Get latest release URL from GitHub
-            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | grep "browser_download_url.*deb" | cut -d '"' -f 4)
+            print_status "info" "Detecting system architecture..."
             
-            if [ -n "$latest_url" ]; then
-                wget -O localsend.deb "$latest_url"
-                print_status "info" "Installing LocalSend..."
-                sudo dpkg -i localsend.deb
-                sudo apt-get install -f -y
-                print_status "success" "LocalSend installed"
+            # Detect architecture
+            local arch=$(dpkg --print-architecture)
+            local download_arch=""
+            
+            case "$arch" in
+                amd64)
+                    download_arch="x86-64"
+                    print_status "info" "Architecture: x86-64 (amd64)"
+                    ;;
+                arm64)
+                    download_arch="arm-64"
+                    print_status "info" "Architecture: ARM 64-bit"
+                    ;;
+                armhf)
+                    download_arch="arm-32"
+                    print_status "info" "Architecture: ARM 32-bit"
+                    ;;
+                *)
+                    print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
+                    flatpak install -y flathub org.localsend.localsend_app
+                    cd - > /dev/null
+                    return 0
+                    ;;
+            esac
+            
+            print_status "info" "Fetching latest LocalSend release..."
+            
+            # Get latest release URL from GitHub for specific architecture
+            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | \
+                grep "browser_download_url.*linux-${download_arch}.deb" | \
+                head -n 1 | \
+                cut -d '"' -f 4)
+            
+            if [ -n "$latest_url" ] && [ "$latest_url" != "null" ]; then
+                print_status "info" "Downloading LocalSend from GitHub..."
+                print_status "config" "URL: $latest_url"
+                
+                if wget -O localsend.deb "$latest_url"; then
+                    print_status "info" "Installing LocalSend..."
+                    sudo dpkg -i localsend.deb
+                    sudo apt-get install -f -y
+                    print_status "success" "LocalSend installed via .deb package"
+                else
+                    print_status "warning" "Download failed. Installing via Flatpak..."
+                    flatpak install -y flathub org.localsend.localsend_app
+                    print_status "success" "LocalSend installed via Flatpak"
+                fi
             else
                 print_status "warning" "Could not fetch latest release. Installing via Flatpak..."
                 flatpak install -y flathub org.localsend.localsend_app
+                print_status "success" "LocalSend installed via Flatpak"
             fi
             ;;
+            
         dnf|yum)
-            print_status "info" "Downloading LocalSend RPM..."
-            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | grep "browser_download_url.*rpm" | cut -d '"' -f 4)
+            print_status "info" "Detecting system architecture..."
             
-            if [ -n "$latest_url" ]; then
-                wget -O localsend.rpm "$latest_url"
-                print_status "info" "Installing LocalSend..."
-                sudo $PACKAGE_MANAGER install -y localsend.rpm
-                print_status "success" "LocalSend installed"
+            # Detect architecture
+            local arch=$(uname -m)
+            local download_arch=""
+            
+            case "$arch" in
+                x86_64)
+                    download_arch="x86-64"
+                    print_status "info" "Architecture: x86-64"
+                    ;;
+                aarch64)
+                    download_arch="arm-64"
+                    print_status "info" "Architecture: ARM 64-bit"
+                    ;;
+                *)
+                    print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
+                    flatpak install -y flathub org.localsend.localsend_app
+                    cd - > /dev/null
+                    return 0
+                    ;;
+            esac
+            
+            print_status "info" "Fetching latest LocalSend release..."
+            
+            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | \
+                grep "browser_download_url.*linux-${download_arch}.rpm" | \
+                head -n 1 | \
+                cut -d '"' -f 4)
+            
+            if [ -n "$latest_url" ] && [ "$latest_url" != "null" ]; then
+                print_status "info" "Downloading LocalSend from GitHub..."
+                print_status "config" "URL: $latest_url"
+                
+                if wget -O localsend.rpm "$latest_url"; then
+                    print_status "info" "Installing LocalSend..."
+                    sudo $PACKAGE_MANAGER install -y localsend.rpm
+                    print_status "success" "LocalSend installed via .rpm package"
+                else
+                    print_status "warning" "Download failed. Installing via Flatpak..."
+                    flatpak install -y flathub org.localsend.localsend_app
+                    print_status "success" "LocalSend installed via Flatpak"
+                fi
             else
                 print_status "warning" "Could not fetch latest release. Installing via Flatpak..."
                 flatpak install -y flathub org.localsend.localsend_app
+                print_status "success" "LocalSend installed via Flatpak"
             fi
             ;;
+            
         pacman)
             if command_exists yay; then
                 print_status "info" "Installing LocalSend from AUR..."
                 yay -S --noconfirm localsend-bin
                 print_status "success" "LocalSend installed from AUR"
             else
-                print_status "info" "Installing LocalSend via Flatpak..."
+                print_status "info" "yay not found. Installing LocalSend via Flatpak..."
                 flatpak install -y flathub org.localsend.localsend_app
                 print_status "success" "LocalSend installed via Flatpak"
             fi
             ;;
-        zypper)
-            print_status "info" "Downloading LocalSend RPM..."
-            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | grep "browser_download_url.*rpm" | cut -d '"' -f 4)
             
-            if [ -n "$latest_url" ]; then
-                wget -O localsend.rpm "$latest_url"
-                print_status "info" "Installing LocalSend..."
-                $INSTALL_CMD localsend.rpm
-                print_status "success" "LocalSend installed"
+        zypper)
+            print_status "info" "Detecting system architecture..."
+            
+            # Detect architecture
+            local arch=$(uname -m)
+            local download_arch=""
+            
+            case "$arch" in
+                x86_64)
+                    download_arch="x86-64"
+                    print_status "info" "Architecture: x86-64"
+                    ;;
+                aarch64)
+                    download_arch="arm-64"
+                    print_status "info" "Architecture: ARM 64-bit"
+                    ;;
+                *)
+                    print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
+                    flatpak install -y flathub org.localsend.localsend_app
+                    cd - > /dev/null
+                    return 0
+                    ;;
+            esac
+            
+            print_status "info" "Fetching latest LocalSend release..."
+            
+            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | \
+                grep "browser_download_url.*linux-${download_arch}.rpm" | \
+                head -n 1 | \
+                cut -d '"' -f 4)
+            
+            if [ -n "$latest_url" ] && [ "$latest_url" != "null" ]; then
+                print_status "info" "Downloading LocalSend from GitHub..."
+                print_status "config" "URL: $latest_url"
+                
+                if wget -O localsend.rpm "$latest_url"; then
+                    print_status "info" "Installing LocalSend..."
+                    $INSTALL_CMD localsend.rpm
+                    print_status "success" "LocalSend installed via .rpm package"
+                else
+                    print_status "warning" "Download failed. Installing via Flatpak..."
+                    flatpak install -y flathub org.localsend.localsend_app
+                    print_status "success" "LocalSend installed via Flatpak"
+                fi
             else
                 print_status "warning" "Could not fetch latest release. Installing via Flatpak..."
                 flatpak install -y flathub org.localsend.localsend_app
+                print_status "success" "LocalSend installed via Flatpak"
             fi
             ;;
     esac
@@ -1273,23 +1388,28 @@ install_localsend() {
     case "$PACKAGE_MANAGER" in
         apt|pacman)
             if command_exists ufw; then
-                sudo ufw allow 53317/tcp comment "LocalSend"
-                sudo ufw allow 53317/udp comment "LocalSend"
-                sudo ufw reload
-                print_status "success" "Firewall configured for LocalSend"
+                sudo ufw allow 53317/tcp comment "LocalSend" 2>/dev/null
+                sudo ufw allow 53317/udp comment "LocalSend" 2>/dev/null
+                sudo ufw reload 2>/dev/null
+                print_status "success" "Firewall configured for LocalSend (port 53317)"
+            else
+                print_status "info" "UFW not installed. Skipping firewall configuration."
             fi
             ;;
         dnf|yum|zypper)
             if command_exists firewall-cmd; then
-                sudo firewall-cmd --permanent --add-port=53317/tcp
-                sudo firewall-cmd --permanent --add-port=53317/udp
-                sudo firewall-cmd --reload
-                print_status "success" "Firewall configured for LocalSend"
+                sudo firewall-cmd --permanent --add-port=53317/tcp 2>/dev/null
+                sudo firewall-cmd --permanent --add-port=53317/udp 2>/dev/null
+                sudo firewall-cmd --reload 2>/dev/null
+                print_status "success" "Firewall configured for LocalSend (port 53317)"
+            else
+                print_status "info" "firewalld not installed. Skipping firewall configuration."
             fi
             ;;
     esac
     
-    print_status "info" "LocalSend allows secure file sharing across devices on your local network"
+    print_status "info" "LocalSend: Secure file sharing on your local network"
+    print_status "config" "Available on Android, iOS, Windows, macOS, and Linux"
     
     cd - > /dev/null
 }

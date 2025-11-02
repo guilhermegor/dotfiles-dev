@@ -85,6 +85,31 @@ set_workspaces_primary_only() {
     print_status "success" "Workspaces configured for primary display only"
 }
 
+configure_mouse() {
+    print_status "info" "Configuring mouse settings..."
+    
+    # Set mouse speed (velocity) - middle value similar to the screenshot
+    # Values range from -1 (slow) to 1 (fast), 0 is default/middle
+    gsettings set org.gnome.desktop.peripherals.mouse speed 0.0
+    
+    # Enable mouse acceleration (default profile)
+    # Options: 'default' (with acceleration) or 'flat' (without acceleration)
+    gsettings set org.gnome.desktop.peripherals.mouse accel-profile 'default'
+    
+    # Enable natural scrolling (reverse scroll direction)
+    # When enabled, moving content follows finger direction (like touchpad/mobile)
+    gsettings set org.gnome.desktop.peripherals.mouse natural-scroll true
+    
+    local MOUSE_SPEED=$(gsettings get org.gnome.desktop.peripherals.mouse speed)
+    local ACCEL_PROFILE=$(gsettings get org.gnome.desktop.peripherals.mouse accel-profile)
+    local NATURAL_SCROLL=$(gsettings get org.gnome.desktop.peripherals.mouse natural-scroll)
+    
+    print_status "success" "Mouse configured:"
+    print_status "config" "  Speed: $MOUSE_SPEED"
+    print_status "config" "  Acceleration: $ACCEL_PROFILE"
+    print_status "config" "  Natural scrolling: $NATURAL_SCROLL"
+}
+
 configure_dock() {
     print_status "info" "Configuring dock..."
     
@@ -103,8 +128,22 @@ configure_dock() {
     set_dock_icon_size
     gsettings set org.gnome.shell.extensions.dash-to-dock background-opacity 0.7
     gsettings set org.gnome.shell.extensions.dash-to-dock transparency-mode 'FIXED'
+    
+    # Enable auto-hide and intellihide
+    print_status "info" "Configuring dock auto-hide..."
     gsettings set org.gnome.shell.extensions.dash-to-dock autohide true
     gsettings set org.gnome.shell.extensions.dash-to-dock intellihide true
+    
+    # Additional dock hiding settings for better behavior
+    gsettings set org.gnome.shell.extensions.dash-to-dock dock-fixed false
+    gsettings set org.gnome.shell.extensions.dash-to-dock intellihide-mode 'FOCUS_APPLICATION_WINDOWS'
+    
+    # Set hide animation speed (in seconds)
+    gsettings set org.gnome.shell.extensions.dash-to-dock animation-time 0.2
+    gsettings set org.gnome.shell.extensions.dash-to-dock hide-delay 0.2
+    gsettings set org.gnome.shell.extensions.dash-to-dock show-delay 0.25
+    
+    print_status "success" "Dock auto-hide configured"
     
     # Set favorite apps with robust desktop file detection
     print_status "info" "Configuring favorite apps..."
@@ -300,10 +339,11 @@ main() {
     fi
     
     print_status "info" "Starting Ubuntu appearance configuration"
-    echo -e "${MAGENTA}----------------------------------------${NC}"
+    echo -e "${MAGENTA}========================================${NC}"
     
     set_dark_mode
     configure_terminal
+    configure_mouse
     configure_dock
     set_ubuntu_ui_interface
     configure_workspaces
@@ -311,7 +351,7 @@ main() {
     configure_inactivity_time_lock
     configure_power_settings
     
-    echo -e "${MAGENTA}----------------------------------------${NC}"
+    echo -e "${MAGENTA}========================================${NC}"
     print_status "success" "All appearance settings configured successfully!"
     print_status "info" "Changes should take effect immediately. If not, try logging out and back in."
 }

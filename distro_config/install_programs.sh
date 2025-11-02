@@ -1155,6 +1155,145 @@ configure_gsconnect() {
     fi
 }
 
+install_miro() {
+    print_status "section" "MIRO"
+    
+    if snap list | grep -q miro; then
+        print_status "info" "Miro already installed"
+        return 0
+    fi
+    
+    case "$PACKAGE_MANAGER" in
+        apt|dnf|yum|zypper)
+            # Miro is best installed via Snap on most distributions
+            if command_exists snap; then
+                print_status "info" "Installing Miro via Snap..."
+                sudo snap install miro
+                print_status "success" "Miro installed via Snap"
+            else
+                print_status "warning" "Snap not available. Installing Miro via Flatpak..."
+                if command_exists flatpak; then
+                    flatpak install -y flathub com.miro.Miro
+                    print_status "success" "Miro installed via Flatpak"
+                else
+                    print_status "error" "Neither Snap nor Flatpak available. Please install one first."
+                    return 1
+                fi
+            fi
+            ;;
+        pacman)
+            # For Arch-based systems, try Flatpak first
+            if command_exists flatpak; then
+                print_status "info" "Installing Miro via Flatpak..."
+                flatpak install -y flathub com.miro.Miro
+                print_status "success" "Miro installed via Flatpak"
+            elif command_exists yay; then
+                print_status "info" "Installing Miro from AUR..."
+                yay -S --noconfirm miro-bin || yay -S --noconfirm miro
+                print_status "success" "Miro installed from AUR"
+            else
+                print_status "warning" "Please install Miro manually from AUR or via Flatpak"
+                return 1
+            fi
+            ;;
+    esac
+}
+
+install_localsend() {
+    print_status "section" "LOCALSEND"
+    
+    # Check if LocalSend is already installed
+    if command_exists localsend || flatpak list | grep -q "org.localsend.localsend_app"; then
+        print_status "info" "LocalSend already installed"
+        return 0
+    fi
+    
+    cd "$DOWNLOADS_DIR"
+    
+    case "$PACKAGE_MANAGER" in
+        apt)
+            print_status "info" "Downloading LocalSend..."
+            # Get latest release URL from GitHub
+            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | grep "browser_download_url.*deb" | cut -d '"' -f 4)
+            
+            if [ -n "$latest_url" ]; then
+                wget -O localsend.deb "$latest_url"
+                print_status "info" "Installing LocalSend..."
+                sudo dpkg -i localsend.deb
+                sudo apt-get install -f -y
+                print_status "success" "LocalSend installed"
+            else
+                print_status "warning" "Could not fetch latest release. Installing via Flatpak..."
+                flatpak install -y flathub org.localsend.localsend_app
+            fi
+            ;;
+        dnf|yum)
+            print_status "info" "Downloading LocalSend RPM..."
+            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | grep "browser_download_url.*rpm" | cut -d '"' -f 4)
+            
+            if [ -n "$latest_url" ]; then
+                wget -O localsend.rpm "$latest_url"
+                print_status "info" "Installing LocalSend..."
+                sudo $PACKAGE_MANAGER install -y localsend.rpm
+                print_status "success" "LocalSend installed"
+            else
+                print_status "warning" "Could not fetch latest release. Installing via Flatpak..."
+                flatpak install -y flathub org.localsend.localsend_app
+            fi
+            ;;
+        pacman)
+            if command_exists yay; then
+                print_status "info" "Installing LocalSend from AUR..."
+                yay -S --noconfirm localsend-bin
+                print_status "success" "LocalSend installed from AUR"
+            else
+                print_status "info" "Installing LocalSend via Flatpak..."
+                flatpak install -y flathub org.localsend.localsend_app
+                print_status "success" "LocalSend installed via Flatpak"
+            fi
+            ;;
+        zypper)
+            print_status "info" "Downloading LocalSend RPM..."
+            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | grep "browser_download_url.*rpm" | cut -d '"' -f 4)
+            
+            if [ -n "$latest_url" ]; then
+                wget -O localsend.rpm "$latest_url"
+                print_status "info" "Installing LocalSend..."
+                $INSTALL_CMD localsend.rpm
+                print_status "success" "LocalSend installed"
+            else
+                print_status "warning" "Could not fetch latest release. Installing via Flatpak..."
+                flatpak install -y flathub org.localsend.localsend_app
+            fi
+            ;;
+    esac
+    
+    # Configure firewall for LocalSend (uses port 53317)
+    print_status "info" "Configuring firewall for LocalSend..."
+    case "$PACKAGE_MANAGER" in
+        apt|pacman)
+            if command_exists ufw; then
+                sudo ufw allow 53317/tcp comment "LocalSend"
+                sudo ufw allow 53317/udp comment "LocalSend"
+                sudo ufw reload
+                print_status "success" "Firewall configured for LocalSend"
+            fi
+            ;;
+        dnf|yum|zypper)
+            if command_exists firewall-cmd; then
+                sudo firewall-cmd --permanent --add-port=53317/tcp
+                sudo firewall-cmd --permanent --add-port=53317/udp
+                sudo firewall-cmd --reload
+                print_status "success" "Firewall configured for LocalSend"
+            fi
+            ;;
+    esac
+    
+    print_status "info" "LocalSend allows secure file sharing across devices on your local network"
+    
+    cd - > /dev/null
+}
+
 # ============================================================================
 # SYSTEM OPTIMIZATION
 # ============================================================================
@@ -1256,6 +1395,8 @@ run_full_installation() {
     install_warp_terminal
     install_virtual_machine_manager
     configure_gsconnect
+    install_miro
+    install_localsend
     install_clamav
     cleanup_system
     
@@ -1295,6 +1436,8 @@ run_custom_installation() {
         "install_warp_terminal:Warp Terminal"
         "install_virtual_machine_manager:VM Manager"
         "configure_gsconnect:GSConnect"
+        "install_miro:Miro Collaboration Tool"
+        "install_localsend:LocalSend File Sharing"
         "install_clamav:ClamAV Antivirus"
         "cleanup_system:System Cleanup"
     )

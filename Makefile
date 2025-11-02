@@ -13,7 +13,7 @@ init: permissions install_programs irpf_download set_shortcuts ubuntu_workspace
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
-	@echo "║  🎉 Initial System Setup Complete!                        ║"
+	@echo "║  🎉 Initial System Setup Complete!                         ║"
 	@echo "║                                                            ║"
 	@echo "║  ✅ Permissions set for all scripts                        ║"
 	@echo "║  ✅ Essential programs installed                           ║"

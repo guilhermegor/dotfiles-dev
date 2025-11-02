@@ -263,6 +263,16 @@ configure_dock() {
     
     print_status "success" "Dock configured with ${#favorites[@]} favorite apps"
     print_status "info" "Apps in order: ${favorites_str}"
+    
+    # Ensure Thunderbird is removed from favorites if it exists
+    print_status "info" "Removing unwanted apps from dock..."
+    local current_favorites=$(gsettings get org.gnome.shell favorite-apps)
+    # Remove Thunderbird if present
+    if [[ "$current_favorites" == *"thunderbird"* ]]; then
+        current_favorites=$(echo "$current_favorites" | sed "s/, *'[^']*thunderbird[^']*\.desktop'//g" | sed "s/'[^']*thunderbird[^']*\.desktop', *//g" | sed "s/'[^']*thunderbird[^']*\.desktop'//g")
+        gsettings set org.gnome.shell favorite-apps "$current_favorites"
+        print_status "success" "Thunderbird removed from dock"
+    fi
 }
 
 set_ubuntu_ui_interface() {
@@ -330,6 +340,613 @@ configure_power_settings() {
     print_status "success" "Screen will turn off after $BATTERY_TIMEOUT seconds (30 min) on battery"
 }
 
+organize_app_folders() {
+    print_status "info" "Organizing applications into folders..."
+    
+    # Function to find desktop file and return just the filename
+    find_app_desktop_file() {
+        local app_name="$1"
+        if [ -f "$HOME/.local/share/applications/$app_name" ]; then
+            echo "$app_name"
+            return 0
+        elif [ -f "/usr/share/applications/$app_name" ]; then
+            echo "$app_name"
+            return 0
+        elif [ -f "/var/lib/snapd/desktop/applications/$app_name" ]; then
+            echo "$app_name"
+            return 0
+        fi
+        return 1
+    }
+    
+    # Get current folder settings
+    local current_folders=$(gsettings get org.gnome.desktop.app-folders folder-children)
+    
+    # Initialize array to store folder IDs
+    local folder_ids=()
+    
+    # ==================== SISTEMA (SYSTEM) FOLDER ====================
+    print_status "info" "Creating Sistema folder..."
+    local sistema_apps=()
+    
+    # System applications - common desktop file names
+    local system_app_names=(
+        # Software/Package Management
+        'update-manager.desktop' 'software-properties-gtk.desktop' 'software-properties-drivers.desktop'
+        'synaptic.desktop' 'org.gnome.Software.desktop' 'snap-store_ubuntu-software.desktop'
+        'io.github.flattool.Warehouse.desktop' 'com.github.tchx84.Flatseal.desktop' 'flatseal.desktop'
+        
+        # System Settings & Configuration
+        'gnome-control-center.desktop' 'unity-control-center.desktop' 'org.gnome.Settings.desktop'
+        'gnome-session-properties.desktop' 'gnome-startup-applications.desktop'
+        'org.gnome.PowerStats.desktop' 'gnome-power-statistics.desktop' 'power-statistics.desktop'
+        
+        # System Monitoring
+        'gnome-system-monitor.desktop' 'org.gnome.SystemMonitor.desktop'
+        'htop.desktop' 'cpu-x.desktop' 'cpux.desktop'
+        
+        # Hardware & Drivers
+        'nvidia-settings.desktop' 'software-properties-drivers.desktop'
+        'gnome-firmware-panel.desktop' 'gnome-firmware.desktop' 'firmware-updater.desktop'
+        'org.gnome.firmware.desktop' 'org.gnome.Firmware.desktop' 'fwupd.desktop'
+        'solaar.desktop' 'io.github.pwr_solaar.solaar.desktop'
+        
+        # Language & Locale
+        'gnome-language-selector.desktop' 'language-selector.desktop'
+        
+        # Help & Documentation
+        'yelp.desktop' 'gnome-help.desktop' 'help.desktop' 'org.gnome.Yelp.desktop'
+        
+        # Ubuntu specific
+        'ubuntu-session-properties.desktop' 'gnome-initial-setup.desktop'
+        'update-notifier.desktop' 'software-center.desktop'
+        
+        # Firmware Updater - Snap package versions (EXPLICITLY ADDED)
+        'firmware-updater_firmware-updater.desktop' 'firmware-updater_firmware-updater-app.desktop'
+    )
+    
+    # Search for system apps
+    for app in "${system_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            sistema_apps+=("'$result'")
+        fi
+    done
+    
+    # Also search for related patterns - INCLUDING SNAP LOCATIONS
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*system*.desktop \
+                        /usr/share/applications/*settings*.desktop \
+                        /usr/share/applications/*config*.desktop \
+                        /usr/share/applications/*update*.desktop \
+                        /usr/share/applications/*driver*.desktop \
+                        /usr/share/applications/*firmware*.desktop \
+                        /var/lib/snapd/desktop/applications/*firmware*.desktop \
+                        /var/lib/snapd/desktop/applications/*system*.desktop \
+                        /var/lib/snapd/desktop/applications/*update*.desktop \
+                        "$HOME/.local/share/applications"/*system*.desktop \
+                        "$HOME/.local/share/applications"/*settings*.desktop \
+                        "$HOME/.local/share/applications"/*config*.desktop \
+                        "$HOME/.local/share/applications"/*firmware*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            # Exclude some non-system apps that might match patterns
+            if [[ ! "$basename" =~ "game" ]] && [[ ! "$basename" =~ "sound" ]] && \
+               [[ ! "$basename" =~ "color" ]] && [[ ! " ${sistema_apps[@]} " =~ " '$basename' " ]]; then
+                sistema_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+    
+    # Remove duplicates
+    sistema_apps=($(echo "${sistema_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+    
+    if [ ${#sistema_apps[@]} -gt 0 ]; then
+        local sistema_apps_str=$(IFS=,; echo "${sistema_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ name 'Sistema'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ apps "[${sistema_apps_str}]"
+        folder_ids+=("'Sistema'")
+        print_status "success" "Sistema folder created with ${#sistema_apps[@]} apps"
+        print_status "config" "  Apps: ${sistema_apps_str}"
+    else
+        print_status "warning" "No Sistema apps found"
+    fi
+    
+    # ==================== SEGURANÇA (SECURITY) FOLDER ====================
+    print_status "info" "Creating Segurança folder..."
+    local seguranca_apps=()
+    
+    # Security and Backup applications
+    local security_app_names=(
+        # ClamTk - Antivirus
+        'clamtk.desktop' 'com.gitlab.davem.ClamTk.desktop'
+        
+        # Timeshift - System Restore
+        'timeshift-gtk.desktop' 'timeshift.desktop' 'com.teejeetech.Timeshift.desktop'
+        
+        # GNOME Backups / Deja Dup
+        'org.gnome.DejaDup.desktop' 'deja-dup.desktop' 'deja-dup-preferences.desktop'
+        'backups.desktop' 'gnome-backups.desktop'
+        
+        # Other backup tools
+        'duplicity.desktop' 'grsync.desktop' 'luckybackup.desktop'
+        
+        # Encryption tools
+        'veracrypt.desktop' 'keepassxc.desktop' 'seahorse.desktop' 'gnome-seahorse.desktop'
+        
+        # Firewall
+        'gufw.desktop' 'firewall-config.desktop' 'ufw.desktop'
+    )
+    
+    # Search for security and backup apps
+    for app in "${security_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            seguranca_apps+=("'$result'")
+        fi
+    done
+    
+    # Also search for related patterns
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*backup*.desktop \
+                        /usr/share/applications/*timeshift*.desktop \
+                        /usr/share/applications/*clam*.desktop \
+                        /usr/share/applications/*security*.desktop \
+                        /usr/share/applications/*firewall*.desktop \
+                        /usr/share/applications/*encrypt*.desktop \
+                        "$HOME/.local/share/applications"/*backup*.desktop \
+                        "$HOME/.local/share/applications"/*timeshift*.desktop \
+                        "$HOME/.local/share/applications"/*clam*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            # Check if not already in array
+            if [[ ! " ${seguranca_apps[@]} " =~ " '$basename' " ]]; then
+                seguranca_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+    
+    # Remove duplicates
+    seguranca_apps=($(echo "${seguranca_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+    
+    if [ ${#seguranca_apps[@]} -gt 0 ]; then
+        local seguranca_apps_str=$(IFS=,; echo "${seguranca_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ name 'Segurança'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ apps "[${seguranca_apps_str}]"
+        folder_ids+=("'Seguranca'")
+        print_status "success" "Segurança folder created with ${#seguranca_apps[@]} apps"
+        print_status "config" "  Apps: ${seguranca_apps_str}"
+    else
+        print_status "warning" "No Segurança apps found"
+    fi
+    
+    # ==================== UTILITÁRIOS (UTILITIES) FOLDER ====================
+    print_status "info" "Creating Utilitários folder..."
+    local utilitarios_apps=()
+    
+    # Utility applications
+    local utility_app_names=(
+        # Network
+        'nm-connection-editor.desktop' 'network-admin.desktop' 'gnome-nettool.desktop'
+        
+        # Disk & Storage
+        'org.gnome.baobab.desktop' 'baobab.desktop' # Disk Usage Analyzer
+        'org.gnome.DiskUtility.desktop' 'gnome-disks.desktop' 'gnome-disk-utility.desktop' # Disks
+        'org.gnome.FileShredder.desktop' 'file-shredder.desktop' 'shredder.desktop' # File Shredder
+        
+        # Document Viewers
+        'org.gnome.Evince.desktop' 'evince.desktop' # Document Viewer
+        'org.gnome.eog.desktop' 'eog.desktop' 'org.gnome.ImageViewer.desktop' # Image Viewer
+        
+        # Security & Passwords
+        'org.gnome.seahorse.Application.desktop' 'seahorse.desktop' # Passwords and Keys
+        
+        # Software Management
+        'org.gnome.Software.desktop' 'gnome-software.desktop' 'software-center.desktop' # App Center
+        'snap-store_ubuntu-software.desktop' 'snap-store_snap-store.desktop' 'snap-store.desktop' # Snap Store
+        'ubuntu-software.desktop' 'ubuntu-software-center.desktop' 'software-store.desktop'
+        'io.snapcraft.Store.desktop' 'snapcraft-store.desktop'
+        'org.gnome.Extensions.desktop' 'gnome-extensions.desktop' 'gnome-shell-extension-prefs.desktop' # Extensions
+        'gnome-software-properties.desktop'
+        
+        # Clipboard Manager
+        'com.github.hluk.copyq.desktop' 'copyq.desktop'
+        
+        # Remote Desktop
+        'org.gnome.Connections.desktop' 'gnome-connections.desktop' 'gnome-remote-desktop.desktop'
+        'org.gnome.RemoteDesktop.desktop' 'vino-preferences.desktop'
+        
+        # Photos & Images
+        'org.gnome.Shotwell.desktop' 'shotwell.desktop' 'shotwell-viewer.desktop'
+        
+        # Clocks & Time
+        'org.gnome.clocks.desktop' 'gnome-clocks.desktop'
+        
+        # Calculator
+        'org.gnome.Calculator.desktop' 'gnome-calculator.desktop' 'gcalctool.desktop'
+        
+        # File Manager
+        'org.gnome.Nautilus.desktop' 'nautilus.desktop' 'org.gnome.Files.desktop'
+        
+        # Mouse Configuration
+        'org.freedesktop.Piper.desktop' 'piper.desktop'
+        
+        # Media Player
+        'vlc.desktop' 'org.videolan.VLC.desktop'
+        
+        # System Logs
+        'org.gnome.Logs.desktop' 'gnome-logs.desktop' 'gnome-system-log.desktop'
+        
+        # Character Map
+        'org.gnome.Characters.desktop' 'gucharmap.desktop' 'gnome-characters.desktop'
+        
+        # Font Manager/Viewer
+        'org.gnome.font-viewer.desktop' 'gnome-font-viewer.desktop' 'org.gnome.FontManager.desktop'
+        'font-manager.desktop' 'fonts.desktop'
+        
+        # Text Editor
+        'org.gnome.gedit.desktop' 'gedit.desktop' 'org.gnome.TextEditor.desktop' 'gnome-text-editor.desktop'
+        
+        # Archive Manager
+        'org.gnome.FileRoller.desktop' 'file-roller.desktop'
+        
+        # Screenshot Tool
+        'org.gnome.Screenshot.desktop' 'gnome-screenshot.desktop'
+        
+        # Weather
+        'org.gnome.Weather.desktop' 'gnome-weather.desktop'
+        
+        # Maps
+        'org.gnome.Maps.desktop' 'gnome-maps.desktop'
+        
+        # Email Clients (to organize them into a folder)
+        'thunderbird.desktop' 'org.mozilla.Thunderbird.desktop' 'mozilla-thunderbird.desktop'
+        'evolution.desktop' 'org.gnome.Evolution.desktop'
+        'geary.desktop' 'org.gnome.Geary.desktop'
+        
+        # Startup Disk Creator
+        'usb-creator-gtk.desktop' 'gnome-multi-writer.desktop' 'org.gnome.MultiWriter.desktop'
+        'startup-disk-creator.desktop'
+        
+        # Document Scanner
+        'simple-scan.desktop' 'org.gnome.SimpleScan.desktop' 'gnome-simple-scan.desktop'
+        'xsane.desktop' 'skanlite.desktop'
+        
+        # Geomview - 3D geometry viewer
+        'geomview.desktop' 'org.geomview.Geomview.desktop'
+    )
+    
+    # Search for utility apps
+    for app in "${utility_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            utilitarios_apps+=("'$result'")
+        fi
+    done
+    
+    # Also search for related patterns
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/org.gnome.*.desktop \
+                        /usr/share/applications/*viewer*.desktop \
+                        /usr/share/applications/*calculator*.desktop \
+                        /usr/share/applications/*files*.desktop \
+                        /usr/share/applications/*nautilus*.desktop \
+                        /usr/share/applications/*thunderbird*.desktop \
+                        /usr/share/applications/*evolution*.desktop \
+                        /usr/share/applications/*geary*.desktop \
+                        /usr/share/applications/*scan*.desktop \
+                        /usr/share/applications/*usb-creator*.desktop \
+                        /usr/share/applications/*startup-disk*.desktop \
+                        /usr/share/applications/*geomview*.desktop \
+                        /var/lib/snapd/desktop/applications/snap-store*.desktop \
+                        /var/lib/snapd/desktop/applications/*software*.desktop \
+                        "$HOME/.local/share/applications"/org.gnome.*.desktop \
+                        "$HOME/.local/share/applications"/*thunderbird*.desktop \
+                        "$HOME/.local/share/applications"/*scan*.desktop \
+                        "$HOME/.local/share/applications"/*geomview*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            # Exclude some apps that should be in other categories
+            if [[ ! "$basename" =~ "settings" ]] && [[ ! "$basename" =~ "control-center" ]] && \
+               [[ ! "$basename" =~ "software-properties" ]] && [[ ! "$basename" =~ "update" ]] && \
+               [[ ! "$basename" =~ "firmware" ]] && [[ ! " ${utilitarios_apps[@]} " =~ " '$basename' " ]]; then
+                utilitarios_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+    
+    # Remove duplicates
+    utilitarios_apps=($(echo "${utilitarios_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+    
+    if [ ${#utilitarios_apps[@]} -gt 0 ]; then
+        local utilitarios_apps_str=$(IFS=,; echo "${utilitarios_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ name 'Utilitários'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ apps "[${utilitarios_apps_str}]"
+        folder_ids+=("'Utilitarios'")
+        print_status "success" "Utilitários folder created with ${#utilitarios_apps[@]} apps"
+        print_status "config" "  Apps: ${utilitarios_apps_str}"
+    else
+        print_status "warning" "No Utilitários apps found"
+    fi
+    
+    # ==================== SHARING FOLDER ====================
+    print_status "info" "Creating Sharing folder..."
+    local sharing_apps=()
+    
+    # Sharing applications: KDE Connect, LocalSend, Transmission
+    for app in 'org.kde.kdeconnect.settings.desktop' 'org.kde.kdeconnect.nonplasma.desktop' \
+               'org.kde.kdeconnect.app.desktop' 'org.kde.kdeconnect.sms.desktop' \
+               'kdeconnect-settings.desktop' 'kdeconnect.desktop' 'kdeconnect-indicator.desktop' \
+               'kdeconnect-sms.desktop' 'org.kde.kdeconnect_open.desktop' \
+               'org.localsend.localsend_app.desktop' 'localsend.desktop' 'localsend_app.desktop' \
+               'transmission-gtk.desktop' 'transmission.desktop' 'org.transmissionbt.Transmission.desktop'; do
+        if result=$(find_app_desktop_file "$app"); then
+            sharing_apps+=("'$result'")
+        fi
+    done
+    
+    # Also search for any KDE Connect, LocalSend, or Transmission related desktop files
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*kdeconnect*.desktop "$HOME/.local/share/applications"/*kdeconnect*.desktop \
+                        /usr/share/applications/*localsend*.desktop "$HOME/.local/share/applications"/*localsend*.desktop \
+                        /usr/share/applications/*transmission*.desktop "$HOME/.local/share/applications"/*transmission*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            # Check if not already in array
+            if [[ ! " ${sharing_apps[@]} " =~ " '$basename' " ]]; then
+                sharing_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+    
+    # Remove duplicates
+    sharing_apps=($(echo "${sharing_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+    
+    if [ ${#sharing_apps[@]} -gt 0 ]; then
+        local sharing_apps_str=$(IFS=,; echo "${sharing_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sharing/ name 'Sharing'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sharing/ apps "[${sharing_apps_str}]"
+        folder_ids+=("'Sharing'")
+        print_status "success" "Sharing folder created with ${#sharing_apps[@]} apps"
+        print_status "config" "  Apps: ${sharing_apps_str}"
+    else
+        print_status "warning" "No Sharing apps found"
+    fi
+    
+    # ==================== IRPF FOLDER ====================
+    print_status "info" "Creating IRPF folder..."
+    local irpf_apps=()
+    
+    # Find all IRPF related desktop files (multiple years)
+    # Pattern: IRPF YYYY, Ajuda do IRPF YYYY, Leia-me do IRPF YYYY
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*.desktop "$HOME/.local/share/applications"/*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            # Match IRPF patterns (case insensitive)
+            if [[ "$basename" =~ [Ii][Rr][Pp][Ff] ]] || [[ "$basename" =~ irpf ]]; then
+                irpf_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+    
+    # Remove duplicates
+    irpf_apps=($(echo "${irpf_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+    
+    if [ ${#irpf_apps[@]} -gt 0 ]; then
+        local irpf_apps_str=$(IFS=,; echo "${irpf_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/IRPF/ name 'IRPF'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/IRPF/ apps "[${irpf_apps_str}]"
+        folder_ids+=("'IRPF'")
+        print_status "success" "IRPF folder created with ${#irpf_apps[@]} apps"
+        print_status "config" "  Apps: ${irpf_apps_str}"
+    else
+        print_status "warning" "No IRPF apps found"
+    fi
+    
+    # ==================== DEV FOLDER ====================
+    print_status "info" "Creating DEV folder..."
+    local dev_apps=()
+    
+    # Development tools
+    for app in 'vim.desktop' 'gvim.desktop' 'org.vim.Vim.desktop' \
+               'dev.warp.Warp.desktop' 'warp.desktop' 'warp-terminal.desktop' \
+               'me.iepure.devtoolbox.desktop' 'devtoolbox.desktop' 'dev-toolbox.desktop'; do
+        if result=$(find_app_desktop_file "$app"); then
+            dev_apps+=("'$result'")
+        fi
+    done
+    
+    # Also search for any Warp, Vim, or Dev Toolbox related desktop files
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*warp*.desktop "$HOME/.local/share/applications"/*warp*.desktop \
+                        /usr/share/applications/*vim*.desktop "$HOME/.local/share/applications"/*vim*.desktop \
+                        /usr/share/applications/*devtoolbox*.desktop "$HOME/.local/share/applications"/*devtoolbox*.desktop \
+                        /usr/share/applications/*dev-toolbox*.desktop "$HOME/.local/share/applications"/*dev-toolbox*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            # Check if not already in array
+            if [[ ! " ${dev_apps[@]} " =~ " '$basename' " ]]; then
+                dev_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+    
+    # Remove duplicates
+    dev_apps=($(echo "${dev_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+    
+    if [ ${#dev_apps[@]} -gt 0 ]; then
+        local dev_apps_str=$(IFS=,; echo "${dev_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ name 'DEV'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ apps "[${dev_apps_str}]"
+        folder_ids+=("'DEV'")
+        print_status "success" "DEV folder created with ${#dev_apps[@]} apps"
+        print_status "config" "  Apps: ${dev_apps_str}"
+    else
+        print_status "warning" "No DEV apps found"
+    fi
+    
+    # ==================== EREADER FOLDER ====================
+    print_status "info" "Creating ereader folder..."
+    local ereader_apps=()
+    
+    # Calibre and related applications
+    for app in 'calibre-gui.desktop' 'calibre.desktop' \
+               'calibre-ebook-edit.desktop' 'ebook-edit.desktop' \
+               'calibre-ebook-viewer.desktop' 'ebook-viewer.desktop' \
+               'calibre-lrfviewer.desktop' 'lrfviewer.desktop'; do
+        if result=$(find_app_desktop_file "$app"); then
+            ereader_apps+=("'$result'")
+        fi
+    done
+    
+    # Also search for any Calibre related desktop files
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*calibre*.desktop "$HOME/.local/share/applications"/*calibre*.desktop \
+                        /usr/share/applications/*ebook*.desktop "$HOME/.local/share/applications"/*ebook*.desktop \
+                        /usr/share/applications/*lrf*.desktop "$HOME/.local/share/applications"/*lrf*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            # Check if not already in array
+            if [[ ! " ${ereader_apps[@]} " =~ " '$basename' " ]]; then
+                ereader_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+    
+    # Remove duplicates
+    ereader_apps=($(echo "${ereader_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+    
+    if [ ${#ereader_apps[@]} -gt 0 ]; then
+        local ereader_apps_str=$(IFS=,; echo "${ereader_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Ereader/ name 'Ereader'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Ereader/ apps "[${ereader_apps_str}]"
+        folder_ids+=("'Ereader'")
+        print_status "success" "Ereader folder created with ${#ereader_apps[@]} apps"
+        print_status "config" "  Apps: ${ereader_apps_str}"
+    else
+        print_status "warning" "No Ereader apps found"
+    fi
+    
+    # ==================== OFFICE FOLDER ====================
+    print_status "info" "Creating Office folder..."
+    local office_apps=()
+
+    # LibreOffice applications - ALL variants found on your system
+    for app in 'libreoffice-calc.desktop' 'libreoffice-draw.desktop' 'libreoffice-impress.desktop' \
+               'libreoffice-math.desktop' 'libreoffice-writer.desktop' 'libreoffice-base.desktop' \
+               'libreoffice-startcenter.desktop' 'libreoffice-xsltfilter.desktop'; do
+        if result=$(find_app_desktop_file "$app"); then
+            office_apps+=("'$result'")
+        fi
+    done
+
+    if [ ${#office_apps[@]} -gt 0 ]; then
+        local office_apps_str=$(IFS=,; echo "${office_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ name 'Office'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ apps "[${office_apps_str}]"
+        folder_ids+=("'Office'")
+        print_status "success" "Office folder created with ${#office_apps[@]} apps"
+        print_status "config" "  Apps: ${office_apps_str}"
+    else
+        print_status "warning" "No Office apps found"
+    fi
+    
+    # Virtualization applications
+    local virtualization_app_names=(
+        # Virtual Machine Managers
+        'virt-manager.desktop' 'org.virt-manager.virt-manager.desktop' # Virtual Machine Manager
+        'gnome-boxes.desktop' 'org.gnome.Boxes.desktop' # GNOME Boxes
+        'virtualbox.desktop' 'org.virtualbox.VirtualBox.desktop' 'virtualbox-qt.desktop'
+        'vmware-workstation.desktop' 'vmplayer.desktop'
+        
+        # Remote Viewers
+        'virt-viewer.desktop' 'org.virt-manager.virt-viewer.desktop' # Remote Viewer
+        'remote-viewer.desktop'
+        'vinagre.desktop' 'org.gnome.Vinagre.desktop' # VNC Viewer
+        'remmina.desktop' 'org.remmina.Remmina.desktop' # Remmina Remote Desktop
+        'rdesktop.desktop' 'xfreerdp.desktop'
+        
+        # Container Tools
+        'docker-desktop.desktop'
+        
+        # Other virtualization tools
+        'qemu.desktop' 'kvirt.desktop'
+    )
+    
+    # Search for virtualization apps
+    for app in "${virtualization_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            ambiente_virtual_apps+=("'$result'")
+        fi
+    done
+    
+    # Also search for related patterns
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*virt*.desktop \
+                        /usr/share/applications/*virtual*.desktop \
+                        /usr/share/applications/*vmware*.desktop \
+                        /usr/share/applications/*qemu*.desktop \
+                        /usr/share/applications/*boxes*.desktop \
+                        /usr/share/applications/*remote-viewer*.desktop \
+                        /usr/share/applications/*vinagre*.desktop \
+                        /usr/share/applications/*remmina*.desktop \
+                        "$HOME/.local/share/applications"/*virt*.desktop \
+                        "$HOME/.local/share/applications"/*virtual*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            # Check if not already in array
+            if [[ ! " ${ambiente_virtual_apps[@]} " =~ " '$basename' " ]]; then
+                ambiente_virtual_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+    
+    # Remove duplicates
+    ambiente_virtual_apps=($(echo "${ambiente_virtual_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+    
+    if [ ${#ambiente_virtual_apps[@]} -gt 0 ]; then
+        local ambiente_virtual_apps_str=$(IFS=,; echo "${ambiente_virtual_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ name 'Ambiente Virtual'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ apps "[${ambiente_virtual_apps_str}]"
+        folder_ids+=("'AmbienteVirtual'")
+        print_status "success" "Ambiente Virtual folder created with ${#ambiente_virtual_apps[@]} apps"
+        print_status "config" "  Apps: ${ambiente_virtual_apps_str}"
+    else
+        print_status "warning" "No Ambiente Virtual apps found"
+    fi
+    
+    # ==================== UPDATE FOLDER LIST ====================
+    # Reorder folders according to user preference: Sistema, Segurança, Utilitários, Sharing, IRPF, DEV, Ereader, Office, Ambiente Virtual
+    local ordered_folder_ids=()
+
+    # Add folders in the desired order
+    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'AmbienteVirtual'"; do
+        # Check if this folder was actually created
+        for created_folder in "${folder_ids[@]}"; do
+            if [ "$created_folder" = "$folder" ]; then
+                ordered_folder_ids+=("$folder")
+                break
+            fi
+        done
+    done
+
+    if [ ${#ordered_folder_ids[@]} -gt 0 ]; then
+        local ordered_folder_ids_str=$(IFS=,; echo "${ordered_folder_ids[*]}")
+        gsettings set org.gnome.desktop.app-folders folder-children "[${ordered_folder_ids_str}]"
+        print_status "success" "App folders organized in custom order: ${ordered_folder_ids_str}"
+    else
+        print_status "warning" "No folders were created"
+    fi
+    
+    print_status "info" "Application organization complete"
+}
+
 main() {
     # Check if running as root
     if [ "$EUID" -eq 0 ]; then 
@@ -350,10 +967,12 @@ main() {
     apply_additional_tweaks
     configure_inactivity_time_lock
     configure_power_settings
+    organize_app_folders
     
     echo -e "${MAGENTA}========================================${NC}"
     print_status "success" "All appearance settings configured successfully!"
     print_status "info" "Changes should take effect immediately. If not, try logging out and back in."
+    print_status "info" "Open 'Mostrar aplicativos' to see your organized folders!"
 }
 
 # Execute main function

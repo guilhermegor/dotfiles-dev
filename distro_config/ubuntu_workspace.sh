@@ -34,6 +34,78 @@ print_status() {
     esac
 }
 
+remove_thunderbird_completely() {
+    print_status "info" "Removing Thunderbird from dock favorites..."
+    
+    # Get current favorites
+    local current_favorites=$(gsettings get org.gnome.shell favorite-apps)
+    
+    # Check if Thunderbird exists in favorites using the exact desktop file names found
+    local thunderbird_patterns=(
+        "thunderbird.desktop"
+        "thunderbird_thunderbird.desktop"
+        "org.mozilla.Thunderbird.desktop"
+        "mozilla-thunderbird.desktop"
+    )
+    
+    local found_thunderbird=false
+    local new_favorites="$current_favorites"
+    
+    for pattern in "${thunderbird_patterns[@]}"; do
+        if [[ "$current_favorites" == *"$pattern"* ]]; then
+            print_status "info" "Found Thunderbird in favorites: $pattern"
+            found_thunderbird=true
+            
+            # Remove the Thunderbird entry using robust pattern matching
+            # Handle cases where it might be at beginning, middle, or end of the array
+            new_favorites=$(echo "$new_favorites" | sed "s/,'$pattern'//g" | sed "s/'$pattern',//g" | sed "s/'$pattern'//g")
+            
+            # Also handle cases with extra spaces
+            new_favorites=$(echo "$new_favorites" | sed "s/, *'$pattern'//g" | sed "s/'$pattern' *, *//g")
+        fi
+    done
+    
+    if [ "$found_thunderbird" = true ]; then
+        # Set the cleaned favorites list
+        gsettings set org.gnome.shell favorite-apps "$new_favorites"
+        print_status "success" "Thunderbird removed from dock favorites"
+        print_status "config" "Updated favorites: $new_favorites"
+    else
+        print_status "info" "Thunderbird not found in dock favorites"
+    fi
+    
+    # Also ensure Thunderbird is not in any app folders
+    print_status "info" "Ensuring Thunderbird is not in app folders..."
+    
+    # Get list of all app folders
+    local folder_children=$(gsettings get org.gnome.desktop.app-folders folder-children)
+    
+    # Remove brackets and quotes, then split by comma
+    folder_children=$(echo "$folder_children" | sed "s/\[//g" | sed "s/\]//g" | sed "s/'//g")
+    IFS=',' read -ra folders <<< "$folder_children"
+    
+    for folder in "${folders[@]}"; do
+        folder=$(echo "$folder" | xargs) # trim whitespace
+        if [ -n "$folder" ]; then
+            local folder_apps=$(gsettings get org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/${folder}/ apps)
+            
+            # Check if Thunderbird is in this folder
+            for pattern in "${thunderbird_patterns[@]}"; do
+                if [[ "$folder_apps" == *"$pattern"* ]]; then
+                    print_status "info" "Removing Thunderbird from folder: $folder"
+                    
+                    # Remove Thunderbird from folder apps
+                    local new_folder_apps=$(echo "$folder_apps" | sed "s/,'$pattern'//g" | sed "s/'$pattern',//g" | sed "s/'$pattern'//g")
+                    new_folder_apps=$(echo "$new_folder_apps" | sed "s/, *'$pattern'//g" | sed "s/'$pattern' *, *//g")
+                    
+                    gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/${folder}/ apps "$new_folder_apps"
+                    print_status "success" "Thunderbird removed from $folder folder"
+                fi
+            done
+        fi
+    done
+}
+
 configure_terminal() {
     print_status "info" "Configuring terminal profile..."
     
@@ -264,15 +336,8 @@ configure_dock() {
     print_status "success" "Dock configured with ${#favorites[@]} favorite apps"
     print_status "info" "Apps in order: ${favorites_str}"
     
-    # Ensure Thunderbird is removed from favorites if it exists
-    print_status "info" "Removing unwanted apps from dock..."
-    local current_favorites=$(gsettings get org.gnome.shell favorite-apps)
-    # Remove Thunderbird if present
-    if [[ "$current_favorites" == *"thunderbird"* ]]; then
-        current_favorites=$(echo "$current_favorites" | sed "s/, *'[^']*thunderbird[^']*\.desktop'//g" | sed "s/'[^']*thunderbird[^']*\.desktop', *//g" | sed "s/'[^']*thunderbird[^']*\.desktop'//g")
-        gsettings set org.gnome.shell favorite-apps "$current_favorites"
-        print_status "success" "Thunderbird removed from dock"
-    fi
+    # Now explicitly remove Thunderbird to ensure it's gone
+    remove_thunderbird_completely
 }
 
 set_ubuntu_ui_interface() {
@@ -600,7 +665,6 @@ organize_app_folders() {
         'org.gnome.Maps.desktop' 'gnome-maps.desktop'
         
         # Email Clients (to organize them into a folder)
-        'thunderbird.desktop' 'org.mozilla.Thunderbird.desktop' 'mozilla-thunderbird.desktop'
         'evolution.desktop' 'org.gnome.Evolution.desktop'
         'geary.desktop' 'org.gnome.Geary.desktop'
         
@@ -630,7 +694,6 @@ organize_app_folders() {
                         /usr/share/applications/*calculator*.desktop \
                         /usr/share/applications/*files*.desktop \
                         /usr/share/applications/*nautilus*.desktop \
-                        /usr/share/applications/*thunderbird*.desktop \
                         /usr/share/applications/*evolution*.desktop \
                         /usr/share/applications/*geary*.desktop \
                         /usr/share/applications/*scan*.desktop \
@@ -640,7 +703,7 @@ organize_app_folders() {
                         /var/lib/snapd/desktop/applications/snap-store*.desktop \
                         /var/lib/snapd/desktop/applications/*software*.desktop \
                         "$HOME/.local/share/applications"/org.gnome.*.desktop \
-                        "$HOME/.local/share/applications"/*thunderbird*.desktop \
+                        "$HOME/.local/share/applications"/*evolution*.desktop \
                         "$HOME/.local/share/applications"/*scan*.desktop \
                         "$HOME/.local/share/applications"/*geomview*.desktop; do
         if [ -f "$desktop_file" ]; then

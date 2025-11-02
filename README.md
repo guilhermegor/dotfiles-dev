@@ -107,7 +107,6 @@ The `make init` command will:
 - ✅ Configure custom shortcuts
 - ✅ Set up Ubuntu workspace
 
-**Estimated time:** 10-20 minutes
 
 After `make init` completes, you can optionally run:
 ```bash

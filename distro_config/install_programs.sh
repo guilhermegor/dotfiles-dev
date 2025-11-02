@@ -692,53 +692,173 @@ install_cursor() {
     print_status "info" "Downloading Cursor IDE..."
     print_status "warning" "This may take a few minutes (large file ~150MB)..."
     
+    # List of URLs to try in order
+    local cursor_urls=(
+        "https://downloader.cursor.sh/linux/appImage/x64"
+        "https://download.cursor.sh/linux/appImage/x64"
+        "https://cursor.sh/download/linux/appImage/x64"
+    )
+    
+    local download_success=false
+    local downloaded_file=""
+    
     case "$PACKAGE_MANAGER" in
         apt)
-            wget -O cursor.deb "https://downloader.cursor.sh/linux/appImage/x64"
+            # Try to download .deb package
+            for url in "${cursor_urls[@]}"; do
+                print_status "info" "Trying URL: $url"
+                
+                # Test DNS resolution first
+                local domain=$(echo "$url" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+                if ! host "$domain" &>/dev/null; then
+                    print_status "warning" "Cannot resolve domain: $domain"
+                    continue
+                fi
+                
+                if wget --timeout=30 --tries=3 -O cursor.deb "$url" 2>&1 | tee -a "$LOG_FILE"; then
+                    if [ -f "cursor.deb" ] && [ -s "cursor.deb" ]; then
+                        # Verify it's actually a .deb file
+                        if file cursor.deb | grep -q "Debian"; then
+                            download_success=true
+                            downloaded_file="cursor.deb"
+                            print_status "success" "Downloaded Cursor .deb package"
+                            break
+                        else
+                            print_status "warning" "Downloaded file is not a valid .deb package"
+                            rm -f cursor.deb
+                        fi
+                    fi
+                fi
+                
+                print_status "warning" "Download from $url failed, trying next URL..."
+            done
             
-            if [ ! -f "cursor.deb" ] || [ ! -s "cursor.deb" ]; then
-                print_status "warning" "Download may have failed. Trying alternative URL..."
-                wget -O cursor.deb "https://api2.cursor.sh/updates/download/golden/linux-x64-deb/cursor/1.7"
+            if [ "$download_success" = true ]; then
+                print_status "info" "Installing Cursor IDE..."
+                sudo dpkg -i cursor.deb || {
+                    print_status "warning" "dpkg installation had issues, fixing dependencies..."
+                    sudo apt-get install -f -y
+                }
+                
+                # Verify installation
+                if command_exists cursor || dpkg -l | grep -q cursor; then
+                    print_status "success" "Cursor IDE installed successfully"
+                else
+                    print_status "error" "Cursor installation failed"
+                    download_success=false
+                fi
             fi
             
-            print_status "info" "Installing Cursor IDE..."
-            sudo dpkg -i cursor.deb
-            sudo apt-get install -f -y  # Fix any dependency issues
+            # If .deb download/install failed, try AppImage as fallback
+            if [ "$download_success" = false ]; then
+                print_status "warning" "Unable to download/install .deb package"
+                print_status "info" "Trying AppImage installation as fallback..."
+                
+                # Try downloading AppImage directly
+                if wget --timeout=30 --tries=3 -O cursor.AppImage "https://download.cursor.sh/builds/latest/linux/x64/appImage" || \
+                   wget --timeout=30 --tries=3 -O cursor.AppImage "https://cursor.sh/download"; then
+                    
+                    if [ -f "cursor.AppImage" ] && [ -s "cursor.AppImage" ]; then
+                        chmod +x cursor.AppImage
+                        mkdir -p ~/.local/bin
+                        mv cursor.AppImage ~/.local/bin/cursor
+                        
+                        # Add to PATH if not already there
+                        if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+                            echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+                            print_status "info" "Added ~/.local/bin to PATH in ~/.bashrc"
+                        fi
+                        
+                        print_status "success" "Cursor installed as AppImage in ~/.local/bin/cursor"
+                        download_success=true
+                    fi
+                else
+                    print_status "error" "Could not download Cursor from any source"
+                    print_status "info" "Please visit https://cursor.sh to download manually"
+                fi
+            fi
             ;;
-        dnf|yum)
-            print_status "info" "Cursor IDE .rpm package not officially available"
-            print_status "info" "Installing AppImage instead..."
-            wget -O cursor.AppImage "https://downloader.cursor.sh/linux/appImage/x64"
-            chmod +x cursor.AppImage
-            mkdir -p ~/.local/bin
-            mv cursor.AppImage ~/.local/bin/cursor
-            print_status "success" "Cursor installed as AppImage in ~/.local/bin/cursor"
+            
+        dnf|yum|zypper)
+            print_status "info" "Installing Cursor AppImage..."
+            
+            # Try multiple AppImage URLs
+            local appimage_urls=(
+                "https://download.cursor.sh/builds/latest/linux/x64/appImage"
+                "https://downloader.cursor.sh/linux/appImage/x64"
+                "https://cursor.sh/download"
+            )
+            
+            for url in "${appimage_urls[@]}"; do
+                print_status "info" "Trying URL: $url"
+                
+                # Test DNS resolution first
+                local domain=$(echo "$url" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+                if ! host "$domain" &>/dev/null; then
+                    print_status "warning" "Cannot resolve domain: $domain"
+                    continue
+                fi
+                
+                if wget --timeout=30 --tries=3 -O cursor.AppImage "$url" 2>&1 | tee -a "$LOG_FILE"; then
+                    if [ -f "cursor.AppImage" ] && [ -s "cursor.AppImage" ]; then
+                        download_success=true
+                        break
+                    fi
+                fi
+                
+                print_status "warning" "Download from $url failed, trying next URL..."
+            done
+            
+            if [ "$download_success" = true ]; then
+                chmod +x cursor.AppImage
+                mkdir -p ~/.local/bin
+                mv cursor.AppImage ~/.local/bin/cursor
+                
+                # Add to PATH if not already there
+                if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+                    print_status "info" "Added ~/.local/bin to PATH in ~/.bashrc"
+                fi
+                
+                print_status "success" "Cursor installed as AppImage in ~/.local/bin/cursor"
+            else
+                print_status "error" "Could not download Cursor AppImage"
+                print_status "info" "Please visit https://cursor.sh to download manually"
+            fi
             ;;
+            
         pacman)
             print_status "info" "Installing Cursor from AUR..."
             if command_exists yay; then
-                yay -S --noconfirm cursor-bin || yay -S --noconfirm cursor-appimage
+                if yay -S --noconfirm cursor-bin 2>&1 | tee -a "$LOG_FILE"; then
+                    download_success=true
+                    print_status "success" "Cursor installed from AUR"
+                elif yay -S --noconfirm cursor-appimage 2>&1 | tee -a "$LOG_FILE"; then
+                    download_success=true
+                    print_status "success" "Cursor AppImage installed from AUR"
+                fi
             else
-                print_status "warning" "Please install yay first or download Cursor AppImage manually"
+                print_status "warning" "yay not found"
+                print_status "info" "Install yay first: sudo pacman -S --needed git base-devel && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si"
+                print_status "info" "Or download Cursor manually from https://cursor.sh"
             fi
-            ;;
-        zypper)
-            print_status "info" "Installing Cursor AppImage..."
-            wget -O cursor.AppImage "https://downloader.cursor.sh/linux/appImage/x64"
-            chmod +x cursor.AppImage
-            mkdir -p ~/.local/bin
-            mv cursor.AppImage ~/.local/bin/cursor
-            print_status "success" "Cursor installed as AppImage in ~/.local/bin/cursor"
             ;;
     esac
     
-    # Verify installation
+    # Final verification
     if command_exists cursor; then
-        print_status "success" "Cursor IDE installed successfully"
+        print_status "success" "Cursor IDE is ready to use"
         print_status "info" "Launch with: cursor"
+        cursor --version 2>&1 | head -n1 >> "$LOG_FILE" || true
+    elif [ -f ~/.local/bin/cursor ]; then
+        print_status "success" "Cursor AppImage installed in ~/.local/bin/cursor"
+        print_status "info" "Launch with: cursor (after reloading shell or logging out/in)"
+        print_status "config" "Or run: export PATH=\"\$HOME/.local/bin:\$PATH\" && cursor"
     else
-        print_status "warning" "Cursor IDE installed but command not found in PATH"
-        print_status "info" "Try launching from applications menu or add ~/.local/bin to PATH"
+        print_status "warning" "Cursor installation could not be completed automatically"
+        print_status "info" "Manual installation options:"
+        print_status "config" "1. Visit https://cursor.sh and download for Linux"
+        print_status "config" "2. Or try: wget https://cursor.sh/download -O cursor.AppImage && chmod +x cursor.AppImage"
     fi
     
     cd - > /dev/null
@@ -771,6 +891,40 @@ install_pyenv() {
     
     if command_exists pyenv; then
         print_status "info" "pyenv already installed"
+        return 0
+    fi
+    
+    # Check if .pyenv directory exists but pyenv command isn't available
+    if [ -d "$HOME/.pyenv" ]; then
+        print_status "warning" "Found existing ~/.pyenv directory but pyenv command not available"
+        print_status "info" "Setting up existing pyenv installation..."
+        
+        export PYENV_ROOT="$HOME/.pyenv"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        
+        # Add to shell configuration if not already present
+        if ! grep -q "PYENV_ROOT" ~/.bashrc; then
+            {
+                echo 'export PYENV_ROOT="$HOME/.pyenv"'
+                echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"'
+                echo 'eval "$(pyenv init - bash)"'
+            } >> ~/.bashrc
+            print_status "success" "pyenv configuration added to ~/.bashrc"
+        fi
+        
+        if ! grep -q "PYENV_ROOT" ~/.profile; then
+            {
+                echo 'export PYENV_ROOT="$HOME/.pyenv"'
+                echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"'
+                echo 'eval "$(pyenv init - bash)"'
+            } >> ~/.profile
+            print_status "success" "pyenv configuration added to ~/.profile"
+        fi
+        
+        # Source for current session
+        eval "$(pyenv init - bash)"
+        
+        print_status "success" "Existing pyenv setup completed"
         return 0
     fi
     

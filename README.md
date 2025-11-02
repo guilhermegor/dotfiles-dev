@@ -67,19 +67,47 @@
 
 Get your Linux system configured in seconds:
 ```bash
+sudo apt update && sudo apt upgrade -y && sudo apt-get update
+sudo apt install dkms git -y
+
+mkdir ~/github
+cd ~/github
 git clone https://github.com/guilhermegor/linux-distro-init.git
 cd linux-distro-init
 
-# Run the complete initial setup - one command does it all!
 make init
 ```
 
-**What `make init` does:**
-- ✅ Sets executable permissions for all scripts
-- ✅ Installs essential programs
-- ✅ Downloads IRPF (Brazilian tax software)
-- ✅ Configures custom shortcuts
-- ✅ Sets up Ubuntu workspace
+### 📋 Important Notes
+
+**⚠️ Administrator Privileges Required**
+
+During the setup process, you will be prompted to enter your system password multiple times. This is necessary to execute commands with administrator privileges (sudo) for system-wide configurations and installations.
+
+**⌨️ Navigation Tips**
+
+- Use **Tab** key to navigate between options in interactive menus
+- Use **Arrow keys** (↑/↓) to move through selection lists
+- Press **Enter** to confirm your selection
+- Press **Spacebar** to toggle checkboxes (when applicable)
+
+**💡 Setup Tips**
+
+- Ensure you have a **stable internet connection** before starting
+- The initial setup may take **10-20 minutes** depending on your system
+- It's recommended to **close unnecessary applications** during installation
+- If prompted to restart any services, choose **Yes** to ensure proper configuration
+
+**🔄 What to Expect**
+
+The `make init` command will:
+- ✅ Set executable permissions for all scripts
+- ✅ Install essential programs
+- ✅ Download IRPF (Brazilian tax software)
+- ✅ Configure custom shortcuts
+- ✅ Set up Ubuntu workspace
+
+**Estimated time:** 10-20 minutes
 
 After `make init` completes, you can optionally run:
 ```bash

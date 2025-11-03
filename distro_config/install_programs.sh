@@ -22,6 +22,8 @@ PACKAGE_MANAGER=""
 INSTALL_CMD=""
 UPDATE_CMD=""
 UPGRADE_CMD=""
+UBUNTU_VERSION=""
+UBUNTU_CODENAME=""
 
 # ============================================================================
 # DISTRO DETECTION
@@ -33,6 +35,8 @@ detect_distro() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         DISTRO=$ID
+        UBUNTU_VERSION="$VERSION_ID"
+        UBUNTU_CODENAME="$VERSION_CODENAME"
         
         case "$DISTRO" in
             ubuntu|debian|pop|linuxmint)
@@ -41,6 +45,7 @@ detect_distro() {
                 UPDATE_CMD="sudo apt update"
                 UPGRADE_CMD="sudo apt upgrade -y"
                 print_status "success" "Detected Debian-based system: $PRETTY_NAME"
+                print_status "info" "Ubuntu Version: $UBUNTU_VERSION, Codename: $UBUNTU_CODENAME"
                 ;;
             fedora|rhel|centos|rocky|almalinux)
                 PACKAGE_MANAGER="dnf"
@@ -76,6 +81,8 @@ detect_distro() {
     
     echo "DISTRO=$DISTRO" >> "$LOG_FILE"
     echo "PACKAGE_MANAGER=$PACKAGE_MANAGER" >> "$LOG_FILE"
+    echo "UBUNTU_VERSION=$UBUNTU_VERSION" >> "$LOG_FILE"
+    echo "UBUNTU_CODENAME=$UBUNTU_CODENAME" >> "$LOG_FILE"
 }
 
 detect_package_manager_fallback() {
@@ -242,6 +249,145 @@ install_if_missing() {
 }
 
 # ============================================================================
+# INSYNC DOWNLOAD AND INSTALLATION
+# ============================================================================
+
+install_insync() {
+    print_status "section" "INSYNC DOWNLOAD AND INSTALLATION"
+    
+    # Check if Insync is already installed
+    if command_exists insync || dpkg -l 2>/dev/null | grep -q insync; then
+        print_status "info" "Insync already installed"
+        return 0
+    fi
+    
+    # Only support Ubuntu/Debian for now as we have the specific .deb URL
+    if [[ "$DISTRO" != "ubuntu" && "$DISTRO" != "debian" ]]; then
+        print_status "warning" "Insync installation currently only supported on Ubuntu/Debian"
+        print_status "info" "Please install Insync manually for your distribution"
+        return 1
+    fi
+    
+    cd "$DOWNLOADS_DIR"
+    
+    # Map Ubuntu versions to Insync release names
+    local insync_codename=""
+    case "$UBUNTU_CODENAME" in
+        "noble")
+            insync_codename="noble"
+            ;;
+        "jammy")
+            insync_codename="jammy"
+            ;;
+        "focal")
+            insync_codename="focal"
+            ;;
+        "bionic")
+            insync_codename="bionic"
+            ;;
+        *)
+            print_status "warning" "Unknown Ubuntu codename: $UBUNTU_CODENAME, using noble as fallback"
+            insync_codename="noble"
+            ;;
+    esac
+    
+    local insync_version="3.9.6.60027"
+    local insync_deb_url="https://cdn.insynchq.com/builds/linux/${insync_version}/insync_${insync_version}-${insync_codename}_amd64.deb"
+    local insync_deb_file="insync_${insync_version}-${insync_codename}_amd64.deb"
+    
+    print_status "info" "Detected Ubuntu $UBUNTU_VERSION ($UBUNTU_CODENAME)"
+    print_status "info" "Downloading Insync for $insync_codename..."
+    print_status "config" "Download URL: $insync_deb_url"
+    
+    # Download Insync
+    if wget -O "$insync_deb_file" "$insync_deb_url" 2>&1 | tee -a "$LOG_FILE"; then
+        if [ -f "$insync_deb_file" ] && [ -s "$insync_deb_file" ]; then
+            print_status "success" "Insync downloaded successfully"
+            
+            # Verify it's a valid .deb file
+            if file "$insync_deb_file" | grep -q "Debian"; then
+                print_status "info" "Installing Insync..."
+                
+                # Install the .deb package
+                if sudo dpkg -i "$insync_deb_file"; then
+                    print_status "success" "Insync installed successfully"
+                    
+                    # Fix any dependency issues
+                    sudo apt-get install -f -y
+                    
+                    # Verify installation
+                    if command_exists insync || dpkg -l | grep -q insync; then
+                        print_status "success" "Insync installation verified"
+                        print_status "info" "Insync version: $insync_version"
+                        
+                        # Launch Insync
+                        print_status "info" "Starting Insync..."
+                        insync start &>> "$LOG_FILE" &
+                        print_status "success" "Insync started"
+                    else
+                        print_status "warning" "Insync installed but command not found"
+                    fi
+                else
+                    print_status "error" "Failed to install Insync package"
+                    print_status "info" "Attempting to fix dependencies..."
+                    sudo apt-get install -f -y
+                    
+                    # Try installing again
+                    if sudo dpkg -i "$insync_deb_file"; then
+                        print_status "success" "Insync installed after fixing dependencies"
+                    else
+                        print_status "error" "Failed to install Insync even after fixing dependencies"
+                        return 1
+                    fi
+                fi
+            else
+                print_status "error" "Downloaded file is not a valid .deb package"
+                rm -f "$insync_deb_file"
+                return 1
+            fi
+        else
+            print_status "error" "Downloaded file is empty or missing"
+            return 1
+        fi
+    else
+        print_status "error" "Failed to download Insync"
+        print_status "info" "Please check your internet connection and try again"
+        print_status "info" "Or download manually from: https://www.insynchq.com/downloads"
+        return 1
+    fi
+    
+    # Alternative installation method if the direct download fails
+    if [ ! -f "$insync_deb_file" ] || [ ! -s "$insync_deb_file" ]; then
+        print_status "warning" "Primary download method failed, trying alternative..."
+        
+        # Try to download using curl with the exact URL from your logs
+        local alt_url="https://cdn.insynchq.com/builds/linux/3.9.6.60027/insync_3.9.6.60027-noble_amd64.deb"
+        print_status "info" "Trying alternative URL: $alt_url"
+        
+        if curl -L -o "insync_alternative.deb" "$alt_url" 2>&1 | tee -a "$LOG_FILE"; then
+            if [ -f "insync_alternative.deb" ] && [ -s "insync_alternative.deb" ]; then
+                print_status "info" "Installing Insync from alternative download..."
+                sudo dpkg -i "insync_alternative.deb"
+                sudo apt-get install -f -y
+                print_status "success" "Insync installed from alternative download"
+            else
+                print_status "error" "Alternative download also failed"
+                return 1
+            fi
+        else
+            print_status "error" "All download methods failed"
+            return 1
+        fi
+    fi
+    
+    print_status "info" "Insync: Google Drive sync client for Linux"
+    print_status "config" "Launch with: insync start"
+    print_status "config" "Configure with: insync show"
+    
+    cd - > /dev/null
+}
+
+# ============================================================================
 # SYSTEM UPDATE
 # ============================================================================
 
@@ -267,16 +413,16 @@ install_core_dependencies() {
     print_status "info" "Installing curl and SSL libraries..."
     case "$PACKAGE_MANAGER" in
         apt)
-            $INSTALL_CMD libcurl4-openssl-dev libssl-dev
+            $INSTALL_CMD curl wget libcurl4-openssl-dev libssl-dev
             ;;
         dnf|yum)
-            $INSTALL_CMD libcurl-devel openssl-devel
+            $INSTALL_CMD curl wget libcurl-devel openssl-devel
             ;;
         pacman)
-            $INSTALL_CMD curl openssl
+            $INSTALL_CMD curl wget openssl
             ;;
         zypper)
-            $INSTALL_CMD libcurl-devel libopenssl-devel
+            $INSTALL_CMD curl wget libcurl-devel libopenssl-devel
             ;;
     esac
     
@@ -1614,6 +1760,9 @@ show_menu() {
     
     echo -e "${GREEN}Detected System:${NC} $DISTRO"
     echo -e "${GREEN}Package Manager:${NC} $PACKAGE_MANAGER"
+    if [ -n "$UBUNTU_VERSION" ]; then
+        echo -e "${GREEN}Ubuntu Version:${NC} $UBUNTU_VERSION ($UBUNTU_CODENAME)"
+    fi
     echo -e ""
     echo -e "${YELLOW}Select installation mode:${NC}"
     echo -e "  ${GREEN}1)${NC} Full Installation (All components)"
@@ -1649,6 +1798,7 @@ run_full_installation() {
     configure_gsconnect
     install_miro
     install_localsend
+    install_insync
     install_clamav
     cleanup_system
     
@@ -1660,6 +1810,7 @@ run_full_installation() {
     print_status "config" "  - Homebrew: brew --version"
     print_status "config" "  - asdf: asdf --version"
     print_status "config" "  - Cursor: cursor --version"
+    print_status "config" "  - Insync: insync start"
 }
 
 run_custom_installation() {
@@ -1690,6 +1841,7 @@ run_custom_installation() {
         "configure_gsconnect:GSConnect"
         "install_miro:Miro Collaboration Tool"
         "install_localsend:LocalSend File Sharing"
+        "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"
         "cleanup_system:System Cleanup"
     )

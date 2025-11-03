@@ -289,7 +289,10 @@ configure_dock() {
     gsettings set org.gnome.shell.extensions.dash-to-dock background-opacity 0.7
     gsettings set org.gnome.shell.extensions.dash-to-dock transparency-mode 'FIXED'
     
-    # Enable auto-hide and intellihide
+    # Disable showing volumes and devices in dock
+    print_status "info" "Disabling volumes and devices in dock..."
+    gsettings set org.gnome.shell.extensions.dash-to-dock show-mounts false
+    
     print_status "info" "Configuring dock auto-hide..."
     gsettings set org.gnome.shell.extensions.dash-to-dock autohide true
     gsettings set org.gnome.shell.extensions.dash-to-dock intellihide true
@@ -711,7 +714,7 @@ organize_app_folders() {
         'geary.desktop' 'org.gnome.Geary.desktop'
         'usb-creator-gtk.desktop' 'gnome-multi-writer.desktop' 'org.gnome.MultiWriter.desktop'
         'startup-disk-creator.desktop'
-        'simple-scan.desktop' 'org.gnome.SimpleScan.desktop' 'gnome-simple-scan.desktop'
+        'simple-scan.desktop' 'org.gnome.SimpleScan.desktop' 'gnome-simple-san.desktop'
         'xsane.desktop' 'skanlite.desktop'
         'geomview.desktop' 'org.geomview.Geomview.desktop'
         'bleachbit.desktop'

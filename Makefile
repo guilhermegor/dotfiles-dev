@@ -62,7 +62,7 @@ setup_bluetooth:
 
 setup_keyboard:
 	@echo "Configuring keyboard..."
-	@bash drivers/keyboard_cdllha.sh
+	@bash drivers/keyboard_cdilha.sh
 
 setup_mouse:
 	@echo "Configuring mouse..."

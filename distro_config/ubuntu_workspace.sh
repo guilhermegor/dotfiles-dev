@@ -708,6 +708,7 @@ organize_app_folders() {
         'org.gnome.gedit.desktop' 'gedit.desktop' 'org.gnome.TextEditor.desktop' 'gnome-text-editor.desktop'
         'org.gnome.FileRoller.desktop' 'file-roller.desktop'
         'org.gnome.Screenshot.desktop' 'gnome-screenshot.desktop'
+        'flameshot.desktop' 'org.flameshot.Flameshot.desktop'
         'org.gnome.Weather.desktop' 'gnome-weather.desktop'
         'org.gnome.Maps.desktop' 'gnome-maps.desktop'
         'evolution.desktop' 'org.gnome.Evolution.desktop'
@@ -738,15 +739,18 @@ organize_app_folders() {
                         /usr/share/applications/*usb-creator*.desktop \
                         /usr/share/applications/*startup-disk*.desktop \
                         /usr/share/applications/*geomview*.desktop \
+                        /usr/share/applications/*flameshot*.desktop \
                         /var/lib/snapd/desktop/applications/snap-store*.desktop \
                         /var/lib/snapd/desktop/applications/*software*.desktop \
                         /var/lib/flatpak/exports/share/applications/*Raider*.desktop \
                         /var/lib/flatpak/exports/share/applications/*shredder*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*flameshot*.desktop \
                         "$HOME/.local/share/applications"/org.gnome.*.desktop \
                         "$HOME/.local/share/applications"/*evolution*.desktop \
                         "$HOME/.local/share/applications"/*scan*.desktop \
                         "$HOME/.local/share/applications"/*geomview*.desktop \
-                        "$HOME/.local/share/applications"/*Raider*.desktop; do
+                        "$HOME/.local/share/applications"/*Raider*.desktop \
+                        "$HOME/.local/share/applications"/*flameshot*.desktop; do
         if [ -f "$desktop_file" ]; then
             local basename=$(basename "$desktop_file")
             if [[ ! "$basename" =~ "settings" ]] && [[ ! "$basename" =~ "control-center" ]] && \

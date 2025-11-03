@@ -1303,6 +1303,7 @@ install_utilities() {
         "timeshift:timeshift:timeshift:timeshift"
         "kdeconnect:kdeconnect:kdeconnect:kdeconnect"
         "solaar:solaar:solaar:solaar"
+        "flameshot:flameshot:flameshot:flameshot"
     )
     
     for util_info in "${utilities[@]}"; do
@@ -1365,6 +1366,23 @@ install_utilities() {
     print_status "success" "System utilities installed"
     print_status "info" "Solaar: Logitech device manager - launch with 'solaar' command"
     print_status "info" "Piper: Gaming device configuration tool"
+    print_status "info" "Flameshot: Screenshot tool - launch with 'flameshot' command"
+}
+
+install_flameshot() {
+    print_status "section" "FLAMESHOT SCREENSHOT TOOL"
+    
+    if command_exists flameshot; then
+        print_status "info" "Flameshot already installed"
+        return 0
+    fi
+    
+    print_status "info" "Installing Flameshot..."
+    install_package "flameshot" "flameshot" "flameshot" "flameshot"
+    
+    print_status "success" "Flameshot installed"
+    print_status "info" "Usage: flameshot gui (for interactive screenshot tool)"
+    print_status "info" "You can set up keyboard shortcuts for quick access"
 }
 
 install_warp_terminal() {
@@ -1755,7 +1773,7 @@ cleanup_system() {
 
 show_menu() {
     echo -e "\n${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}   ${MAGENTA}Multi-Distribution Development Environment Setup${NC}   ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}   ${MAGENTA}Multi-Distribution Development Environment Setup${NC}   ${CYAN}      ║${NC}"
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}\n"
     
     echo -e "${GREEN}Detected System:${NC} $DISTRO"
@@ -1793,6 +1811,7 @@ run_full_installation() {
     install_snap_apps
     install_flatpak_apps
     install_utilities
+    install_flameshot
     install_warp_terminal
     install_virtual_machine_manager
     configure_gsconnect
@@ -1811,6 +1830,7 @@ run_full_installation() {
     print_status "config" "  - asdf: asdf --version"
     print_status "config" "  - Cursor: cursor --version"
     print_status "config" "  - Insync: insync start"
+    print_status "config" "  - Flameshot: flameshot gui (for screenshots)"
 }
 
 run_custom_installation() {
@@ -1836,6 +1856,7 @@ run_custom_installation() {
         "install_snap_apps:Snap Applications"
         "install_flatpak_apps:Flatpak Applications"
         "install_utilities:System Utilities"
+        "install_flameshot:Flameshot Screenshot Tool"
         "install_warp_terminal:Warp Terminal"
         "install_virtual_machine_manager:VM Manager"
         "configure_gsconnect:GSConnect"

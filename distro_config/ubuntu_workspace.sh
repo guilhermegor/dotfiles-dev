@@ -859,6 +859,7 @@ organize_app_folders() {
         'miro_miro.desktop' 'snap-miro_miro.desktop'
         'cursor.desktop' 'com.cursor.Cursor.desktop' 'cursor-app.desktop'
         'notepadqq.desktop' 'com.notepadqq.Notepadqq.desktop'
+        'slack.desktop' 'com.slack.Slack.desktop' 'slack_slack.desktop' 'slack-desktop.desktop'
     )
     
     for app in "${dev_app_names[@]}"; do
@@ -872,11 +873,16 @@ organize_app_folders() {
                         /var/lib/flatpak/exports/share/applications/*cursor*.desktop \
                         /var/lib/flatpak/exports/share/applications/*notepadqq*.desktop \
                         /var/lib/flatpak/exports/share/applications/*Notepadqq*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*slack*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*Slack*.desktop \
                         /var/lib/snapd/desktop/applications/*miro*.desktop \
+                        /var/lib/snapd/desktop/applications/*slack*.desktop \
                         "$HOME/.local/share/applications"/*cursor*.desktop \
                         "$HOME/.local/share/applications"/*miro*.desktop \
                         "$HOME/.local/share/applications"/*devtoolbox*.desktop \
-                        "$HOME/.local/share/applications"/*notepadqq*.desktop; do
+                        "$HOME/.local/share/applications"/*notepadqq*.desktop \
+                        "$HOME/.local/share/applications"/*slack*.desktop \
+                        /usr/share/applications/*slack*.desktop; do
         if [ -f "$desktop_file" ]; then
             local basename=$(basename "$desktop_file")
             if [[ ! " ${dev_apps[@]} " =~ " '$basename' " ]]; then
@@ -885,13 +891,13 @@ organize_app_folders() {
         fi
     done
 
-    # Fallback: any .desktop file with "miro" in name (case-insensitive)
+    # Fallback: any .desktop file with "miro" or "slack" in name (case-insensitive)
     for desktop_file in /var/lib/snapd/desktop/applications/*.desktop \
                         "$HOME/.local/share/applications"/*.desktop \
                         /usr/share/applications/*.desktop; do
         if [ -f "$desktop_file" ]; then
             local lower_name=$(basename "$desktop_file" | tr '[:upper:]' '[:lower:]')
-            if [[ "$lower_name" == *miro* ]] && [[ ! " ${dev_apps[*]} " =~ $(basename "$desktop_file") ]]; then
+            if ([[ "$lower_name" == *miro* ]] || [[ "$lower_name" == *slack* ]]) && [[ ! " ${dev_apps[*]} " =~ $(basename "$desktop_file") ]]; then
                 dev_apps+=("'$(basename "$desktop_file")'")
             fi
         fi

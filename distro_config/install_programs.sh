@@ -1245,6 +1245,117 @@ install_chrome() {
     cd - > /dev/null
 }
 
+install_slack() {
+    print_status "section" "SLACK"
+    
+    # Check if Slack is already installed via different methods
+    if command_exists slack || snap list 2>/dev/null | grep -q "^slack " || flatpak list 2>/dev/null | grep -q com.slack.Slack; then
+        print_status "info" "Slack already installed"
+        return 0
+    fi
+    
+    cd "$DOWNLOADS_DIR"
+    
+    case "$PACKAGE_MANAGER" in
+        apt)
+            print_status "info" "Downloading Slack..."
+            # Use the redirect URL which always points to the latest version
+            if wget -O slack-desktop-latest-amd64.deb "https://downloads.slack-edge.com/desktop-releases/linux/x64/latest/slack-desktop-latest-amd64.deb" 2>&1 | tee -a "$LOG_FILE"; then
+                if [ -f "slack-desktop-latest-amd64.deb" ] && [ -s "slack-desktop-latest-amd64.deb" ]; then
+                    print_status "info" "Installing Slack..."
+                    sudo dpkg -i slack-desktop-latest-amd64.deb || {
+                        print_status "warning" "dpkg installation had issues, fixing dependencies..."
+                        sudo apt-get install -f -y
+                    }
+                    
+                    if command_exists slack || dpkg -l | grep -q slack; then
+                        print_status "success" "Slack installed successfully"
+                    else
+                        print_status "warning" "Slack package installation failed, trying Snap..."
+                        if command_exists snap; then
+                            sudo snap install slack
+                            print_status "success" "Slack installed via Snap"
+                        fi
+                    fi
+                else
+                    print_status "error" "Download failed, trying alternative method..."
+                    if command_exists snap; then
+                        sudo snap install slack
+                        print_status "success" "Slack installed via Snap"
+                    fi
+                fi
+            else
+                print_status "error" "Download failed, trying Snap..."
+                if command_exists snap; then
+                    sudo snap install slack
+                    print_status "success" "Slack installed via Snap"
+                fi
+            fi
+            ;;
+        dnf|yum)
+            print_status "info" "Downloading Slack..."
+            if wget -O slack-latest.rpm "https://downloads.slack-edge.com/desktop-releases/linux/x64/latest/slack-latest.x86_64.rpm" 2>&1 | tee -a "$LOG_FILE"; then
+                print_status "info" "Installing Slack..."
+                sudo $PACKAGE_MANAGER install -y slack-latest.rpm
+                print_status "success" "Slack installed"
+            else
+                print_status "error" "Download failed, trying Flatpak..."
+                if command_exists flatpak; then
+                    flatpak install -y flathub com.slack.Slack
+                    print_status "success" "Slack installed via Flatpak"
+                fi
+            fi
+            ;;
+        pacman)
+            print_status "info" "Installing Slack..."
+            if command_exists yay; then
+                yay -S --noconfirm slack-desktop
+                print_status "success" "Slack installed from AUR"
+            else
+                print_status "warning" "yay not found. Installing via Flatpak..."
+                if command_exists flatpak; then
+                    flatpak install -y flathub com.slack.Slack
+                    print_status "success" "Slack installed via Flatpak"
+                else
+                    print_status "error" "Please install yay or Flatpak first"
+                    return 1
+                fi
+            fi
+            ;;
+        zypper)
+            print_status "info" "Downloading Slack..."
+            if wget -O slack-latest.rpm "https://downloads.slack-edge.com/desktop-releases/linux/x64/latest/slack-latest.x86_64.rpm" 2>&1 | tee -a "$LOG_FILE"; then
+                print_status "info" "Installing Slack..."
+                $INSTALL_CMD slack-latest.rpm
+                print_status "success" "Slack installed"
+            else
+                print_status "error" "Download failed, trying Flatpak..."
+                if command_exists flatpak; then
+                    flatpak install -y flathub com.slack.Slack
+                    print_status "success" "Slack installed via Flatpak"
+                fi
+            fi
+            ;;
+    esac
+    
+    # Final verification
+    if command_exists slack; then
+        print_status "success" "Slack is ready to use"
+        print_status "info" "Launch with: slack"
+    elif snap list 2>/dev/null | grep -q "^slack "; then
+        print_status "success" "Slack installed via Snap"
+        print_status "info" "Launch with: slack"
+    elif flatpak list 2>/dev/null | grep -q com.slack.Slack; then
+        print_status "success" "Slack installed via Flatpak"
+        print_status "info" "Launch with: flatpak run com.slack.Slack"
+    else
+        print_status "warning" "Slack installation could not be verified"
+        print_status "info" "You can install Slack manually from https://slack.com/downloads/linux"
+    fi
+    
+    cd - > /dev/null
+}
+
 install_snap_apps() {
     print_status "section" "SNAP APPLICATIONS"
     
@@ -1808,6 +1919,7 @@ run_full_installation() {
     install_pgadmin
     install_dbeaver
     install_chrome
+    install_slack
     install_snap_apps
     install_flatpak_apps
     install_utilities
@@ -1831,6 +1943,7 @@ run_full_installation() {
     print_status "config" "  - Cursor: cursor --version"
     print_status "config" "  - Insync: insync start"
     print_status "config" "  - Flameshot: flameshot gui (for screenshots)"
+    print_status "config" "  - Slack: slack (or check in applications menu)"
 }
 
 run_custom_installation() {
@@ -1853,6 +1966,7 @@ run_custom_installation() {
         "install_pgadmin:pgAdmin4"
         "install_dbeaver:DBeaver"
         "install_chrome:Google Chrome"
+        "install_slack:Slack"
         "install_snap_apps:Snap Applications"
         "install_flatpak_apps:Flatpak Applications"
         "install_utilities:System Utilities"

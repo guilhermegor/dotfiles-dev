@@ -248,6 +248,21 @@ set_workspaces_primary_only() {
     print_status "success" "Workspaces configured for primary display only"
 }
 
+set_workspace_app_isolation() {
+    print_status "info" "Configurando alternador de aplicativos para mostrar apenas apps do espaço de trabalho atual..."
+    
+    # This setting makes Alt+Tab show only applications from the current workspace
+    gsettings set org.gnome.shell.app-switcher current-workspace-only true
+    
+    # Alternative setting for some GNOME versions
+    if gsettings list-schemas | grep -q "org.gnome.shell.window-switcher"; then
+        gsettings set org.gnome.shell.window-switcher current-workspace-only true
+    fi
+    
+    local CURRENT_SETTING=$(gsettings get org.gnome.shell.app-switcher current-workspace-only)
+    print_status "success" "Alternador de aplicativos configurado para espaço de trabalho atual: $CURRENT_SETTING"
+}
+
 configure_mouse() {
     print_status "info" "Configuring mouse settings..."
     
@@ -450,6 +465,7 @@ set_ubuntu_ui_interface() {
 
 configure_workspaces() {
     set_workspaces_primary_only
+    set_workspace_app_isolation
 }
 
 apply_additional_tweaks() {

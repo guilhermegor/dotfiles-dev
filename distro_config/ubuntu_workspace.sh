@@ -866,7 +866,7 @@ organize_app_folders() {
     # ==================== DEV FOLDER ====================
     print_status "info" "Creating DEV folder..."
     local dev_apps=()
-    
+
     local dev_app_names=(
         'vim.desktop' 'gvim.desktop' 'org.vim.Vim.desktop'
         'dev.warp.Warp.desktop' 'warp.desktop' 'warp-terminal.desktop'
@@ -877,58 +877,77 @@ organize_app_folders() {
         'notepadqq.desktop' 'com.notepadqq.Notepadqq.desktop'
         'slack.desktop' 'com.slack.Slack.desktop' 'slack_slack.desktop' 'slack-desktop.desktop'
     )
-    
+
     for app in "${dev_app_names[@]}"; do
         if result=$(find_app_desktop_file "$app"); then
             dev_apps+=("'$result'")
-        fi
-    done
-    
-    shopt -s nullglob
-    for desktop_file in /var/lib/flatpak/exports/share/applications/*devtoolbox*.desktop \
-                        /var/lib/flatpak/exports/share/applications/*cursor*.desktop \
-                        /var/lib/flatpak/exports/share/applications/*notepadqq*.desktop \
-                        /var/lib/flatpak/exports/share/applications/*Notepadqq*.desktop \
-                        /var/lib/flatpak/exports/share/applications/*slack*.desktop \
-                        /var/lib/flatpak/exports/share/applications/*Slack*.desktop \
-                        /var/lib/snapd/desktop/applications/*miro*.desktop \
-                        /var/lib/snapd/desktop/applications/*slack*.desktop \
-                        "$HOME/.local/share/applications"/*cursor*.desktop \
-                        "$HOME/.local/share/applications"/*miro*.desktop \
-                        "$HOME/.local/share/applications"/*devtoolbox*.desktop \
-                        "$HOME/.local/share/applications"/*notepadqq*.desktop \
-                        "$HOME/.local/share/applications"/*slack*.desktop \
-                        /usr/share/applications/*slack*.desktop; do
-        if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
-            if [[ ! " ${dev_apps[@]} " =~ " '$basename' " ]]; then
-                dev_apps+=("'$basename'")
-            fi
+            print_status "config" "Found DEV app: $result"
         fi
     done
 
-    # Fallback: any .desktop file with "miro" or "slack" in name (case-insensitive)
-    for desktop_file in /var/lib/snapd/desktop/applications/*.desktop \
-                        "$HOME/.local/share/applications"/*.desktop \
-                        /usr/share/applications/*.desktop; do
+    # SPECIFIC Miro Snap package detection
+    print_status "info" "Adding Miro Snap package..."
+    if [ -f "/var/lib/snapd/desktop/applications/miro_miro.desktop" ]; then
+        if [[ ! " ${dev_apps[@]} " =~ " 'miro_miro.desktop' " ]]; then
+            dev_apps+=("'miro_miro.desktop'")
+            print_status "success" "✓ Added Miro Snap package: miro_miro.desktop"
+        else
+            print_status "info" "Miro Snap package already in list"
+        fi
+    else
+        print_status "warning" "Miro Snap package not found at expected location"
+    fi
+
+    # SPECIFIC Chrome App Miro detection - using the exact filename we found
+    print_status "info" "Adding Miro Chrome app..."
+    local miro_chrome_app="chrome-bfldocfmjhokladppcchgfolcnpjlnng-Default.desktop"
+    if [ -f "$HOME/.local/share/applications/$miro_chrome_app" ]; then
+        if [[ ! " ${dev_apps[@]} " =~ " '$miro_chrome_app' " ]]; then
+            dev_apps+=("'$miro_chrome_app'")
+            print_status "success" "✓ Added Miro Chrome app: $miro_chrome_app"
+        else
+            print_status "info" "Miro Chrome app already in list"
+        fi
+    else
+        print_status "warning" "Miro Chrome app not found at: $HOME/.local/share/applications/$miro_chrome_app"
+    fi
+
+    # Additional fallback search for any other Miro Chrome apps (in case there are multiple)
+    print_status "info" "Searching for additional Miro Chrome shortcuts..."
+    shopt -s nullglob
+    for desktop_file in "$HOME/.local/share/applications/chrome-"*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local lower_name=$(basename "$desktop_file" | tr '[:upper:]' '[:lower:]')
-            if ([[ "$lower_name" == *miro* ]] || [[ "$lower_name" == *slack* ]]) && [[ ! " ${dev_apps[*]} " =~ $(basename "$desktop_file") ]]; then
-                dev_apps+=("'$(basename "$desktop_file")'")
+            local basename=$(basename "$desktop_file")
+            # Skip if it's already the one we specifically added
+            if [ "$basename" != "$miro_chrome_app" ]; then
+                # Check if it's Miro by examining the file content
+                if grep -q -i "Name.*=.*Miro" "$desktop_file" || 
+                grep -q -i "Exec.*=.*miro" "$desktop_file" || 
+                grep -q -i "miro" "$desktop_file" || 
+                grep -q -i "realtimeboard" "$desktop_file"; then
+                    if [[ ! " ${dev_apps[@]} " =~ " '$basename' " ]]; then
+                        dev_apps+=("'$basename'")
+                        print_status "success" "✓ Added additional Miro Chrome shortcut: $basename"
+                    fi
+                fi
             fi
         fi
     done
     shopt -u nullglob
-    
+
+    # Remove any duplicates that might have been added
     dev_apps=($(echo "${dev_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-    
+
     if [ ${#dev_apps[@]} -gt 0 ]; then
         local dev_apps_str=$(IFS=,; echo "${dev_apps[*]}")
         gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ name 'DEV'
         gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ apps "[${dev_apps_str}]"
         folder_ids+=("'DEV'")
         print_status "success" "DEV folder created with ${#dev_apps[@]} apps"
-        print_status "config" "  Apps: ${dev_apps_str}"
+        print_status "config" "  Apps in DEV folder:"
+        for app in "${dev_apps[@]}"; do
+            print_status "config" "    - ${app//\'/}"
+        done
     else
         print_status "warning" "No DEV apps found"
     fi

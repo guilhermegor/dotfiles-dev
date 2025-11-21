@@ -1017,7 +1017,7 @@ organize_app_folders() {
     # ==================== AMBIENTE VIRTUAL FOLDER ====================
     print_status "info" "Creating Ambiente Virtual folder..."
     local ambiente_virtual_apps=()
-    
+
     local virtualization_app_names=(
         'virt-manager.desktop' 'org.virt-manager.virt-manager.desktop'
         'gnome-boxes.desktop' 'org.gnome.Boxes.desktop'
@@ -1030,14 +1030,15 @@ organize_app_folders() {
         'rdesktop.desktop' 'xfreerdp.desktop'
         'docker-desktop.desktop'
         'qemu.desktop' 'kvirt.desktop'
+        'rustdesk.desktop' 'com.rustdesk.RustDesk.desktop' 'org.rustdesk.RustDesk.desktop'
     )
-    
+
     for app in "${virtualization_app_names[@]}"; do
         if result=$(find_app_desktop_file "$app"); then
             ambiente_virtual_apps+=("'$result'")
         fi
     done
-    
+
     shopt -s nullglob
     for desktop_file in /usr/share/applications/*virt*.desktop \
                         /usr/share/applications/*virtual*.desktop \
@@ -1047,8 +1048,12 @@ organize_app_folders() {
                         /usr/share/applications/*remote-viewer*.desktop \
                         /usr/share/applications/*vinagre*.desktop \
                         /usr/share/applications/*remmina*.desktop \
+                        /usr/share/applications/*rustdesk*.desktop \
+                        /var/lib/snapd/desktop/applications/*rustdesk*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*rustdesk*.desktop \
                         "$HOME/.local/share/applications"/*virt*.desktop \
-                        "$HOME/.local/share/applications"/*virtual*.desktop; do
+                        "$HOME/.local/share/applications"/*virtual*.desktop \
+                        "$HOME/.local/share/applications"/*rustdesk*.desktop; do
         if [ -f "$desktop_file" ]; then
             local basename=$(basename "$desktop_file")
             if [[ ! " ${ambiente_virtual_apps[@]} " =~ " '$basename' " ]]; then
@@ -1057,9 +1062,9 @@ organize_app_folders() {
         fi
     done
     shopt -u nullglob
-    
+
     ambiente_virtual_apps=($(echo "${ambiente_virtual_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-    
+
     if [ ${#ambiente_virtual_apps[@]} -gt 0 ]; then
         local ambiente_virtual_apps_str=$(IFS=,; echo "${ambiente_virtual_apps[*]}")
         gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ name 'Ambiente Virtual'

@@ -1822,6 +1822,310 @@ install_localsend() {
 }
 
 # ============================================================================
+# RUSTDESK REMOTE DESKTOP
+# ============================================================================
+
+install_rustdesk() {
+    print_status "section" "RUSTDESK REMOTE DESKTOP"
+    
+    # Check if RustDesk is already installed
+    if command_exists rustdesk || flatpak list 2>/dev/null | grep -q "com.rustdesk.RustDesk" || dpkg -l 2>/dev/null | grep -q "^ii  rustdesk "; then
+        print_status "info" "RustDesk already installed"
+        return 0
+    fi
+    
+    cd "$DOWNLOADS_DIR"
+    
+    case "$PACKAGE_MANAGER" in
+        apt)
+            print_status "info" "Detecting system architecture..."
+            
+            # Detect architecture
+            local arch=$(dpkg --print-architecture)
+            local download_arch=""
+            
+            case "$arch" in
+                amd64)
+                    download_arch="x86_64"
+                    print_status "info" "Architecture: x86-64 (amd64)"
+                    ;;
+                arm64)
+                    download_arch="aarch64"
+                    print_status "info" "Architecture: ARM 64-bit"
+                    ;;
+                armhf)
+                    download_arch="armv7"
+                    print_status "info" "Architecture: ARM 32-bit"
+                    ;;
+                *)
+                    print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
+                    flatpak install -y flathub com.rustdesk.RustDesk
+                    cd - > /dev/null
+                    return 0
+                    ;;
+            esac
+            
+            print_status "info" "Fetching latest RustDesk release..."
+            
+            # Get latest release info from GitHub API
+            local latest_info=$(curl -s https://api.github.com/repos/rustdesk/rustdesk/releases/latest)
+            local latest_version=$(echo "$latest_info" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+            
+            if [ -z "$latest_version" ]; then
+                print_status "warning" "Could not fetch latest version, using fallback"
+                latest_version="1.4.4"
+            fi
+            
+            print_status "info" "Latest RustDesk version: $latest_version"
+            
+            # Construct download URL
+            local deb_filename="rustdesk-${latest_version}-${download_arch}.deb"
+            local latest_url="https://github.com/rustdesk/rustdesk/releases/download/${latest_version}/${deb_filename}"
+            
+            print_status "info" "Downloading RustDesk from GitHub..."
+            print_status "config" "URL: $latest_url"
+            
+            if wget -O rustdesk.deb "$latest_url"; then
+                print_status "success" "RustDesk downloaded successfully"
+                
+                # First, fix any existing broken dependencies
+                print_status "info" "Checking for existing dependency issues..."
+                sudo apt-get install -f -y || true
+                
+                # Install dependencies first - use minimal set to avoid conflicts
+                print_status "info" "Installing RustDesk dependencies..."
+                sudo apt-get update
+                
+                # Install only essential dependencies that won't cause conflicts
+                local essential_deps=(
+                    "libxdo3"
+                    "libgtk-3-0"
+                    "libxtst6"
+                    "libxcb-randr0"
+                    "libxcb-shape0"
+                    "libxcb-xfixes0"
+                    "libxcb-keysyms1"
+                    "libxcb-image0"
+                    "libxcb-xtest0"
+                )
+                
+                for dep in "${essential_deps[@]}"; do
+                    print_status "info" "Installing $dep..."
+                    sudo apt-get install -y "$dep" || print_status "warning" "Failed to install $dep, continuing..."
+                done
+                
+                # Try to install appindicator (handle both variants)
+                if sudo apt-get install -y libayatana-appindicator3-1 2>/dev/null; then
+                    print_status "info" "Installed libayatana-appindicator3-1"
+                elif sudo apt-get install -y libappindicator3-1 2>/dev/null; then
+                    print_status "info" "Installed libappindicator3-1"
+                else
+                    print_status "warning" "Could not install appindicator library, continuing..."
+                fi
+                
+                print_status "info" "Installing RustDesk..."
+                if sudo dpkg -i rustdesk.deb; then
+                    print_status "success" "RustDesk installed via .deb package"
+                else
+                    print_status "warning" "dpkg installation had issues, fixing dependencies..."
+                    sudo apt-get install -f -y
+                    
+                    # Verify installation
+                    if dpkg -l | grep -q "^ii  rustdesk "; then
+                        print_status "success" "RustDesk installed after fixing dependencies"
+                    else
+                        print_status "error" "Failed to install RustDesk via .deb package"
+                        print_status "info" "Trying Flatpak installation..."
+                        if flatpak install -y flathub com.rustdesk.RustDesk; then
+                            print_status "success" "RustDesk installed via Flatpak"
+                        else
+                            print_status "error" "All installation methods failed"
+                            print_status "info" "You can install RustDesk manually from:"
+                            print_status "config" "https://github.com/rustdesk/rustdesk/releases"
+                        fi
+                    fi
+                fi
+            else
+                print_status "warning" "Download failed. Installing via Flatpak..."
+                if flatpak install -y flathub com.rustdesk.RustDesk; then
+                    print_status "success" "RustDesk installed via Flatpak"
+                else
+                    print_status "error" "Flatpak installation also failed"
+                fi
+            fi
+            ;;
+            
+        dnf|yum)
+            print_status "info" "Detecting system architecture..."
+            
+            # Detect architecture
+            local arch=$(uname -m)
+            local download_arch=""
+            
+            case "$arch" in
+                x86_64)
+                    download_arch="x86_64"
+                    print_status "info" "Architecture: x86-64"
+                    ;;
+                aarch64)
+                    download_arch="aarch64"
+                    print_status "info" "Architecture: ARM 64-bit"
+                    ;;
+                *)
+                    print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
+                    flatpak install -y flathub com.rustdesk.RustDesk
+                    cd - > /dev/null
+                    return 0
+                    ;;
+            esac
+            
+            print_status "info" "Fetching latest RustDesk release..."
+            
+            # Get latest release info from GitHub API
+            local latest_info=$(curl -s https://api.github.com/repos/rustdesk/rustdesk/releases/latest)
+            local latest_version=$(echo "$latest_info" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+            
+            if [ -z "$latest_version" ]; then
+                print_status "warning" "Could not fetch latest version, using fallback"
+                latest_version="1.4.4"
+            fi
+            
+            print_status "info" "Latest RustDesk version: $latest_version"
+            
+            # Construct download URL
+            local rpm_filename="rustdesk-${latest_version}-${download_arch}.rpm"
+            local latest_url="https://github.com/rustdesk/rustdesk/releases/download/${latest_version}/${rpm_filename}"
+            
+            print_status "info" "Downloading RustDesk from GitHub..."
+            print_status "config" "URL: $latest_url"
+            
+            if wget -O rustdesk.rpm "$latest_url"; then
+                print_status "info" "Installing RustDesk..."
+                sudo $PACKAGE_MANAGER install -y rustdesk.rpm
+                print_status "success" "RustDesk installed via .rpm package"
+            else
+                print_status "warning" "Download failed. Installing via Flatpak..."
+                flatpak install -y flathub com.rustdesk.RustDesk
+                print_status "success" "RustDesk installed via Flatpak"
+            fi
+            ;;
+            
+        pacman)
+            if command_exists yay; then
+                print_status "info" "Installing RustDesk from AUR..."
+                yay -S --noconfirm rustdesk-bin
+                print_status "success" "RustDesk installed from AUR"
+            else
+                print_status "info" "yay not found. Installing RustDesk via Flatpak..."
+                flatpak install -y flathub com.rustdesk.RustDesk
+                print_status "success" "RustDesk installed via Flatpak"
+            fi
+            ;;
+            
+        zypper)
+            print_status "info" "Detecting system architecture..."
+            
+            # Detect architecture
+            local arch=$(uname -m)
+            local download_arch=""
+            
+            case "$arch" in
+                x86_64)
+                    download_arch="x86_64"
+                    print_status "info" "Architecture: x86-64"
+                    ;;
+                aarch64)
+                    download_arch="aarch64"
+                    print_status "info" "Architecture: ARM 64-bit"
+                    ;;
+                *)
+                    print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
+                    flatpak install -y flathub com.rustdesk.RustDesk
+                    cd - > /dev/null
+                    return 0
+                    ;;
+            esac
+            
+            print_status "info" "Fetching latest RustDesk release..."
+            
+            # Get latest release info from GitHub API
+            local latest_info=$(curl -s https://api.github.com/repos/rustdesk/rustdesk/releases/latest)
+            local latest_version=$(echo "$latest_info" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+            
+            if [ -z "$latest_version" ]; then
+                print_status "warning" "Could not fetch latest version, using fallback"
+                latest_version="1.4.4"
+            fi
+            
+            print_status "info" "Latest RustDesk version: $latest_version"
+            
+            # Construct download URL
+            local rpm_filename="rustdesk-${latest_version}-${download_arch}.rpm"
+            local latest_url="https://github.com/rustdesk/rustdesk/releases/download/${latest_version}/${rpm_filename}"
+            
+            print_status "info" "Downloading RustDesk from GitHub..."
+            print_status "config" "URL: $latest_url"
+            
+            if wget -O rustdesk.rpm "$latest_url"; then
+                print_status "info" "Installing RustDesk..."
+                $INSTALL_CMD rustdesk.rpm
+                print_status "success" "RustDesk installed via .rpm package"
+            else
+                print_status "warning" "Download failed. Installing via Flatpak..."
+                flatpak install -y flathub com.rustdesk.RustDesk
+                print_status "success" "RustDesk installed via Flatpak"
+            fi
+            ;;
+    esac
+    
+    # Configure firewall for RustDesk (uses ports 21115-21119)
+    print_status "info" "Configuring firewall for RustDesk..."
+    case "$PACKAGE_MANAGER" in
+        apt|pacman)
+            if command_exists ufw; then
+                sudo ufw allow 21115:21119/tcp comment "RustDesk" 2>/dev/null
+                sudo ufw allow 21115:21119/udp comment "RustDesk" 2>/dev/null
+                sudo ufw reload 2>/dev/null
+                print_status "success" "Firewall configured for RustDesk (ports 21115-21119)"
+            else
+                print_status "info" "UFW not installed. Skipping firewall configuration."
+            fi
+            ;;
+        dnf|yum|zypper)
+            if command_exists firewall-cmd; then
+                sudo firewall-cmd --permanent --add-port=21115-21119/tcp 2>/dev/null
+                sudo firewall-cmd --permanent --add-port=21115-21119/udp 2>/dev/null
+                sudo firewall-cmd --reload 2>/dev/null
+                print_status "success" "Firewall configured for RustDesk (ports 21115-21119)"
+            else
+                print_status "info" "firewalld not installed. Skipping firewall configuration."
+            fi
+            ;;
+    esac
+    
+    # Final verification
+    if command_exists rustdesk || dpkg -l 2>/dev/null | grep -q "^ii  rustdesk " || flatpak list 2>/dev/null | grep -q "com.rustdesk.RustDesk"; then
+        print_status "success" "RustDesk is ready to use"
+        print_status "info" "RustDesk: Open-source remote desktop software"
+        print_status "config" "Alternative to TeamViewer and AnyDesk"
+        print_status "config" "Launch with: rustdesk"
+        print_status "config" "You can set up your own relay server for better performance"
+        
+        # Show version if available
+        if command_exists rustdesk; then
+            rustdesk --version 2>&1 | head -n1 >> "$LOG_FILE" || true
+        fi
+    else
+        print_status "warning" "RustDesk installation could not be verified"
+        print_status "info" "You can install RustDesk manually from:"
+        print_status "config" "https://github.com/rustdesk/rustdesk/releases"
+        print_status "config" "Or via Flatpak: flatpak install flathub com.rustdesk.RustDesk"
+    fi
+    
+    cd - > /dev/null
+}
+
+# ============================================================================
 # SYSTEM OPTIMIZATION
 # ============================================================================
 
@@ -1929,6 +2233,7 @@ run_full_installation() {
     configure_gsconnect
     install_miro
     install_localsend
+    install_rustdesk
     install_insync
     install_clamav
     cleanup_system
@@ -1942,6 +2247,7 @@ run_full_installation() {
     print_status "config" "  - asdf: asdf --version"
     print_status "config" "  - Cursor: cursor --version"
     print_status "config" "  - Insync: insync start"
+    print_status "config" "  - RustDesk: rustdesk"
     print_status "config" "  - Flameshot: flameshot gui (for screenshots)"
     print_status "config" "  - Slack: slack (or check in applications menu)"
 }
@@ -1976,6 +2282,7 @@ run_custom_installation() {
         "configure_gsconnect:GSConnect"
         "install_miro:Miro Collaboration Tool"
         "install_localsend:LocalSend File Sharing"
+        "install_rustdesk:RustDesk Remote Desktop"
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"
         "cleanup_system:System Cleanup"

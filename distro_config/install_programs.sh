@@ -146,44 +146,6 @@ install_package() {
     esac
 }
 
-# Helper function to download and install .deb or .rpm packages
-install_from_url() {
-    local url="$1"
-    local package_name="$2"
-    
-    cd "$DOWNLOADS_DIR"
-    
-    case "$PACKAGE_MANAGER" in
-        apt)
-            print_status "info" "Downloading ${package_name}.deb..."
-            wget -O "${package_name}.deb" "$url"
-            print_status "info" "Installing ${package_name}..."
-            sudo dpkg -i "${package_name}.deb"
-            sudo apt-get install -f -y  # Fix dependencies
-            ;;
-        dnf|yum)
-            # For RPM-based systems, we need to find the RPM URL
-            local rpm_url="${url//.deb/.rpm}"
-            rpm_url="${rpm_url//amd64/x86_64}"
-            print_status "info" "Downloading ${package_name}.rpm..."
-            wget -O "${package_name}.rpm" "$rpm_url" || {
-                print_status "warning" "RPM package not available from this URL"
-                print_status "info" "Please install $package_name manually or from your distro's repos"
-                return 1
-            }
-            print_status "info" "Installing ${package_name}..."
-            sudo $PACKAGE_MANAGER install -y "${package_name}.rpm"
-            ;;
-        pacman)
-            print_status "warning" "Package $package_name may need to be installed from AUR"
-            print_status "info" "Try: yay -S $package_name"
-            return 1
-            ;;
-    esac
-    
-    cd - > /dev/null
-}
-
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
@@ -237,14 +199,262 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
-install_if_missing() {
-    local package="$1"
-    if ! dpkg -l | grep -q "^ii  $package "; then
-        print_status "info" "Installing $package..."
-        sudo apt install -y "$package"
-        print_status "success" "$package installed"
+# ============================================================================
+# NEOVIM INSTALLATION
+# ============================================================================
+
+install_neovim() {
+    print_status "section" "NEOVIM INSTALLATION"
+    
+    # Check if Neovim is already installed
+    if command_exists nvim; then
+        local current_version=$(nvim --version | head -n1 | awk '{print $2}')
+        print_status "info" "Neovim already installed (version: $current_version)"
+        return 0
+    fi
+    
+    print_status "info" "Installing Neovim..."
+    
+    case "$PACKAGE_MANAGER" in
+        apt)
+            # For Ubuntu/Debian, use the official PPA for latest version
+            if [[ "$DISTRO" == "ubuntu" || "$DISTRO" == "debian" ]]; then
+                print_status "info" "Adding Neovim PPA for latest version..."
+                sudo add-apt-repository -y ppa:neovim-ppa/unstable
+                $UPDATE_CMD
+            fi
+            
+            # Install Neovim
+            if install_package "neovim" "neovim" "neovim" "neovim"; then
+                print_status "success" "Neovim installed via system package manager"
+            else
+                print_status "warning" "System package installation failed, trying alternative methods..."
+                install_neovim_alternative
+            fi
+            ;;
+        dnf|yum)
+            # For Fedora/RHEL/CentOS
+            if install_package "neovim" "neovim" "neovim" "neovim"; then
+                print_status "success" "Neovim installed via system package manager"
+            else
+                print_status "warning" "System package installation failed, trying alternative methods..."
+                install_neovim_alternative
+            fi
+            ;;
+        pacman)
+            # For Arch Linux
+            if install_package "neovim" "neovim" "neovim" "neovim"; then
+                print_status "success" "Neovim installed via system package manager"
+            else
+                print_status "warning" "System package installation failed, trying alternative methods..."
+                install_neovim_alternative
+            fi
+            ;;
+        zypper)
+            # For openSUSE
+            if install_package "neovim" "neovim" "neovim" "neovim"; then
+                print_status "success" "Neovim installed via system package manager"
+            else
+                print_status "warning" "System package installation failed, trying alternative methods..."
+                install_neovim_alternative
+            fi
+            ;;
+    esac
+    
+    # Verify installation
+    if command_exists nvim; then
+        local version=$(nvim --version | head -n1 | awk '{print $2}')
+        print_status "success" "Neovim installed successfully (version: $version)"
+        
+        # Install vim-plug for plugin management
+        install_vim_plug
+        
+        # Create basic configuration
+        setup_neovim_config
+        
     else
-        print_status "info" "$package already installed"
+        print_status "error" "Neovim installation failed"
+        return 1
+    fi
+}
+
+install_neovim_alternative() {
+    print_status "info" "Trying alternative Neovim installation methods..."
+    
+    # Method 1: Install via Homebrew if available
+    if command_exists brew; then
+        print_status "info" "Installing Neovim via Homebrew..."
+        brew install neovim
+        return $?
+    fi
+    
+    # Method 2: Install via AppImage
+    print_status "info" "Downloading Neovim AppImage..."
+    cd "$DOWNLOADS_DIR"
+    
+    local nvim_appimage_url="https://github.com/neovim/neovim/releases/latest/download/nvim.appimage"
+    
+    if wget -O nvim.appimage "$nvim_appimage_url"; then
+        chmod +x nvim.appimage
+        sudo mv nvim.appimage /usr/local/bin/nvim
+        print_status "success" "Neovim AppImage installed to /usr/local/bin/nvim"
+        cd - > /dev/null
+        return 0
+    else
+        print_status "error" "Failed to download Neovim AppImage"
+        cd - > /dev/null
+        return 1
+    fi
+}
+
+install_vim_plug() {
+    print_status "info" "Installing vim-plug plugin manager..."
+    
+    local plug_dir="$HOME/.local/share/nvim/site/autoload"
+    local plug_file="$plug_dir/plug.vim"
+    
+    mkdir -p "$plug_dir"
+    
+    if curl -fLo "$plug_file" --create-dirs \
+        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim; then
+        print_status "success" "vim-plug installed successfully"
+    else
+        print_status "warning" "Failed to install vim-plug"
+    fi
+}
+
+setup_neovim_config() {
+    print_status "info" "Setting up basic Neovim configuration..."
+    
+    local nvim_dir="$HOME/.config/nvim"
+    local init_file="$nvim_dir/init.vim"
+    
+    mkdir -p "$nvim_dir"
+    
+    # Create basic init.vim if it doesn't exist
+    if [ ! -f "$init_file" ]; then
+        cat > "$init_file" << 'EOF'
+" Basic Neovim Configuration
+set number
+set relativenumber
+set expandtab
+set tabstop=4
+set shiftwidth=4
+set smartindent
+set wrap
+set smartcase
+set noswapfile
+set nobackup
+set undodir=~/.vim/undodir
+set undofile
+set incsearch
+set termguicolors
+set scrolloff=8
+set noshowmode
+set completeopt=menuone,noinsert,noselect
+set signcolumn=yes
+set colorcolumn=80
+
+" Plugin configuration
+call plug#begin('~/.vim/plugged')
+
+" Theme
+Plug 'navarasu/onedark.nvim'
+
+" File explorer
+Plug 'preservim/nerdtree'
+
+" Status line
+Plug 'vim-airline/vim-airline'
+
+" Git integration
+Plug 'tpope/vim-fugitive'
+Plug 'airblade/vim-gitgutter'
+
+" Syntax highlighting and language support
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
+
+" Fuzzy finder
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
+Plug 'junegunn/fzf.vim'
+
+" Commenting
+Plug 'tpope/vim-commentary'
+
+" Auto pairs
+Plug 'jiangmiao/auto-pairs'
+
+" Which key
+Plug 'folke/which-key.nvim'
+
+call plug#end()
+
+" Color scheme
+colorscheme onedark
+
+" Key mappings
+let mapleader = " "
+
+" NERDTree
+nnoremap <leader>n :NERDTreeFocus<CR>
+nnoremap <C-n> :NERDTree<CR>
+nnoremap <C-t> :NERDTreeToggle<CR>
+nnoremap <C-f> :NERDTreeFind<CR>
+
+" Fuzzy finder
+nnoremap <C-p> :Files<CR>
+nnoremap <leader>fg :Rg<CR>
+nnoremap <leader>fb :Buffers<CR>
+
+" Navigation
+nnoremap <leader>h :wincmd h<CR>
+nnoremap <leader>j :wincmd j<CR>
+nnoremap <leader>k :wincmd k<CR>
+nnoremap <leader>l :wincmd l<CR>
+
+" Tab management
+nnoremap <leader>to :tabnew<CR>
+nnoremap <leader>tc :tabclose<CR>
+nnoremap <leader>tn :tabnext<CR>
+nnoremap <leader>tp :tabprevious<CR>
+
+" Save and quit
+nnoremap <leader>w :w<CR>
+nnoremap <leader>q :q<CR>
+nnoremap <leader>wq :wq<CR>
+
+" Source current file
+nnoremap <leader><CR> :so ~/.config/nvim/init.vim<CR>
+
+" Auto commands
+autocmd VimEnter * NERDTree | wincmd p
+
+" COC configuration
+nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gy <Plug>(coc-type-definition)
+nmap <silent> gi <Plug>(coc-implementation)
+nmap <silent> gr <Plug>(coc-references)
+
+" Use tab for trigger completion with characters ahead and navigate
+inoremap <silent><expr> <TAB>
+      \ coc#pum#visible() ? coc#pum#next(1) :
+      \ CheckBackspace() ? "\<Tab>" :
+      \ coc#refresh()
+inoremap <expr><S-TAB> coc#pum#visible() ? coc#pum#prev(1) : "\<C-h>"
+
+function! CheckBackspace() abort
+  let col = col('.') - 1
+  return !col || getline('.')[col - 1]  =~# '\s'
+endfunction
+
+" Make <CR> to accept selected completion item or notify coc.nvim to format
+inoremap <silent><expr> <CR> coc#pum#visible() ? coc#pum#confirm() : "\<C-g>u\<CR>\<c-r>=coc#on_enter()\<CR>"
+EOF
+        
+        print_status "success" "Basic Neovim configuration created at $init_file"
+        print_status "info" "After first launch, run :PlugInstall to install plugins"
+    else
+        print_status "info" "Neovim configuration already exists at $init_file"
     fi
 }
 
@@ -2330,6 +2540,7 @@ run_full_installation() {
     install_pinta
     install_insync
     install_clamav
+    install_neovim  # Added Neovim installation
     cleanup_system
     
     print_status "section" "INSTALLATION COMPLETE!"
@@ -2345,6 +2556,7 @@ run_full_installation() {
     print_status "config" "  - Pinta: pinta (image editor)"
     print_status "config" "  - Flameshot: flameshot gui (for screenshots)"
     print_status "config" "  - Slack: slack (or check in applications menu)"
+    print_status "config" "  - Neovim: nvim (run :PlugInstall after first launch)"
 }
 
 run_custom_installation() {
@@ -2381,6 +2593,7 @@ run_custom_installation() {
         "install_pinta:Pinta Image Editor"
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"
+        "install_neovim:Neovim Text Editor"  # Added Neovim to custom installation
         "cleanup_system:System Cleanup"
     )
     

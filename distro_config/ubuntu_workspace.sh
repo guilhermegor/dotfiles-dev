@@ -869,6 +869,7 @@ organize_app_folders() {
 
     local dev_app_names=(
         'vim.desktop' 'gvim.desktop' 'org.vim.Vim.desktop'
+        'nvim.desktop' 'neovim.desktop' 'org.neovim.nvim.desktop'  # Added Neovim
         'dev.warp.Warp.desktop' 'warp.desktop' 'warp-terminal.desktop'
         'me.iepure.devtoolbox.desktop' 'devtoolbox.desktop' 'dev-toolbox.desktop'
         'miro.desktop' 'com.miro.Miro.desktop' 'miro-app.desktop' 'RealtimeBoard.desktop'
@@ -934,6 +935,70 @@ organize_app_folders() {
         fi
     done
     shopt -u nullglob
+
+    # Search for Neovim desktop files in common locations
+    print_status "info" "Searching for Neovim desktop files..."
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/nvim*.desktop \
+                        /usr/share/applications/neovim*.desktop \
+                        "$HOME/.local/share/applications"/nvim*.desktop \
+                        "$HOME/.local/share/applications"/neovim*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*nvim*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*neovim*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            if [[ ! " ${dev_apps[@]} " =~ " '$basename' " ]]; then
+                dev_apps+=("'$basename'")
+                print_status "success" "✓ Added Neovim: $basename"
+            fi
+        fi
+    done
+    shopt -u nullglob
+
+    # Check if Neovim is installed but doesn't have a desktop file
+    if command -v nvim >/dev/null 2>&1; then
+        print_status "info" "Neovim is installed but checking for desktop file..."
+        
+        # Check if we already found a desktop file
+        local found_nvim_desktop=false
+        for app in "${dev_apps[@]}"; do
+            if [[ "$app" == *"nvim"* ]] || [[ "$app" == *"neovim"* ]]; then
+                found_nvim_desktop=true
+                break
+            fi
+        done
+        
+        if [ "$found_nvim_desktop" = false ]; then
+            print_status "warning" "Neovim is installed but no desktop file found"
+            print_status "info" "Creating a desktop file for Neovim..."
+            
+            local nvim_desktop_path="$HOME/.local/share/applications/nvim.desktop"
+            mkdir -p "$HOME/.local/share/applications"
+            
+            cat > "$nvim_desktop_path" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Neovim
+GenericName=Text Editor
+Comment=Edit text files
+Exec=nvim %F
+Icon=nvim
+Terminal=true
+StartupNotify=true
+Categories=Development;TextEditor;
+Keywords=Text;Editor;
+MimeType=text/plain;
+EOF
+            
+            if [ -f "$nvim_desktop_path" ]; then
+                dev_apps+=("'nvim.desktop'")
+                print_status "success" "✓ Created and added Neovim desktop file"
+            else
+                print_status "error" "Failed to create Neovim desktop file"
+            fi
+        fi
+    fi
 
     # Remove any duplicates that might have been added
     dev_apps=($(echo "${dev_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))

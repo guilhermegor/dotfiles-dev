@@ -996,8 +996,9 @@ organize_app_folders() {
     local office_apps=()
 
     for app in 'libreoffice-calc.desktop' 'libreoffice-draw.desktop' 'libreoffice-impress.desktop' \
-               'libreoffice-math.desktop' 'libreoffice-writer.desktop' 'libreoffice-base.desktop' \
-               'libreoffice-startcenter.desktop' 'libreoffice-xsltfilter.desktop'; do
+            'libreoffice-math.desktop' 'libreoffice-writer.desktop' 'libreoffice-base.desktop' \
+            'libreoffice-startcenter.desktop' 'libreoffice-xsltfilter.desktop' \
+            'pinta.desktop' 'com.github.PintaProject.Pinta.desktop'; do
         if result=$(find_app_desktop_file "$app"); then
             office_apps+=("'$result'")
         fi

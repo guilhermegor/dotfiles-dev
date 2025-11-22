@@ -1822,6 +1822,99 @@ install_localsend() {
 }
 
 # ============================================================================
+# PINTA IMAGE EDITOR
+# ============================================================================
+
+install_pinta() {
+    print_status "section" "PINTA IMAGE EDITOR"
+    
+    # Check if Pinta is already installed
+    if command_exists pinta || flatpak list 2>/dev/null | grep -q "com.github.PintaProject.Pinta" || dpkg -l 2>/dev/null | grep -q "^ii  pinta "; then
+        print_status "info" "Pinta already installed"
+        return 0
+    fi
+    
+    print_status "info" "Installing Pinta image editor..."
+    
+    case "$PACKAGE_MANAGER" in
+        apt)
+            # Try installing via apt first
+            if install_package "pinta" "pinta" "pinta" "pinta"; then
+                print_status "success" "Pinta installed via system package manager"
+            else
+                print_status "warning" "Pinta not available in repositories, trying Flatpak..."
+                if command_exists flatpak; then
+                    flatpak install -y flathub com.github.PintaProject.Pinta
+                    print_status "success" "Pinta installed via Flatpak"
+                else
+                    print_status "error" "Could not install Pinta. Please install manually."
+                    return 1
+                fi
+            fi
+            ;;
+        dnf|yum)
+            # For RPM-based systems, try Flatpak first as Pinta might not be in main repos
+            if command_exists flatpak; then
+                flatpak install -y flathub com.github.PintaProject.Pinta
+                print_status "success" "Pinta installed via Flatpak"
+            else
+                print_status "warning" "Flatpak not available, trying system repositories..."
+                if install_package "pinta" "pinta" "pinta" "pinta"; then
+                    print_status "success" "Pinta installed via system package manager"
+                else
+                    print_status "error" "Could not install Pinta. Please install Flatpak first or install Pinta manually."
+                    return 1
+                fi
+            fi
+            ;;
+        pacman)
+            # For Arch-based systems
+            if command_exists yay; then
+                yay -S --noconfirm pinta
+                print_status "success" "Pinta installed from AUR"
+            elif command_exists flatpak; then
+                flatpak install -y flathub com.github.PintaProject.Pinta
+                print_status "success" "Pinta installed via Flatpak"
+            else
+                print_status "warning" "Please install Pinta manually: yay -S pinta or enable Flatpak"
+                return 1
+            fi
+            ;;
+        zypper)
+            # For openSUSE
+            if command_exists flatpak; then
+                flatpak install -y flathub com.github.PintaProject.Pinta
+                print_status "success" "Pinta installed via Flatpak"
+            else
+                if install_package "pinta" "pinta" "pinta" "pinta"; then
+                    print_status "success" "Pinta installed via system package manager"
+                else
+                    print_status "error" "Could not install Pinta. Please install Flatpak first."
+                    return 1
+                fi
+            fi
+            ;;
+    esac
+    
+    # Final verification
+    if command_exists pinta || flatpak list 2>/dev/null | grep -q "com.github.PintaProject.Pinta"; then
+        print_status "success" "Pinta image editor is ready to use"
+        print_status "info" "Pinta: Simple yet powerful image editing tool"
+        print_status "config" "Alternative to Paint.NET for Linux"
+        print_status "config" "Launch with: pinta"
+        
+        if flatpak list 2>/dev/null | grep -q "com.github.PintaProject.Pinta"; then
+            print_status "config" "Or if installed via Flatpak: flatpak run com.github.PintaProject.Pinta"
+        fi
+    else
+        print_status "warning" "Pinta installation could not be verified"
+        print_status "info" "You can install Pinta manually:"
+        print_status "config" "Flatpak: flatpak install flathub com.github.PintaProject.Pinta"
+        print_status "config" "Or visit: https://www.pinta-project.com/"
+    fi
+}
+
+# ============================================================================
 # RUSTDESK REMOTE DESKTOP
 # ============================================================================
 
@@ -2234,6 +2327,7 @@ run_full_installation() {
     install_miro
     install_localsend
     install_rustdesk
+    install_pinta
     install_insync
     install_clamav
     cleanup_system
@@ -2248,6 +2342,7 @@ run_full_installation() {
     print_status "config" "  - Cursor: cursor --version"
     print_status "config" "  - Insync: insync start"
     print_status "config" "  - RustDesk: rustdesk"
+    print_status "config" "  - Pinta: pinta (image editor)"
     print_status "config" "  - Flameshot: flameshot gui (for screenshots)"
     print_status "config" "  - Slack: slack (or check in applications menu)"
 }
@@ -2283,6 +2378,7 @@ run_custom_installation() {
         "install_miro:Miro Collaboration Tool"
         "install_localsend:LocalSend File Sharing"
         "install_rustdesk:RustDesk Remote Desktop"
+        "install_pinta:Pinta Image Editor"
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"
         "cleanup_system:System Cleanup"

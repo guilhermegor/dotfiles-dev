@@ -200,6 +200,210 @@ command_exists() {
 }
 
 # ============================================================================
+# OLLAMA INSTALLATION
+# ============================================================================
+
+install_ollama() {
+    print_status "section" "OLLAMA AI PLATFORM"
+    
+    # Check if Ollama is already installed
+    if command_exists ollama; then
+        local current_version=$(ollama --version 2>/dev/null || echo "unknown")
+        print_status "info" "Ollama already installed (version: $current_version)"
+        return 0
+    fi
+    
+    print_status "info" "Installing Ollama - Local AI platform..."
+    
+    case "$PACKAGE_MANAGER" in
+        apt)
+            install_ollama_debian
+            ;;
+        dnf|yum)
+            install_ollama_rpm
+            ;;
+        pacman)
+            install_ollama_arch
+            ;;
+        zypper)
+            install_ollama_opensuse
+            ;;
+        *)
+            print_status "warning" "Unsupported package manager, using curl installation method"
+            install_ollama_curl
+            ;;
+    esac
+    
+    # Verify installation
+    if command_exists ollama; then
+        local version=$(ollama --version 2>/dev/null || echo "unknown")
+        print_status "success" "Ollama installed successfully (version: $version)"
+        
+        # Configure Ollama service
+        configure_ollama_service
+        
+        # Show usage information
+        show_ollama_info
+    else
+        print_status "error" "Ollama installation failed"
+        return 1
+    fi
+}
+
+install_ollama_debian() {
+    print_status "info" "Installing Ollama on Debian-based system..."
+    
+    # Install dependencies
+    print_status "info" "Installing dependencies..."
+    $INSTALL_CMD curl
+    
+    # Download and install Ollama
+    cd "$DOWNLOADS_DIR"
+    print_status "info" "Downloading Ollama installer..."
+    
+    if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Ollama installed via official script"
+    else
+        print_status "warning" "Official installer failed, trying alternative method..."
+        install_ollama_curl
+    fi
+    
+    cd - > /dev/null
+}
+
+install_ollama_rpm() {
+    print_status "info" "Installing Ollama on RPM-based system..."
+    
+    # Install dependencies
+    print_status "info" "Installing dependencies..."
+    $INSTALL_CMD curl
+    
+    # Download and install Ollama
+    cd "$DOWNLOADS_DIR"
+    print_status "info" "Downloading Ollama installer..."
+    
+    if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Ollama installed via official script"
+    else
+        print_status "warning" "Official installer failed, trying alternative method..."
+        install_ollama_curl
+    fi
+    
+    cd - > /dev/null
+}
+
+install_ollama_arch() {
+    print_status "info" "Installing Ollama on Arch Linux..."
+    
+    # Try installing from AUR
+    if command_exists yay; then
+        print_status "info" "Installing Ollama from AUR..."
+        if yay -S --noconfirm ollama 2>&1 | tee -a "$LOG_FILE"; then
+            print_status "success" "Ollama installed from AUR"
+            return 0
+        else
+            print_status "warning" "AUR installation failed, trying official installer..."
+        fi
+    fi
+    
+    # Fall back to official installer
+    $INSTALL_CMD curl
+    cd "$DOWNLOADS_DIR"
+    
+    if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Ollama installed via official script"
+    else
+        print_status "error" "All installation methods failed"
+        return 1
+    fi
+    
+    cd - > /dev/null
+}
+
+install_ollama_opensuse() {
+    print_status "info" "Installing Ollama on openSUSE..."
+    
+    # Install dependencies
+    print_status "info" "Installing dependencies..."
+    $INSTALL_CMD curl
+    
+    # Use official installer
+    cd "$DOWNLOADS_DIR"
+    print_status "info" "Downloading Ollama installer..."
+    
+    if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Ollama installed via official script"
+    else
+        print_status "warning" "Official installer failed, trying binary installation..."
+        install_ollama_curl
+    fi
+    
+    cd - > /dev/null
+}
+
+install_ollama_curl() {
+    print_status "info" "Installing Ollama using binary download..."
+    
+    cd "$DOWNLOADS_DIR"
+    
+    # Download the binary directly
+    local ollama_url="https://ollama.ai/download/ollama-linux-amd64"
+    local ollama_bin="$DOWNLOADS_DIR/ollama"
+    
+    print_status "info" "Downloading Ollama binary..."
+    if curl -L -o "$ollama_bin" "$ollama_url" 2>&1 | tee -a "$LOG_FILE"; then
+        chmod +x "$ollama_bin"
+        
+        # Install to system path
+        sudo cp "$ollama_bin" /usr/local/bin/ollama
+        print_status "success" "Ollama binary installed to /usr/local/bin/ollama"
+    else
+        print_status "error" "Failed to download Ollama binary"
+        cd - > /dev/null
+        return 1
+    fi
+    
+    cd - > /dev/null
+}
+
+configure_ollama_service() {
+    print_status "info" "Configuring Ollama service..."
+    
+    # Check if systemd is available
+    if ! command_exists systemctl; then
+        print_status "warning" "systemd not available, cannot configure service"
+        return 0
+    fi
+    
+    # Start and enable Ollama service
+    if sudo systemctl enable ollama 2>/dev/null; then
+        print_status "success" "Ollama service enabled"
+    fi
+    
+    if sudo systemctl start ollama 2>/dev/null; then
+        print_status "success" "Ollama service started"
+    else
+        print_status "warning" "Could not start Ollama service automatically"
+        print_status "info" "You can start it manually with: ollama serve"
+    fi
+}
+
+show_ollama_info() {
+    print_status "info" "Ollama usage examples:"
+    print_status "config" "  Start Ollama server: ollama serve"
+    print_status "config" "  Pull a model: ollama pull llama2"
+    print_status "config" "  Run a model: ollama run llama2"
+    print_status "config" "  List models: ollama list"
+    print_status "config" "  Available models: llama2, codellama, mistral, phi, etc."
+    
+    # Show service status if systemd is available
+    if command_exists systemctl && systemctl is-active ollama &>/dev/null; then
+        print_status "success" "Ollama service is running"
+        print_status "info" "Ollama API available at: http://localhost:11434"
+    fi
+}
+
+# ============================================================================
 # NEOVIM INSTALLATION
 # ============================================================================
 
@@ -2540,7 +2744,8 @@ run_full_installation() {
     install_pinta
     install_insync
     install_clamav
-    install_neovim  # Added Neovim installation
+    install_neovim
+    install_ollama  # Added Ollama installation
     cleanup_system
     
     print_status "section" "INSTALLATION COMPLETE!"
@@ -2557,6 +2762,7 @@ run_full_installation() {
     print_status "config" "  - Flameshot: flameshot gui (for screenshots)"
     print_status "config" "  - Slack: slack (or check in applications menu)"
     print_status "config" "  - Neovim: nvim (run :PlugInstall after first launch)"
+    print_status "config" "  - Ollama: ollama --version (AI platform)"
 }
 
 run_custom_installation() {
@@ -2593,7 +2799,8 @@ run_custom_installation() {
         "install_pinta:Pinta Image Editor"
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"
-        "install_neovim:Neovim Text Editor"  # Added Neovim to custom installation
+        "install_neovim:Neovim Text Editor"
+        "install_ollama:Ollama AI Platform"  # Added Ollama to custom installation
         "cleanup_system:System Cleanup"
     )
     
@@ -2621,8 +2828,8 @@ run_custom_installation() {
     print_status "info" "Log file: $LOG_FILE"
     
     # Check if Homebrew or asdf were installed and remind user to reload shell
-    if command_exists brew || command_exists asdf; then
-        print_status "info" "Version managers installed. Reload your shell:"
+    if command_exists brew || command_exists asdf || command_exists ollama; then
+        print_status "info" "Tools installed. Reload your shell:"
         print_status "config" "source ~/.bashrc"
     fi
 }

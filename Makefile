@@ -9,7 +9,7 @@
 # -------------------
 .PHONY: init
 
-init: permissions install_programs irpf_download set_shortcuts ubuntu_workspace
+init: permissions install_programs install_toolchains irpf_download set_shortcuts ubuntu_workspace
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -17,6 +17,7 @@ init: permissions install_programs irpf_download set_shortcuts ubuntu_workspace
 	@echo "║                                                            ║"
 	@echo "║  ✅ Permissions set for all scripts                        ║"
 	@echo "║  ✅ Essential programs installed                           ║"
+	@echo "║  ✅ Toolchains installed                                   ║"
 	@echo "║  ✅ IRPF (Brazilian tax software) downloaded               ║"
 	@echo "║  ✅ Custom shortcuts configured                            ║"
 	@echo "║  ✅ Ubuntu workspace configured                            ║"
@@ -38,6 +39,10 @@ init: permissions install_programs irpf_download set_shortcuts ubuntu_workspace
 install_programs:
 	@echo "Installing essential programs..."
 	@bash distro_config/install_programs.sh
+
+install_toolchains:
+	@echo "Installing development toolchains..."
+	@bash distro_config/install_toolchains.sh
 
 irpf_download:
 	@echo "Downloading IRPF (Brazilian tax software)..."

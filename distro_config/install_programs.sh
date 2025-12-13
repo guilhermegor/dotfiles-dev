@@ -1255,27 +1255,40 @@ install_cursor() {
             print_status "info" "Downloading Cursor IDE..."
             print_status "warning" "This may take a few minutes (large file ~150MB)..."
             
-            # Get the latest version from the download URL
-            # This URL redirects to the latest version automatically
-            local cursor_deb_url="https://downloads.cursor.com/linux/debian/x64"
+            # Official Cursor API download URL
+            local cursor_deb_url="https://api2.cursor.sh/updates/download/golden/linux-x64-deb/cursor/2.2"
             
-            print_status "info" "Fetching latest Cursor .deb package..."
+            print_status "info" "Downloading from official Cursor API..."
             
-            if wget --content-disposition -O cursor_latest_amd64.deb "$cursor_deb_url" 2>&1 | tee -a "$LOG_FILE"; then
-                if [ -f "cursor_latest_amd64.deb" ] && [ -s "cursor_latest_amd64.deb" ]; then
-                    # Verify it's actually a .deb file
-                    if file cursor_latest_amd64.deb | grep -q "Debian"; then
+            if wget --timeout=120 --tries=3 \
+                --user-agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+                -O cursor_latest.deb "$cursor_deb_url" 2>&1 | tee -a "$LOG_FILE"; then
+                
+                if [ -f "cursor_latest.deb" ] && [ -s "cursor_latest.deb" ]; then
+                    # Verify it's a valid .deb file
+                    if file cursor_latest.deb | grep -q "Debian"; then
                         print_status "success" "Downloaded Cursor .deb package"
                         
                         print_status "info" "Installing Cursor IDE..."
-                        sudo dpkg -i cursor_latest_amd64.deb || {
+                        if sudo dpkg -i cursor_latest.deb 2>&1 | tee -a "$LOG_FILE"; then
+                            print_status "success" "Cursor installed successfully"
+                        else
                             print_status "warning" "dpkg installation had issues, fixing dependencies..."
                             sudo apt-get install -f -y
-                        }
+                            
+                            # Try installing again after fixing dependencies
+                            if sudo dpkg -i cursor_latest.deb; then
+                                print_status "success" "Cursor installed after fixing dependencies"
+                            else
+                                print_status "error" "Failed to install Cursor package"
+                                cd - > /dev/null
+                                return 1
+                            fi
+                        fi
                         
                         # Verify installation
                         if command_exists cursor || dpkg -l | grep -q cursor; then
-                            print_status "success" "Cursor IDE installed successfully"
+                            print_status "success" "Cursor IDE installation verified"
                             
                             # Get installed version
                             if dpkg -l | grep -q cursor; then
@@ -1283,82 +1296,100 @@ install_cursor() {
                                 print_status "info" "Installed version: $version"
                                 echo "Cursor version: $version" >> "$LOG_FILE"
                             fi
+                            
+                            cd - > /dev/null
+                            return 0
                         else
-                            print_status "error" "Cursor installation verification failed"
+                            print_status "error" "Installation verification failed"
+                            cd - > /dev/null
                             return 1
                         fi
                     else
                         print_status "error" "Downloaded file is not a valid .deb package"
-                        rm -f cursor_latest_amd64.deb
+                        rm -f cursor_latest.deb
+                        cd - > /dev/null
                         return 1
                     fi
                 else
                     print_status "error" "Download failed or file is empty"
+                    cd - > /dev/null
                     return 1
                 fi
             else
-                print_status "error" "Failed to download Cursor from $cursor_deb_url"
-                print_status "info" "Trying alternative method..."
-                
-                # Alternative: Try the specific version URL format you used
-                local alt_url="https://downloads.cursor.com/production/45fd70f3fe72037444ba35c9e51ce86a1977ac11/linux/x64/deb/amd64/deb/cursor_2.0.34_amd64.deb"
-                
-                print_status "info" "Attempting download from alternative URL..."
-                if wget -O cursor_2.0.34_amd64.deb "$alt_url" 2>&1 | tee -a "$LOG_FILE"; then
-                    if [ -f "cursor_2.0.34_amd64.deb" ] && [ -s "cursor_2.0.34_amd64.deb" ]; then
-                        print_status "info" "Installing Cursor IDE..."
-                        sudo dpkg -i cursor_2.0.34_amd64.deb
-                        sudo apt-get install -f -y
-                        print_status "success" "Cursor IDE installed"
-                    else
-                        print_status "error" "Alternative download also failed"
-                        print_status "info" "Please visit https://cursor.com to download manually"
-                        return 1
-                    fi
-                else
-                    print_status "error" "All download attempts failed"
-                    print_status "info" "Please visit https://cursor.com to download manually"
-                    return 1
-                fi
+                print_status "error" "Failed to download Cursor"
+                print_status "info" "Manual installation options:"
+                print_status "config" "1. Visit https://cursor.com to download directly"
+                print_status "config" "2. Or try: sudo snap install cursor"
+                print_status "config" "3. Or download with: wget -O cursor.deb https://api2.cursor.sh/updates/download/golden/linux-x64-deb/cursor/2.2"
+                cd - > /dev/null
+                return 1
             fi
             ;;
             
-        dnf|yum|zypper)
-            print_status "info" "Installing Cursor AppImage..."
+        dnf|yum)
+            print_status "info" "Installing Cursor for RPM-based system..."
             
-            # Try AppImage for RPM-based systems
-            local appimage_urls=(
-                "https://downloads.cursor.com/linux/appImage/x64"
-                "https://downloader.cursor.sh/linux/appImage/x64"
-            )
+            # Try AppImage for RPM systems
+            local appimage_url="https://api2.cursor.sh/updates/download/golden/linux-x64-appimage/cursor/2.2"
             
-            local download_success=false
+            print_status "info" "Downloading Cursor AppImage..."
             
-            for url in "${appimage_urls[@]}"; do
-                print_status "info" "Trying URL: $url"
+            if wget --timeout=120 --tries=3 \
+                --user-agent="Mozilla/5.0" \
+                -O cursor.AppImage "$appimage_url" 2>&1 | tee -a "$LOG_FILE"; then
                 
-                if wget --timeout=30 --tries=3 -O cursor.AppImage "$url" 2>&1 | tee -a "$LOG_FILE"; then
-                    if [ -f "cursor.AppImage" ] && [ -s "cursor.AppImage" ]; then
-                        download_success=true
-                        break
+                if [ -f "cursor.AppImage" ] && [ -s "cursor.AppImage" ]; then
+                    chmod +x cursor.AppImage
+                    mkdir -p ~/.local/bin
+                    mv cursor.AppImage ~/.local/bin/cursor
+                    
+                    # Add to PATH if not already there
+                    if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+                        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+                        print_status "info" "Added ~/.local/bin to PATH in ~/.bashrc"
                     fi
+                    
+                    print_status "success" "Cursor AppImage installed in ~/.local/bin/cursor"
+                    print_status "info" "Reload shell with: source ~/.bashrc"
+                else
+                    print_status "error" "Download failed or file is empty"
+                    print_status "info" "Please visit https://cursor.com to download manually"
                 fi
-                
-                print_status "warning" "Download from $url failed, trying next URL..."
-            done
+            else
+                print_status "error" "Could not download Cursor AppImage"
+                print_status "info" "Please visit https://cursor.com to download manually"
+            fi
+            ;;
             
-            if [ "$download_success" = true ]; then
-                chmod +x cursor.AppImage
-                mkdir -p ~/.local/bin
-                mv cursor.AppImage ~/.local/bin/cursor
+        zypper)
+            print_status "info" "Installing Cursor for openSUSE..."
+            
+            # Try AppImage for openSUSE
+            local appimage_url="https://api2.cursor.sh/updates/download/golden/linux-x64-appimage/cursor/2.2"
+            
+            print_status "info" "Downloading Cursor AppImage..."
+            
+            if wget --timeout=120 --tries=3 \
+                --user-agent="Mozilla/5.0" \
+                -O cursor.AppImage "$appimage_url" 2>&1 | tee -a "$LOG_FILE"; then
                 
-                # Add to PATH if not already there
-                if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
-                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-                    print_status "info" "Added ~/.local/bin to PATH in ~/.bashrc"
+                if [ -f "cursor.AppImage" ] && [ -s "cursor.AppImage" ]; then
+                    chmod +x cursor.AppImage
+                    mkdir -p ~/.local/bin
+                    mv cursor.AppImage ~/.local/bin/cursor
+                    
+                    # Add to PATH if not already there
+                    if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+                        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+                        print_status "info" "Added ~/.local/bin to PATH in ~/.bashrc"
+                    fi
+                    
+                    print_status "success" "Cursor AppImage installed in ~/.local/bin/cursor"
+                    print_status "info" "Reload shell with: source ~/.bashrc"
+                else
+                    print_status "error" "Download failed or file is empty"
+                    print_status "info" "Please visit https://cursor.com to download manually"
                 fi
-                
-                print_status "success" "Cursor installed as AppImage in ~/.local/bin/cursor"
             else
                 print_status "error" "Could not download Cursor AppImage"
                 print_status "info" "Please visit https://cursor.com to download manually"
@@ -1374,6 +1405,24 @@ install_cursor() {
                     print_status "success" "Cursor AppImage installed from AUR"
                 else
                     print_status "error" "Failed to install Cursor from AUR"
+                    print_status "info" "Trying direct AppImage download..."
+                    
+                    local appimage_url="https://api2.cursor.sh/updates/download/golden/linux-x64-appimage/cursor/2.2"
+                    
+                    if wget --timeout=120 -O cursor.AppImage "$appimage_url" 2>&1 | tee -a "$LOG_FILE"; then
+                        if [ -f "cursor.AppImage" ] && [ -s "cursor.AppImage" ]; then
+                            chmod +x cursor.AppImage
+                            mkdir -p ~/.local/bin
+                            mv cursor.AppImage ~/.local/bin/cursor
+                            
+                            if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+                                echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+                                print_status "info" "Added ~/.local/bin to PATH in ~/.bashrc"
+                            fi
+                            
+                            print_status "success" "Cursor AppImage installed in ~/.local/bin/cursor"
+                        fi
+                    fi
                 fi
             else
                 print_status "warning" "yay not found"
@@ -1395,8 +1444,8 @@ install_cursor() {
         print_status "warning" "Cursor installation could not be verified"
         print_status "info" "If you need to install manually:"
         print_status "config" "1. Visit https://cursor.com"
-        print_status "config" "2. Download the .deb file for Linux"
-        print_status "config" "3. Install with: sudo dpkg -i cursor_*.deb"
+        print_status "config" "2. Or download with: wget -O cursor.deb https://api2.cursor.sh/updates/download/golden/linux-x64-deb/cursor/2.2"
+        print_status "config" "3. Then install: sudo dpkg -i cursor.deb"
     fi
     
     cd - > /dev/null

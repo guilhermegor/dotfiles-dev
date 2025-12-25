@@ -328,6 +328,112 @@ install_nodejs() {
 }
 
 # ============================================================================
+# TYPESCRIPT INSTALLATION
+# ============================================================================
+
+install_typescript() {
+    print_status "section" "TYPESCRIPT INSTALLATION"
+    
+    # Check if Node.js is installed
+    if ! is_tool_installed "nodejs"; then
+        print_status "error" "Node.js is not installed! TypeScript requires Node.js."
+        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
+        read -r install_nodejs_first
+        
+        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
+            install_nodejs
+        else
+            print_status "warning" "Skipping TypeScript installation as Node.js is required"
+            return 1
+        fi
+    fi
+    
+    # Check if npm is available
+    if ! command_exists npm; then
+        print_status "error" "npm is not available. Please ensure Node.js is properly installed."
+        return 1
+    fi
+    
+    # Check if TypeScript is already installed globally
+    print_status "info" "Checking for existing TypeScript installation..."
+    
+    # Try to get TypeScript version
+    local tsc_version=$(npm list -g typescript 2>/dev/null | grep typescript@ | head -1 | sed 's/.*typescript@//' | cut -d' ' -f1)
+    
+    if [ -n "$tsc_version" ]; then
+        print_status "info" "TypeScript is already installed globally (version: $tsc_version)"
+        
+        echo -e "\n${YELLOW}Do you want to update TypeScript to the latest version? (y/n):${NC}"
+        read -r update_ts
+        if [[ ! "$update_ts" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing TypeScript version $tsc_version"
+            return 0
+        fi
+    fi
+    
+    # Ask for TypeScript installation
+    echo -e "\n${YELLOW}Install TypeScript globally? (y/n):${NC}"
+    echo -e "${CYAN}This will install TypeScript via: npm install -g typescript${NC}"
+    read -r install_ts
+    
+    if [[ ! "$install_ts" =~ ^[Yy]$ ]]; then
+        print_status "info" "Skipping TypeScript installation"
+        return 0
+    fi
+    
+    # Ask for specific version
+    echo -e "\n${YELLOW}Enter TypeScript version to install (or press Enter for latest):${NC}"
+    echo -e "${CYAN}Examples: latest, 5.3.0, 5.2.0, 4.9.0${NC}"
+    read -r ts_version
+    
+    local install_cmd="npm install -g typescript"
+    if [ -n "$ts_version" ] && [ "$ts_version" != "latest" ]; then
+        install_cmd="npm install -g typescript@$ts_version"
+        print_status "info" "Installing TypeScript $ts_version..."
+    else
+        print_status "info" "Installing latest TypeScript version..."
+    fi
+    
+    print_status "warning" "This may take a moment..."
+    
+    if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+        # Get the installed version
+        tsc_version=$(npm list -g typescript 2>/dev/null | grep typescript@ | head -1 | sed 's/.*typescript@//' | cut -d' ' -f1)
+        
+        if [ -n "$tsc_version" ]; then
+            print_status "success" "TypeScript $tsc_version installed successfully"
+        else
+            print_status "success" "TypeScript installed successfully"
+        fi
+        
+        # Verify installation
+        print_status "info" "Verifying installation..."
+        
+        # Check tsc version
+        if command_exists tsc; then
+            local actual_tsc_version=$(tsc --version 2>/dev/null | sed 's/Version //' || echo "Not available")
+            print_status "info" "TypeScript compiler version: $actual_tsc_version"
+        else
+            print_status "warning" "TypeScript compiler (tsc) command not found. You may need to reload your shell."
+        fi
+        
+        # Usage tips
+        echo ""
+        print_status "info" "TypeScript management commands:"
+        print_status "config" "  Check version: tsc --version"
+        print_status "config" "  Compile TypeScript: tsc filename.ts"
+        print_status "config" "  Initialize tsconfig: tsc --init"
+        print_status "config" "  Update TypeScript: npm update -g typescript"
+        print_status "config" "  Install specific version: npm install -g typescript@5.3.0"
+        print_status "config" "  List globally installed packages: npm list -g --depth=0"
+        
+    else
+        print_status "error" "Failed to install TypeScript"
+        return 1
+    fi
+}
+
+# ============================================================================
 # RUST INSTALLATION
 # ============================================================================
 
@@ -504,8 +610,10 @@ show_menu() {
     echo -e "${YELLOW}Select installation option:${NC}"
     echo -e "  ${GREEN}1)${NC} Install Node.js only"
     echo -e "  ${GREEN}2)${NC} Install Rust only"
-    echo -e "  ${GREEN}3)${NC} Install all toolchains"
-    echo -e "  ${GREEN}4)${NC} Exit"
+    echo -e "  ${GREEN}3)${NC} Install TypeScript only (requires Node.js)"
+    echo -e "  ${GREEN}4)${NC} Install Node.js + TypeScript"
+    echo -e "  ${GREEN}5)${NC} Install all toolchains (Node.js, TypeScript, Rust)"
+    echo -e "  ${GREEN}6)${NC} Exit"
     echo -e "\n${CYAN}Choice: ${NC}"
 }
 
@@ -544,17 +652,29 @@ main() {
                 break
                 ;;
             3)
+                install_typescript
+                break
+                ;;
+            4)
                 install_nodejs
+                echo ""
+                install_typescript
+                break
+                ;;
+            5)
+                install_nodejs
+                echo ""
+                install_typescript
                 echo ""
                 install_rust
                 break
                 ;;
-            4)
+            6)
                 print_status "info" "Installation cancelled"
                 exit 0
                 ;;
             *)
-                print_status "error" "Invalid option. Please select 1, 2, 3, or 4."
+                print_status "error" "Invalid option. Please select 1-6."
                 ;;
         esac
     done
@@ -579,6 +699,11 @@ main() {
     # Check npm
     if command_exists npm; then
         print_status "config" "  npm: $(npm --version 2>/dev/null || echo 'Not available')"
+    fi
+    
+    # Check TypeScript
+    if command_exists tsc; then
+        print_status "config" "  TypeScript: $(tsc --version 2>/dev/null | sed 's/Version //' || echo 'Not available')"
     fi
     
     # Check rustc
@@ -608,6 +733,7 @@ main() {
     print_status "config" "  Check installed versions: asdf current"
     print_status "config" "  View all managed tools: asdf plugin list"
     print_status "config" "  Project-specific versions: Create .tool-versions file"
+    print_status "config" "  Update TypeScript: npm update -g typescript"
     echo ""
 }
 

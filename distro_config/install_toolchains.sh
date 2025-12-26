@@ -311,6 +311,14 @@ install_nodejs() {
             print_status "info" "npm version: $npm_version"
         fi
         
+        # Check npx version (npx comes with npm 5.2+)
+        if command_exists npx; then
+            local npx_version=$(npx --version 2>/dev/null || echo "Not available")
+            print_status "info" "npx version: $npx_version"
+        else
+            print_status "info" "npx not found (it may come with newer npm versions)"
+        fi
+        
         # Usage tips
         echo ""
         print_status "info" "Node.js management commands:"
@@ -323,6 +331,130 @@ install_nodejs() {
         
     else
         print_status "error" "Failed to install Node.js $node_version"
+        return 1
+    fi
+}
+
+# ============================================================================
+# NPX INSTALLATION
+# ============================================================================
+
+install_npx() {
+    print_status "section" "NPX INSTALLATION"
+    
+    # Check if Node.js is installed
+    if ! is_tool_installed "nodejs"; then
+        print_status "error" "Node.js is not installed! NPX requires Node.js."
+        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
+        read -r install_nodejs_first
+        
+        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
+            install_nodejs
+        else
+            print_status "warning" "Skipping NPX installation as Node.js is required"
+            return 1
+        fi
+    fi
+    
+    # Check if npm is available
+    if ! command_exists npm; then
+        print_status "error" "npm is not available. Please ensure Node.js is properly installed."
+        return 1
+    fi
+    
+    # Check if npx is already available (npx comes with npm 5.2+)
+    print_status "info" "Checking for existing NPX installation..."
+    
+    # Try to get npx version
+    local npx_version=""
+    if command_exists npx; then
+        npx_version=$(npx --version 2>/dev/null || echo "")
+    fi
+    
+    if [ -n "$npx_version" ]; then
+        print_status "info" "NPX is already available (version: $npx_version)"
+        print_status "info" "NPX typically comes bundled with npm 5.2.0 and above"
+        
+        echo -e "\n${YELLOW}Do you want to install/update NPX globally anyway? (y/n):${NC}"
+        echo -e "${CYAN}Note: This will install NPX globally via npm${NC}"
+        read -r update_npx
+        if [[ ! "$update_npx" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing NPX version"
+            return 0
+        fi
+    else
+        print_status "info" "NPX not found in PATH"
+        print_status "info" "NPX typically comes with npm 5.2+. Your npm version: $(npm --version 2>/dev/null || echo 'unknown')"
+    fi
+    
+    # Ask for NPX installation
+    echo -e "\n${YELLOW}Install NPX globally via npm? (y/n):${NC}"
+    echo -e "${CYAN}This will install NPX via: npm install -g npx${NC}"
+    echo -e "${YELLOW}Note: If you have npm 5.2+, npx should already be available${NC}"
+    read -r install_npx
+    
+    if [[ ! "$install_npx" =~ ^[Yy]$ ]]; then
+        print_status "info" "Skipping NPX installation"
+        return 0
+    fi
+    
+    # Ask for specific version
+    echo -e "\n${YELLOW}Enter NPX version to install (or press Enter for latest):${NC}"
+    echo -e "${CYAN}Examples: latest, 10.2.0, 7.1.0${NC}"
+    echo -e "${CYAN}Note: Latest versions of npx are included in npm. Installing separately is optional.${NC}"
+    read -r npx_version_input
+    
+    local install_cmd="npm install -g npx"
+    if [ -n "$npx_version_input" ] && [ "$npx_version_input" != "latest" ]; then
+        install_cmd="npm install -g npx@$npx_version_input"
+        print_status "info" "Installing NPX $npx_version_input..."
+    else
+        print_status "info" "Installing latest NPX version..."
+    fi
+    
+    print_status "warning" "This may take a moment..."
+    
+    if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+        # Get the installed version
+        npx_version=$(npx --version 2>/dev/null || echo "")
+        
+        if [ -n "$npx_version" ]; then
+            print_status "success" "NPX $npx_version installed successfully"
+        else
+            print_status "success" "NPX installed successfully"
+        fi
+        
+        # Verify installation
+        print_status "info" "Verifying installation..."
+        
+        # Check npx version
+        if command_exists npx; then
+            local actual_npx_version=$(npx --version 2>/dev/null || echo "Not available")
+            print_status "info" "NPX version: $actual_npx_version"
+        else
+            print_status "warning" "NPX command not found. You may need to reload your shell."
+        fi
+        
+        # Usage tips
+        echo ""
+        print_status "info" "NPX management commands:"
+        print_status "config" "  Check version: npx --version"
+        print_status "config" "  Run command without installing: npx create-react-app my-app"
+        print_status "config" "  Execute local binaries: npx jest"
+        print_status "config" "  Update NPX: npm update -g npx"
+        print_status "config" "  Install specific version: npm install -g npx@10.2.0"
+        print_status "config" "  Note: NPX comes bundled with npm 5.2+"
+        
+        # Check if npx came from npm or separate installation
+        if command_exists npm; then
+            local npm_version=$(npm --version 2>/dev/null)
+            if [[ "$npm_version" =~ ^[5-9]\. ]]; then
+                print_status "info" "Your npm version ($npm_version) includes npx natively"
+            fi
+        fi
+        
+    else
+        print_status "error" "Failed to install NPX"
         return 1
     fi
 }
@@ -603,17 +735,20 @@ install_rust() {
 # ============================================================================
 
 show_menu() {
-    echo -e "\n${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}               ${MAGENTA}Toolchains Installation via asdf${NC}             ${CYAN}║${NC}"
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}\n"
+    echo -e "\n${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}               ${MAGENTA}Toolchains Installation via asdf${NC}                ${CYAN}║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}\n"
     
     echo -e "${YELLOW}Select installation option:${NC}"
     echo -e "  ${GREEN}1)${NC} Install Node.js only"
     echo -e "  ${GREEN}2)${NC} Install Rust only"
     echo -e "  ${GREEN}3)${NC} Install TypeScript only (requires Node.js)"
-    echo -e "  ${GREEN}4)${NC} Install Node.js + TypeScript"
-    echo -e "  ${GREEN}5)${NC} Install all toolchains (Node.js, TypeScript, Rust)"
-    echo -e "  ${GREEN}6)${NC} Exit"
+    echo -e "  ${GREEN}4)${NC} Install NPX only (requires Node.js)"
+    echo -e "  ${GREEN}5)${NC} Install Node.js + TypeScript"
+    echo -e "  ${GREEN}6)${NC} Install Node.js + NPX"
+    echo -e "  ${GREEN}7)${NC} Install Node.js + TypeScript + NPX"
+    echo -e "  ${GREEN}8)${NC} Install all toolchains (Node.js, TypeScript, NPX, Rust)"
+    echo -e "  ${GREEN}9)${NC} Exit"
     echo -e "\n${CYAN}Choice: ${NC}"
 }
 
@@ -656,25 +791,45 @@ main() {
                 break
                 ;;
             4)
-                install_nodejs
-                echo ""
-                install_typescript
+                install_npx
                 break
                 ;;
             5)
                 install_nodejs
                 echo ""
                 install_typescript
+                break
+                ;;
+            6)
+                install_nodejs
+                echo ""
+                install_npx
+                break
+                ;;
+            7)
+                install_nodejs
+                echo ""
+                install_typescript
+                echo ""
+                install_npx
+                break
+                ;;
+            8)
+                install_nodejs
+                echo ""
+                install_typescript
+                echo ""
+                install_npx
                 echo ""
                 install_rust
                 break
                 ;;
-            6)
+            9)
                 print_status "info" "Installation cancelled"
                 exit 0
                 ;;
             *)
-                print_status "error" "Invalid option. Please select 1-6."
+                print_status "error" "Invalid option. Please select 1-9."
                 ;;
         esac
     done
@@ -699,6 +854,11 @@ main() {
     # Check npm
     if command_exists npm; then
         print_status "config" "  npm: $(npm --version 2>/dev/null || echo 'Not available')"
+    fi
+    
+    # Check npx
+    if command_exists npx; then
+        print_status "config" "  npx: $(npx --version 2>/dev/null || echo 'Not available')"
     fi
     
     # Check TypeScript
@@ -734,6 +894,7 @@ main() {
     print_status "config" "  View all managed tools: asdf plugin list"
     print_status "config" "  Project-specific versions: Create .tool-versions file"
     print_status "config" "  Update TypeScript: npm update -g typescript"
+    print_status "config" "  Update NPX: npm update -g npx"
     echo ""
 }
 

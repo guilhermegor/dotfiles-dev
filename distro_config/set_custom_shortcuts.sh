@@ -77,7 +77,9 @@ set_keybindings_array() {
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom2/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/', \
-    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom4/']"
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom4/', \
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom5/', \
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom6/']"
 }
 
 # function to set individual keybindings
@@ -149,12 +151,12 @@ EOF
     print_status $GREEN "Nautilus integration set up automatically!"
 }
 
-# Modified main function to set up both copy and paste keybindings
+# Modified main function to set up all keybindings including Insync kill
 set_all_keybindings() {
     print_status $GREEN "Configuring GNOME custom keybindings..."
     
-    # Define the keybindings we'll be using
-    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v")
+    # Define the keybindings we'll be using (including new Super+K)
+    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k")
     
     # Ask user if they want to verify conflicts
     read -p "Do you want to verify for shortcut conflicts before proceeding? [Y/n] " -n 1 -r
@@ -166,7 +168,7 @@ set_all_keybindings() {
     # Create the enhanced copy-path script and set up Nautilus integration
     create_copy_path_script
     
-    # Increase the array size to accommodate the new keybindings
+    # Increase the array size to accommodate the new keybindings (now 7 items)
     set_keybindings_array
     
     # Set individual keybindings
@@ -176,11 +178,13 @@ set_all_keybindings() {
     set_individual_keybinding 3 "Open Settings" "gnome-control-center" "<Super><Ctrl>s"
     set_individual_keybinding 4 "Copy File Path" "$HOME/.local/bin/copy-path.sh" "<Ctrl><Shift>c"
     set_individual_keybinding 5 "Paste File Path" "$HOME/.local/bin/copy-path.sh --paste" "<Ctrl><Shift>v"
+    set_individual_keybinding 6 "Kill Insync" "pkill -f insync" "<Super>k"
     
     print_status $GREEN "All keybindings have been configured successfully!"
     print_status $YELLOW "You can now use:"
     print_status $YELLOW "  - Ctrl+Shift+C in Nautilus to copy file paths"
     print_status $YELLOW "  - Ctrl+Shift+V anywhere to paste the paths"
+    print_status $YELLOW "  - Super+K to kill Insync processes"
 }
 
 # execute the main function

@@ -200,6 +200,206 @@ command_exists() {
 }
 
 # ============================================================================
+# VITALS INSTALLATION
+# ============================================================================
+
+install_vitals() {
+    print_status "section" "VITALS SYSTEM MONITOR"
+    
+    # Check if Vitals is already installed and enabled
+    if gnome-extensions list 2>/dev/null | grep -q "Vitals@CoreCoding.com"; then
+        print_status "info" "Vitals extension already installed"
+        
+        # Check if it's enabled
+        if gnome-extensions info "Vitals@CoreCoding.com" 2>/dev/null | grep -q "ENABLED"; then
+            print_status "success" "Vitals extension is already enabled"
+        else
+            print_status "info" "Enabling Vitals extension..."
+            if gnome-extensions enable "Vitals@CoreCoding.com" 2>&1 | tee -a "$LOG_FILE"; then
+                print_status "success" "Vitals extension enabled"
+            else
+                print_status "warning" "Could not enable Vitals extension"
+                print_status "info" "You may need to log out and log back in"
+            fi
+        fi
+        return 0
+    fi
+    
+    print_status "info" "Installing Vitals system monitor extension..."
+    
+    # Only support GNOME-based systems
+    if ! command_exists gnome-shell; then
+        print_status "warning" "GNOME Shell not detected. Vitals requires GNOME desktop environment."
+        print_status "info" "Skipping Vitals installation for non-GNOME systems."
+        return 1
+    fi
+    
+    case "$PACKAGE_MANAGER" in
+        apt)
+            install_vitals_debian
+            ;;
+        dnf|yum)
+            install_vitals_rpm
+            ;;
+        pacman)
+            install_vitals_arch
+            ;;
+        zypper)
+            install_vitals_opensuse
+            ;;
+        *)
+            print_status "warning" "Unsupported package manager, trying manual installation"
+            install_vitals_manual
+            ;;
+    esac
+    
+    # Final verification
+    if gnome-extensions list 2>/dev/null | grep -q "Vitals@CoreCoding.com"; then
+        print_status "success" "Vitals extension installed successfully"
+        print_status "info" "You may need to log out and log back in for the extension to appear"
+        
+        # Try to enable it
+        print_status "info" "Enabling Vitals extension..."
+        if gnome-extensions enable "Vitals@CoreCoding.com" 2>&1 | tee -a "$LOG_FILE"; then
+            print_status "success" "Vitals extension enabled"
+        else
+            print_status "warning" "Could not enable Vitals extension automatically"
+            print_status "config" "Please enable it manually in GNOME Extensions app"
+        fi
+    else
+        print_status "warning" "Vitals installation could not be verified"
+        print_status "info" "You may need to install it manually from extensions.gnome.org"
+    fi
+}
+
+install_vitals_debian() {
+    print_status "info" "Installing Vitals on Debian-based system..."
+    
+    # Install required dependencies
+    print_status "info" "Installing GNOME Shell extension dependencies..."
+    $INSTALL_CMD gnome-shell-extensions gnome-shell-extension-prefs chrome-gnome-shell
+    
+    # Check if Vitals is available in repositories (Ubuntu 24.04+)
+    if [[ "$DISTRO" == "ubuntu" ]] && [[ "$UBUNTU_VERSION" == "24.04" ]]; then
+        print_status "info" "Ubuntu 24.04 detected, checking for Vitals in repositories..."
+        if apt-cache search gnome-shell-extension-vitals 2>/dev/null | grep -q vitals; then
+            print_status "info" "Installing Vitals from Ubuntu repository..."
+            $INSTALL_CMD gnome-shell-extension-vitals
+            return 0
+        fi
+    fi
+    
+    # Fallback to manual installation
+    install_vitals_manual
+}
+
+install_vitals_rpm() {
+    print_status "info" "Installing Vitals on RPM-based system..."
+    
+    # Install required dependencies
+    print_status "info" "Installing GNOME Shell extension dependencies..."
+    $INSTALL_CMD gnome-shell-extension-tool gnome-tweaks
+    
+    # Try to find Vitals in repositories
+    print_status "info" "Checking for Vitals in repositories..."
+    if $PACKAGE_MANAGER search gnome-shell-extension-vitals 2>/dev/null | grep -q vitals; then
+        print_status "info" "Installing Vitals from repository..."
+        $INSTALL_CMD gnome-shell-extension-vitals
+        return 0
+    fi
+    
+    # Fallback to manual installation
+    install_vitals_manual
+}
+
+install_vitals_arch() {
+    print_status "info" "Installing Vitals on Arch Linux..."
+    
+    # Try installing from AUR
+    if command_exists yay; then
+        print_status "info" "Installing Vitals from AUR..."
+        if yay -S --noconfirm gnome-shell-extension-vitals 2>&1 | tee -a "$LOG_FILE"; then
+            print_status "success" "Vitals installed from AUR"
+            return 0
+        fi
+    fi
+    
+    # Fallback to manual installation
+    install_vitals_manual
+}
+
+install_vitals_opensuse() {
+    print_status "info" "Installing Vitals on openSUSE..."
+    
+    # Install required dependencies
+    print_status "info" "Installing GNOME Shell extension dependencies..."
+    $INSTALL_CMD gnome-shell-extension-common gnome-tweaks
+    
+    # Check for Vitals in repositories
+    print_status "info" "Checking for Vitals in repositories..."
+    if zypper search -s gnome-shell-extension-vitals 2>/dev/null | grep -q vitals; then
+        print_status "info" "Installing Vitals from repository..."
+        $INSTALL_CMD gnome-shell-extension-vitals
+        return 0
+    fi
+    
+    # Fallback to manual installation
+    install_vitals_manual
+}
+
+install_vitals_manual() {
+    print_status "info" "Installing Vitals manually from GitHub..."
+    
+    local extensions_dir="$HOME/.local/share/gnome-shell/extensions"
+    local vitals_dir="$extensions_dir/Vitals@CoreCoding.com"
+    
+    # Create extensions directory if it doesn't exist
+    mkdir -p "$extensions_dir"
+    
+    # Check if Vitals is already cloned
+    if [ -d "$vitals_dir" ]; then
+        print_status "info" "Vitals directory already exists, updating..."
+        cd "$vitals_dir"
+        if git pull 2>&1 | tee -a "$LOG_FILE"; then
+            print_status "success" "Vitals updated from GitHub"
+        else
+            print_status "warning" "Could not update Vitals, using existing version"
+        fi
+        cd - > /dev/null
+    else
+        print_status "info" "Cloning Vitals from GitHub repository..."
+        cd "$extensions_dir"
+        if git clone https://github.com/corecoding/Vitals.git "Vitals@CoreCoding.com" 2>&1 | tee -a "$LOG_FILE"; then
+            print_status "success" "Vitals cloned from GitHub"
+        else
+            print_status "error" "Failed to clone Vitals from GitHub"
+            print_status "info" "You can download it manually from: https://extensions.gnome.org/extension/1460/vitals/"
+            return 1
+        fi
+        cd - > /dev/null
+    fi
+    
+    # Verify metadata.json exists
+    if [ ! -f "$vitals_dir/metadata.json" ]; then
+        print_status "error" "Vitals installation incomplete - metadata.json not found"
+        print_status "info" "Please check the extension directory: $vitals_dir"
+        return 1
+    fi
+    
+    # Compile schemas if they exist
+    if [ -d "$vitals_dir/schemas" ]; then
+        print_status "info" "Compiling Vitals schemas..."
+        if [ -f "$vitals_dir/schemas/gschemas.compiled" ]; then
+            rm -f "$vitals_dir/schemas/gschemas.compiled"
+        fi
+        if command_exists glib-compile-schemas; then
+            glib-compile-schemas "$vitals_dir/schemas" 2>&1 | tee -a "$LOG_FILE"
+            print_status "success" "Vitals schemas compiled"
+        fi
+    fi
+}
+
+# ============================================================================
 # OLLAMA INSTALLATION
 # ============================================================================
 
@@ -2794,7 +2994,8 @@ run_full_installation() {
     install_insync
     install_clamav
     install_neovim
-    install_ollama  # Added Ollama installation
+    install_ollama
+    install_vitals  # Added Vitals installation
     cleanup_system
     
     print_status "section" "INSTALLATION COMPLETE!"
@@ -2812,6 +3013,7 @@ run_full_installation() {
     print_status "config" "  - Slack: slack (or check in applications menu)"
     print_status "config" "  - Neovim: nvim (run :PlugInstall after first launch)"
     print_status "config" "  - Ollama: ollama --version (AI platform)"
+    print_status "config" "  - Vitals: Check GNOME extensions (system monitor)"
 }
 
 run_custom_installation() {
@@ -2849,7 +3051,8 @@ run_custom_installation() {
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"
         "install_neovim:Neovim Text Editor"
-        "install_ollama:Ollama AI Platform"  # Added Ollama to custom installation
+        "install_ollama:Ollama AI Platform"
+        "install_vitals:Vitals System Monitor"  # Added Vitals to custom installation
         "cleanup_system:System Cleanup"
     )
     
@@ -2876,10 +3079,17 @@ run_custom_installation() {
     print_status "section" "CUSTOM INSTALLATION COMPLETE!"
     print_status "info" "Log file: $LOG_FILE"
     
-    # Check if Homebrew or asdf were installed and remind user to reload shell
+    # Check if Homebrew, asdf, or Vitals were installed and remind user to reload shell
     if command_exists brew || command_exists asdf || command_exists ollama; then
         print_status "info" "Tools installed. Reload your shell:"
         print_status "config" "source ~/.bashrc"
+    fi
+    
+    # Special note for Vitals
+    if gnome-extensions list 2>/dev/null | grep -q "Vitals@CoreCoding.com"; then
+        print_status "info" "Vitals extension installed. You may need to:"
+        print_status "config" "1. Log out and log back in, OR"
+        print_status "config" "2. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
     fi
 }
 

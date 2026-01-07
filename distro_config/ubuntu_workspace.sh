@@ -710,6 +710,7 @@ organize_app_folders() {
         'snap-store_ubuntu-software.desktop' 'snap-store_snap-store.desktop' 'snap-store.desktop'
         'io.snapcraft.Store.desktop' 'snapcraft-store.desktop'
         'org.gnome.Extensions.desktop' 'gnome-extensions.desktop' 'gnome-shell-extension-prefs.desktop'
+        'com.mattjakeman.ExtensionManager.desktop' 'extension-manager.desktop' 'gnome-extension-manager.desktop'
         'com.github.hluk.copyq.desktop' 'copyq.desktop'
         'org.gnome.Shotwell.desktop' 'shotwell.desktop' 'shotwell-viewer.desktop'
         'org.gnome.clocks.desktop' 'gnome-clocks.desktop'

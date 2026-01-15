@@ -1166,6 +1166,151 @@ EOF
     print_status "info" "Application organization complete"
 }
 
+configure_vitals() {
+    print_status "info" "Configuring Vitals system monitor..."
+    
+    # First check if Vitals extension is installed
+    local vitals_installed=false
+    
+    # Check for Vitals extension in different locations
+    if [ -d "$HOME/.local/share/gnome-shell/extensions/vitals@CoreCoding.com" ] || \
+       [ -d "/usr/share/gnome-shell/extensions/vitals@CoreCoding.com" ]; then
+        vitals_installed=true
+    fi
+    
+    # Also check via extensions list
+    if command -v gnome-extensions &> /dev/null; then
+        if gnome-extensions list 2>/dev/null | grep -q "vitals@CoreCoding.com"; then
+            vitals_installed=true
+        fi
+    fi
+    
+    if [ "$vitals_installed" = false ]; then
+        print_status "warning" "Vitals extension is not installed"
+        print_status "info" "You can install it from: https://extensions.gnome.org/extension/1460/vitals/"
+        print_status "info" "Or run: gnome-extensions install vitals@CoreCoding.com"
+        return 1
+    fi
+    
+    print_status "success" "Vitals extension found, configuring..."
+    
+    # ==================== GENERAL SETTINGS ====================
+    print_status "config" "Setting general preferences..."
+    
+    # Seconds between updates: 60
+    gsettings set org.gnome.shell.extensions.vitals refresh-time 60
+    
+    # Position in panel: Left
+    gsettings set org.gnome.shell.extensions.vitals position 0
+    
+    # Use greater precision
+    gsettings set org.gnome.shell.extensions.vitals use-custom-decimals true
+    
+    # Alphabetize sensors
+    gsettings set org.gnome.shell.extensions.vitals alphabetical true
+    
+    # Hide zero values
+    gsettings set org.gnome.shell.extensions.vitals hide-zeros true
+    
+    # Use fixed widths
+    gsettings set org.gnome.shell.extensions.vitals fixed-widths false
+    
+    # Hide icons in top bar
+    gsettings set org.gnome.shell.extensions.vitals hide-icons true
+    
+    # Menu always centered
+    gsettings set org.gnome.shell.extensions.vitals center-values true
+    
+    # Icon style: Original
+    gsettings set org.gnome.shell.extensions.vitals icons-type 0
+    
+    # ==================== SENSORS ====================
+    print_status "config" "Configuring sensors..."
+    
+    # Enable all sensors
+    gsettings set org.gnome.shell.extensions.vitals show-temperature true
+    gsettings set org.gnome.shell.extensions.vitals show-voltage true
+    gsettings set org.gnome.shell.extensions.vitals show-fan true
+    gsettings set org.gnome.shell.extensions.vitals show-memory true
+    gsettings set org.gnome.shell.extensions.vitals show-processor true
+    gsettings set org.gnome.shell.extensions.vitals show-system true
+    gsettings set org.gnome.shell.extensions.vitals show-network true
+    gsettings set org.gnome.shell.extensions.vitals show-storage true
+    gsettings set org.gnome.shell.extensions.vitals show-battery true
+    gsettings set org.gnome.shell.extensions.vitals show-graphics true
+    
+    # ==================== ADDITIONAL CONFIGURATION ====================
+    print_status "config" "Setting additional Vitals preferences..."
+    
+    # Set temperature unit to Celsius
+    gsettings set org.gnome.shell.extensions.vitals temperature-unit 0
+    
+    # Set network unit to KB/s
+    gsettings set org.gnome.shell.extensions.vitals network-unit 1
+    
+    # Set storage unit to GB
+    gsettings set org.gnome.shell.extensions.vitals storage-unit 2
+    
+    # Show storage in used/total format
+    gsettings set org.gnome.shell.extensions.vitals storage-style 1
+    
+    # Show memory in percentage
+    gsettings set org.gnome.shell.extensions.vitals memory-style 0
+    
+    # Show CPU in percentage
+    gsettings set org.gnome.shell.extensions.vitals processor-style 0
+    
+    # Show battery in watts
+    gsettings set org.gnome.shell.extensions.vitals battery-style 2
+    
+    # Show GPU in percentage
+    gsettings set org.gnome.shell.extensions.vitals graphics-style 0
+    
+    # Show fan in RPM
+    gsettings set org.gnome.shell.extensions.vitals fan-style 0
+    
+    # Show voltage in volts
+    gsettings set org.gnome.shell.extensions.vitals voltage-style 0
+    
+    # ==================== SENSOR ORDER ====================
+    print_status "config" "Setting sensor order..."
+    gsettings set org.gnome.shell.extensions.vitals order "['temperature','voltage','fan','memory','processor','system','network','storage','battery','graphics']"
+    
+    # ==================== HOT SENSORS ====================
+    print_status "config" "Configuring hot sensors (thresholds)..."
+    gsettings set org.gnome.shell.extensions.vitals temperature-warning 80
+    gsettings set org.gnome.shell.extensions.vitals temperature-critical 90
+    gsettings set org.gnome.shell.extensions.vitals memory-warning 90
+    gsettings set org.gnome.shell.extensions.vitals processor-warning 90
+    
+    # ==================== DISPLAY OPTIONS ====================
+    print_status "config" "Setting display options..."
+    gsettings set org.gnome.shell.extensions.vitals show-in-panel true
+    gsettings set org.gnome.shell.extensions.vitals compact true
+    gsettings set org.gnome.shell.extensions.vitals decoration false
+    
+    # ==================== VERIFY CONFIGURATION ====================
+    print_status "info" "Verifying Vitals configuration..."
+    local refresh_time=$(gsettings get org.gnome.shell.extensions.vitals refresh-time)
+    local sensors_order=$(gsettings get org.gnome.shell.extensions.vitals order)
+    
+    print_status "success" "Vitals configuration complete!"
+    print_status "config" "  Update interval: $refresh_time seconds"
+    print_status "config" "  Sensor order: $sensors_order"
+    
+    # Restart GNOME Shell to apply changes
+    print_status "info" "Restarting GNOME Shell to apply Vitals changes..."
+    
+    if command -v busctl &> /dev/null; then
+        busctl --user call org.gnome.Shell /org/gnome/Shell org.gnome.Shell Eval s 'Meta.restart("Restarting GNOME Shell for Vitals...")'
+        print_status "success" "GNOME Shell restart initiated"
+        print_status "info" "Please wait a few seconds for the restart to complete"
+    else
+        print_status "warning" "Could not restart GNOME Shell automatically"
+        print_status "info" "Please log out and log back in to see Vitals changes"
+    fi
+}
+
 main() {
     if [ "$EUID" -eq 0 ]; then 
         print_status "error" "This script should NOT be run with sudo!"
@@ -1186,6 +1331,7 @@ main() {
     configure_inactivity_time_lock
     configure_power_settings
     organize_app_folders
+    configure_vitals
     
     echo -e "${MAGENTA}========================================${NC}"
     print_status "success" "All appearance settings configured successfully!"

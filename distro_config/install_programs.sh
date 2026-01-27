@@ -2887,6 +2887,17 @@ install_rustdesk() {
 
 cleanup_system() {
     print_status "section" "SYSTEM CLEANUP"
+
+    # add lock verification
+    if [ -f /var/lib/apt/lists/lock ]; then
+        print_status "warning" "Apt lock detected, trying to release..."
+        sudo rm -f /var/lib/apt/lists/lock
+        sudo rm -f /var/lib/dpkg/lock
+        sudo rm -f /var/lib/dpkg/lock-frontend
+    fi
+    
+    # stop packagekitd temporarily
+    sudo systemctl stop packagekitd 2>/dev/null || true
     
     print_status "info" "Listing upgradable packages..."
     case "$PACKAGE_MANAGER" in

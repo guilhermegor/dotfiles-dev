@@ -1855,7 +1855,7 @@ install_dbeaver() {
     fi
     
     print_status "info" "Installing DBeaver Community Edition..."
-    sudo snap install dbeaver-ce
+    sudo snap install dbeaver-ce --classic
     
     print_status "success" "DBeaver installed"
 }

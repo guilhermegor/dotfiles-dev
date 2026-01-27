@@ -253,22 +253,87 @@ install_vitals() {
             ;;
     esac
     
-    # Final verification
-    if gnome-extensions list 2>/dev/null | grep -q "Vitals@CoreCoding.com"; then
-        print_status "success" "Vitals extension installed successfully"
-        print_status "info" "You may need to log out and log back in for the extension to appear"
+    # NEW: Enhanced verification with retry logic
+    verify_vitals_installation
+}
+
+# NEW FUNCTION: Enhanced verification with retry logic
+verify_vitals_installation() {
+    print_status "info" "Verifying Vitals installation..."
+    
+    local max_attempts=3
+    local attempt=1
+    local vitals_installed=false
+    
+    # Wait for GNOME to detect the extension
+    while [ $attempt -le $max_attempts ]; do
+        print_status "info" "Verification attempt $attempt/$max_attempts..."
         
-        # Try to enable it
+        # Check if extension is detected
+        if gnome-extensions list 2>/dev/null | grep -q "Vitals@CoreCoding.com"; then
+            vitals_installed=true
+            print_status "success" "Vitals detected in extension list"
+            break
+        fi
+        
+        # Try to force GNOME to rescan extensions
+        print_status "info" "Refreshing extension list..."
+        
+        # Method 1: Send D-Bus signal to rescan extensions
+        if command_exists dbus-send; then
+            dbus-send --session --type=method_call \
+                --dest=org.gnome.Shell \
+                /org/gnome/Shell \
+                org.gnome.Shell.Extensions.ReloadExtensionInfo \
+                string:"Vitals@CoreCoding.com" 2>/dev/null || true
+        fi
+        
+        # Method 2: Restart GNOME Shell extension service
+        if command_exists gdbus; then
+            gdbus call --session --dest org.gnome.Shell \
+                --object-path /org/gnome/Shell \
+                --method org.gnome.Shell.Extensions.ReloadExtensionInfo \
+                "Vitals@CoreCoding.com" 2>/dev/null || true
+        fi
+        
+        sleep 3
+        attempt=$((attempt + 1))
+    done
+    
+    if [ "$vitals_installed" = true ]; then
+        # Try to enable the extension
         print_status "info" "Enabling Vitals extension..."
+        
         if gnome-extensions enable "Vitals@CoreCoding.com" 2>&1 | tee -a "$LOG_FILE"; then
-            print_status "success" "Vitals extension enabled"
+            print_status "success" "Vitals extension enabled successfully"
+            
+            # Verify it's actually enabled
+            sleep 2
+            if gnome-extensions info "Vitals@CoreCoding.com" 2>/dev/null | grep -q "ENABLED"; then
+                print_status "success" "Vitals extension is active and running"
+            else
+                print_status "warning" "Vitals enabled but may not be active"
+            fi
         else
             print_status "warning" "Could not enable Vitals extension automatically"
-            print_status "config" "Please enable it manually in GNOME Extensions app"
+            print_status "info" "You may need to enable it manually"
         fi
     else
-        print_status "warning" "Vitals installation could not be verified"
-        print_status "info" "You may need to install it manually from extensions.gnome.org"
+        print_status "warning" "Vitals installation could not be verified automatically"
+        
+        # Check if files exist even if not detected
+        local extensions_dir="$HOME/.local/share/gnome-shell/extensions"
+        local vitals_dir="$extensions_dir/Vitals@CoreCoding.com"
+        
+        if [ -d "$vitals_dir" ]; then
+            print_status "info" "Vitals files are present at: $vitals_dir"
+            print_status "info" "The extension will be available after you:"
+            print_status "config" "1. Log out and log back in, OR"
+            print_status "config" "2. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+        else
+            print_status "error" "Vitals files not found"
+            print_status "info" "You may need to install it manually from extensions.gnome.org"
+        fi
     fi
 }
 
@@ -284,8 +349,12 @@ install_vitals_debian() {
         print_status "info" "Ubuntu 24.04 detected, checking for Vitals in repositories..."
         if apt-cache search gnome-shell-extension-vitals 2>/dev/null | grep -q vitals; then
             print_status "info" "Installing Vitals from Ubuntu repository..."
-            $INSTALL_CMD gnome-shell-extension-vitals
-            return 0
+            if $INSTALL_CMD gnome-shell-extension-vitals; then
+                print_status "success" "Vitals installed from repository"
+                return 0
+            else
+                print_status "warning" "Repository installation failed, trying manual..."
+            fi
         fi
     fi
     
@@ -304,8 +373,12 @@ install_vitals_rpm() {
     print_status "info" "Checking for Vitals in repositories..."
     if $PACKAGE_MANAGER search gnome-shell-extension-vitals 2>/dev/null | grep -q vitals; then
         print_status "info" "Installing Vitals from repository..."
-        $INSTALL_CMD gnome-shell-extension-vitals
-        return 0
+        if $INSTALL_CMD gnome-shell-extension-vitals; then
+            print_status "success" "Vitals installed from repository"
+            return 0
+        else
+            print_status "warning" "Repository installation failed, trying manual..."
+        fi
     fi
     
     # Fallback to manual installation
@@ -339,8 +412,12 @@ install_vitals_opensuse() {
     print_status "info" "Checking for Vitals in repositories..."
     if zypper search -s gnome-shell-extension-vitals 2>/dev/null | grep -q vitals; then
         print_status "info" "Installing Vitals from repository..."
-        $INSTALL_CMD gnome-shell-extension-vitals
-        return 0
+        if $INSTALL_CMD gnome-shell-extension-vitals; then
+            print_status "success" "Vitals installed from repository"
+            return 0
+        else
+            print_status "warning" "Repository installation failed, trying manual..."
+        fi
     fi
     
     # Fallback to manual installation
@@ -397,6 +474,34 @@ install_vitals_manual() {
             print_status "success" "Vitals schemas compiled"
         fi
     fi
+    
+    # NEW: Set correct permissions
+    print_status "info" "Setting correct permissions..."
+    chmod -R 755 "$vitals_dir"
+    
+    # NEW: Create a desktop file to help GNOME discover the extension
+    print_status "info" "Creating desktop file for better integration..."
+    local desktop_file="$HOME/.local/share/applications/gnome-shell-extension-vitals.desktop"
+    cat > "$desktop_file" << EOF
+[Desktop Entry]
+Type=Application
+Name=Vitals System Monitor
+Comment=System monitor for GNOME Shell
+Exec=/usr/bin/true
+Terminal=false
+Categories=Utility;
+OnlyShowIn=GNOME;
+EOF
+    
+    # NEW: Try to install to system directory as well (optional)
+    if [ "$EUID" -eq 0 ] || sudo -n true 2>/dev/null; then
+        print_status "info" "Also installing to system directory for better compatibility..."
+        sudo mkdir -p /usr/share/gnome-shell/extensions/
+        sudo cp -r "$vitals_dir" /usr/share/gnome-shell/extensions/ 2>/dev/null || true
+        sudo chown -R root:root /usr/share/gnome-shell/extensions/Vitals@CoreCoding.com 2>/dev/null || true
+    fi
+    
+    print_status "info" "Vitals manual installation complete"
 }
 
 # ============================================================================

@@ -253,7 +253,7 @@ configure_settings() {
     "editor.guides.bracketPairs": true,
     "editor.formatOnSave": false,
     "editor.insertSpaces": true,
-    "editor.tabSize": 4,
+    "editor.tabSize": 2,
     "editor.renderWhitespace": "boundary",
     "workbench.startupEditor": "none",
     "workbench.editor.enablePreview": false,

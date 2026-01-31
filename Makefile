@@ -35,7 +35,7 @@ init: permissions install_programs install_toolchains vscode_setup irpf_download
 # -------------------
 # SYSTEM SETUP
 # -------------------
-.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup
+.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore
 
 install_programs:
 	@echo "Installing essential programs..."
@@ -48,6 +48,10 @@ install_toolchains:
 vscode_setup:
 	@echo "Configuring VS Code with extensions and shortcuts..."
 	@bash code_editors/vscode.sh
+
+vscode_restore:
+	@echo "Restoring VS Code configurations..."
+	@bash code_editors/vscode_restore.sh
 
 irpf_download:
 	@echo "Downloading IRPF (Brazilian tax software)..."

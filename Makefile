@@ -9,7 +9,7 @@
 # -------------------
 .PHONY: init
 
-init: permissions install_programs install_toolchains irpf_download set_shortcuts ubuntu_workspace
+init: permissions install_programs install_toolchains vscode_setup irpf_download set_shortcuts ubuntu_workspace
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -18,6 +18,7 @@ init: permissions install_programs install_toolchains irpf_download set_shortcut
 	@echo "║  ✅ Permissions set for all scripts                        ║"
 	@echo "║  ✅ Essential programs installed                           ║"
 	@echo "║  ✅ Toolchains installed                                   ║"
+	@echo "║  ✅ VS Code configured with extensions                     ║"
 	@echo "║  ✅ IRPF (Brazilian tax software) downloaded               ║"
 	@echo "║  ✅ Custom shortcuts configured                            ║"
 	@echo "║  ✅ Ubuntu workspace configured                            ║"
@@ -34,7 +35,7 @@ init: permissions install_programs install_toolchains irpf_download set_shortcut
 # -------------------
 # SYSTEM SETUP
 # -------------------
-.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace
+.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup
 
 install_programs:
 	@echo "Installing essential programs..."
@@ -43,6 +44,10 @@ install_programs:
 install_toolchains:
 	@echo "Installing development toolchains..."
 	@bash distro_config/install_toolchains.sh
+
+vscode_setup:
+	@echo "Configuring VS Code with extensions and shortcuts..."
+	@bash code_editors/vscode.sh
 
 irpf_download:
 	@echo "Downloading IRPF (Brazilian tax software)..."
@@ -138,7 +143,7 @@ storage_analysis:
 # -------------------
 .PHONY: full_setup hardware_setup storage_setup vm_setup permissions
 
-full_setup: permissions install_programs setup_all_drivers
+full_setup: permissions install_programs install_toolchains vscode_setup setup_all_drivers
 	@echo ""
 	@echo "════════════════════════════════════════════"
 	@echo "  ✅ Full system setup completed!"
@@ -173,7 +178,20 @@ permissions:
 	@find drives -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find os -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find storage -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+	@find code_editors -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@echo "✅ Permissions updated successfully!"
+
+# -------------------
+# CODE EDITORS
+# -------------------
+.PHONY: editors_setup
+
+editors_setup: vscode_setup
+	@echo ""
+	@echo "════════════════════════════════════════════"
+	@echo "  ✅ Code editors setup completed!"
+	@echo "════════════════════════════════════════════"
+	@echo ""
 
 # -------------------
 # UTILITIES
@@ -187,10 +205,10 @@ check_status:
 	@lsb_release -a 2>/dev/null || cat /etc/os-release
 	@echo ""
 	@echo "=== Available Scripts ==="
-	@find distro_config drivers drives os storage -name "*.sh" -type f 2>/dev/null | sort
+	@find distro_config drivers drives os storage code_editors -name "*.sh" -type f 2>/dev/null | sort
 	@echo ""
 	@echo "=== Executable Scripts ==="
-	@find distro_config drivers drives os storage -name "*.sh" -type f -executable 2>/dev/null | sort
+	@find distro_config drivers drives os storage code_editors -name "*.sh" -type f -executable 2>/dev/null | sort
 
 list_scripts:
 	@echo "Available bash scripts:"
@@ -209,12 +227,15 @@ list_scripts:
 	@echo ""
 	@echo "Storage scripts:"
 	@ls -1 storage/*.sh 2>/dev/null || echo "  No storage scripts found"
+	@echo ""
+	@echo "Code Editor scripts:"
+	@ls -1 code_editors/*.sh 2>/dev/null || echo "  No code editor scripts found"
 
 clean:
 	@echo "Cleaning temporary files..."
-	@find distro_config drivers drives os storage -name "*.log" -type f -delete 2>/dev/null || true
-	@find distro_config drivers drives os storage -name "*.tmp" -type f -delete 2>/dev/null || true
-	@find distro_config drivers drives os storage -name "*~" -type f -delete 2>/dev/null || true
+	@find distro_config drivers drives os storage code_editors -name "*.log" -type f -delete 2>/dev/null || true
+	@find distro_config drivers drives os storage code_editors -name "*.tmp" -type f -delete 2>/dev/null || true
+	@find distro_config drivers drives os storage code_editors -name "*~" -type f -delete 2>/dev/null || true
 	@echo "✅ Cleanup completed!"
 
 # -------------------
@@ -233,9 +254,14 @@ help:
 	@echo ""
 	@echo "System Setup:"
 	@echo "  install_programs     - Install essential programs"
+	@echo "  install_toolchains   - Install development toolchains"
+	@echo "  vscode_setup         - Configure VS Code with extensions"
 	@echo "  irpf_download        - Download IRPF (Brazilian tax software)"
 	@echo "  set_shortcuts        - Set custom keyboard shortcuts"
 	@echo "  ubuntu_workspace     - Configure Ubuntu workspace"
+	@echo ""
+	@echo "Code Editors:"
+	@echo "  editors_setup        - Setup all code editors (currently VS Code)"
 	@echo ""
 	@echo "Hardware Drivers:"
 	@echo "  setup_bluetooth      - Setup Bluetooth adapter"
@@ -264,6 +290,7 @@ help:
 	@echo "  hardware_setup       - Setup all hardware drivers"
 	@echo "  storage_setup        - Complete storage setup"
 	@echo "  vm_setup             - Setup virtual machine environment"
+	@echo "  editors_setup        - Setup code editors"
 	@echo "  permissions          - Make all scripts executable"
 	@echo ""
 	@echo "Utilities:"
@@ -277,6 +304,8 @@ help:
 	@echo "💡 Usage examples:"
 	@echo "  make init            - First-time setup (recommended!)"
 	@echo "  make full_setup      - Complete system setup"
+	@echo "  make vscode_setup    - Configure VS Code only"
+	@echo "  make editors_setup   - Setup all code editors"
 	@echo "  make setup_wifi      - Setup WiFi adapter only"
 	@echo "  make permissions     - Make all scripts executable"
 	@echo ""

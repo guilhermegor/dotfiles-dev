@@ -731,6 +731,156 @@ install_rust() {
 }
 
 # ============================================================================
+# GITHUB COPILOT CLI INSTALLATION
+# ============================================================================
+
+install_github_copilot_cli() {
+    print_status "section" "GITHUB COPILOT CLI INSTALLATION"
+    
+    # Check if Node.js is installed
+    if ! is_tool_installed "nodejs"; then
+        print_status "error" "Node.js is not installed! GitHub Copilot CLI requires Node.js."
+        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
+        read -r install_nodejs_first
+        
+        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
+            install_nodejs
+        else
+            print_status "warning" "Skipping GitHub Copilot CLI installation as Node.js is required"
+            return 1
+        fi
+    fi
+    
+    # Check if npm is available
+    if ! command_exists npm; then
+        print_status "error" "npm is not available. Please ensure Node.js is properly installed."
+        return 1
+    fi
+    
+    # Check if GitHub Copilot CLI is already installed globally
+    print_status "info" "Checking for existing GitHub Copilot CLI installation..."
+    
+    # Try to get Copilot CLI version with timeout
+    local copilot_version=""
+    if command_exists copilot; then
+        copilot_version=$(timeout 10 copilot --version 2>/dev/null | head -n1 | sed 's/.*v//' || echo "")
+    fi
+    
+    if [ -n "$copilot_version" ]; then
+        print_status "info" "GitHub Copilot CLI is already installed (version: $copilot_version)"
+        
+        echo -e "\n${YELLOW}Do you want to update GitHub Copilot CLI to the latest version? (y/n):${NC}"
+        read -r update_copilot
+        if [[ ! "$update_copilot" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing GitHub Copilot CLI version $copilot_version"
+            return 0
+        fi
+    fi
+    
+    # Ask for GitHub Copilot CLI installation
+    echo -e "\n${YELLOW}Install GitHub Copilot CLI? (y/n):${NC}"
+    read -r install_copilot
+    
+    if [[ ! "$install_copilot" =~ ^[Yy]$ ]]; then
+        print_status "info" "Skipping GitHub Copilot CLI installation"
+        return 0
+    fi
+    
+    # Ask for installation method
+    echo -e "\n${YELLOW}Choose installation method:${NC}"
+    echo -e "${CYAN}1) npm (recommended)${NC}"
+    if command_exists brew; then
+        echo -e "${CYAN}2) Homebrew${NC}"
+    fi
+    echo -e "${CYAN}Enter 1"
+    if command_exists brew; then
+        echo -e "${CYAN} or 2 (default: 1):${NC}"
+    else
+        echo -e "${CYAN} (default: 1):${NC}"
+    fi
+    read -r method_choice
+    
+    if [ "$method_choice" = "2" ] && command_exists brew; then
+        install_method="brew"
+        print_status "info" "Using Homebrew for installation"
+    else
+        install_method="npm"
+        print_status "info" "Using npm for installation"
+    fi
+    
+    # Ask for version (stable or prerelease)
+    echo -e "\n${YELLOW}Install stable or prerelease version?${NC}"
+    echo -e "${CYAN}1) Stable (recommended)${NC}"
+    echo -e "${CYAN}2) Prerelease${NC}"
+    echo -e "${CYAN}Enter 1 or 2 (default: 1):${NC}"
+    read -r version_choice
+    
+    if [ "$install_method" = "brew" ]; then
+        if [ "$version_choice" = "2" ]; then
+            package_name="copilot-cli@prerelease"
+            print_status "info" "Installing GitHub Copilot CLI prerelease version via Homebrew..."
+        else
+            package_name="copilot-cli"
+            print_status "info" "Installing GitHub Copilot CLI stable version via Homebrew..."
+        fi
+        install_cmd="brew install $package_name"
+    else
+        if [ "$version_choice" = "2" ]; then
+            package_name="@github/copilot@prerelease"
+            print_status "info" "Installing GitHub Copilot CLI prerelease version via npm..."
+        else
+            package_name="@github/copilot"
+            print_status "info" "Installing GitHub Copilot CLI stable version via npm..."
+        fi
+        install_cmd="npm install -g $package_name"
+    fi
+    
+    print_status "warning" "This may take a moment..."
+    
+    if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+        # Get the installed version
+        copilot_version=$(timeout 5 copilot --version 2>/dev/null | head -n1 | sed 's/.*v//' || echo "")
+        
+        if [ -n "$copilot_version" ]; then
+            print_status "success" "GitHub Copilot CLI $copilot_version installed successfully"
+        else
+            print_status "success" "GitHub Copilot CLI installed successfully"
+        fi
+        
+        # Set update command based on installation method
+        if [ "$install_method" = "brew" ]; then
+            update_cmd="brew upgrade $package_name"
+        else
+            update_cmd="npm update -g $package_name"
+        fi
+        
+        # Verify installation
+        print_status "info" "Verifying installation..."
+        
+        # Check copilot version
+        if command_exists copilot; then
+            local actual_copilot_version=$(timeout 5 copilot --version 2>/dev/null | head -n1 || echo "Not available")
+            print_status "info" "GitHub Copilot CLI version: $actual_copilot_version"
+        else
+            print_status "warning" "GitHub Copilot CLI command not found. You may need to reload your shell."
+        fi
+        
+        # Usage tips
+        echo ""
+        print_status "info" "GitHub Copilot CLI usage:"
+        print_status "config" "  Launch CLI: copilot"
+        print_status "config" "  Check version: copilot --version"
+        print_status "config" "  Update: $update_cmd"
+        print_status "config" "  Note: Requires GitHub CLI authentication for full functionality"
+        print_status "config" "  Authenticate with: gh auth login"
+        
+    else
+        print_status "error" "Failed to install GitHub Copilot CLI"
+        return 1
+    fi
+}
+
+# ============================================================================
 # MENU AND MAIN EXECUTION
 # ============================================================================
 
@@ -747,8 +897,9 @@ show_menu() {
     echo -e "  ${GREEN}5)${NC} Install Node.js + TypeScript"
     echo -e "  ${GREEN}6)${NC} Install Node.js + NPX"
     echo -e "  ${GREEN}7)${NC} Install Node.js + TypeScript + NPX"
-    echo -e "  ${GREEN}8)${NC} Install all toolchains (Node.js, TypeScript, NPX, Rust)"
-    echo -e "  ${GREEN}9)${NC} Exit"
+    echo -e "  ${GREEN}8)${NC} Install GitHub Copilot CLI (requires Node.js)"
+    echo -e "  ${GREEN}9)${NC} Install all toolchains and tools (Node.js, TypeScript, NPX, Rust, GitHub Copilot CLI)"
+    echo -e "  ${GREEN}10)${NC} Exit"
     echo -e "\n${CYAN}Choice: ${NC}"
 }
 
@@ -815,6 +966,10 @@ main() {
                 break
                 ;;
             8)
+                install_github_copilot_cli
+                break
+                ;;
+            9)
                 install_nodejs
                 echo ""
                 install_typescript
@@ -822,14 +977,16 @@ main() {
                 install_npx
                 echo ""
                 install_rust
+                echo ""
+                install_github_copilot_cli
                 break
                 ;;
-            9)
+            10)
                 print_status "info" "Installation cancelled"
                 exit 0
                 ;;
             *)
-                print_status "error" "Invalid option. Please select 1-9."
+                print_status "error" "Invalid option. Please select 1-10."
                 ;;
         esac
     done
@@ -876,6 +1033,11 @@ main() {
         print_status "config" "  Cargo: $(cargo --version 2>/dev/null || echo 'Not available')"
     fi
     
+    # Check GitHub Copilot CLI
+    if command_exists copilot; then
+        print_status "config" "  GitHub Copilot CLI: $(timeout 5 copilot --version 2>/dev/null | head -n1 || echo 'Not available')"
+    fi
+    
     echo ""
     print_status "info" "Global versions set in ~/.tool-versions:"
     if [ -f "$HOME/.tool-versions" ]; then
@@ -895,6 +1057,7 @@ main() {
     print_status "config" "  Project-specific versions: Create .tool-versions file"
     print_status "config" "  Update TypeScript: npm update -g typescript"
     print_status "config" "  Update NPX: npm update -g npx"
+    print_status "config" "  Update GitHub Copilot CLI: npm update -g @github/copilot"
     echo ""
 }
 

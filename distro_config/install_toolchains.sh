@@ -336,6 +336,145 @@ install_nodejs() {
 }
 
 # ============================================================================
+# NVM (NODE VERSION MANAGER) INSTALLATION
+# ============================================================================
+
+install_nvm() {
+    print_status "section" "NVM (Node Version Manager) Installation"
+    
+    # Check if nvm is already installed
+    if command_exists nvm || [ -d "$HOME/.nvm" ]; then
+        nvm_version=$(nvm --version 2>/dev/null || echo "unknown")
+        print_status "warning" "NVM is already installed (version: $nvm_version)"
+        
+        read -r -p "Do you want to reinstall NVM? (y/n): " reinstall_nvm
+        if [[ ! "$reinstall_nvm" =~ ^[Yy]$ ]]; then
+            print_status "info" "Skipping NVM installation"
+            return 0
+        fi
+    fi
+    
+    # Install dependencies
+    print_status "info" "Installing required dependencies..."
+    dependencies=("curl" "wget" "git")
+    
+    for dep in "${dependencies[@]}"; do
+        if ! command_exists "$dep"; then
+            print_status "warning" "Installing $dep..."
+            if command_exists apt-get; then
+                sudo apt-get update -qq && sudo apt-get install -y "$dep" > /dev/null 2>&1
+            elif command_exists yum; then
+                sudo yum install -y "$dep" > /dev/null 2>&1
+            elif command_exists brew; then
+                brew install "$dep" > /dev/null 2>&1
+            else
+                print_status "error" "Unable to install $dep. Please install it manually."
+                return 1
+            fi
+        fi
+    done
+    
+    # Download and install nvm
+    print_status "info" "Downloading NVM..."
+    NVM_VERSION=$(curl -s https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")' || echo "v0.39.0")
+    NVM_INSTALL_URL="https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh"
+    
+    print_status "info" "Installing NVM ${NVM_VERSION}..."
+    
+    if curl -o- "$NVM_INSTALL_URL" 2>&1 | tee -a "$LOG_FILE" | bash; then
+        # Source nvm
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+        
+        print_status "success" "NVM installed successfully"
+        
+        # Get installed version
+        local nvm_version=$(nvm --version 2>/dev/null || echo "")
+        if [ -n "$nvm_version" ]; then
+            print_status "info" "NVM version: $nvm_version"
+        fi
+        
+        # Ask for Node.js version
+        echo ""
+        echo -e "${YELLOW}Install a Node.js version with NVM?${NC}"
+        echo -e "${CYAN}1) LTS (recommended)${NC}"
+        echo -e "${CYAN}2) Latest${NC}"
+        echo -e "${CYAN}3) Specific version${NC}"
+        echo -e "${CYAN}4) Skip${NC}"
+        echo -e "${CYAN}Enter 1-4 (default: 1):${NC}"
+        read -r nodejs_choice
+        
+        case "$nodejs_choice" in
+            1)
+                print_status "info" "Installing Node.js LTS..."
+                nvm install --lts 2>&1 | tee -a "$LOG_FILE"
+                nvm use --lts 2>&1 | tee -a "$LOG_FILE"
+                print_status "success" "Node.js LTS installed: $(node --version)"
+                ;;
+            2)
+                print_status "info" "Installing latest Node.js..."
+                nvm install node 2>&1 | tee -a "$LOG_FILE"
+                nvm use node 2>&1 | tee -a "$LOG_FILE"
+                print_status "success" "Node.js latest installed: $(node --version)"
+                ;;
+            3)
+                echo -e "${CYAN}Enter Node.js version (e.g., 18.17.0):${NC}"
+                read -r nodejs_version
+                if [ -n "$nodejs_version" ]; then
+                    print_status "info" "Installing Node.js $nodejs_version..."
+                    nvm install "$nodejs_version" 2>&1 | tee -a "$LOG_FILE"
+                    nvm use "$nodejs_version" 2>&1 | tee -a "$LOG_FILE"
+                    print_status "success" "Node.js $nodejs_version installed: $(node --version)"
+                else
+                    print_status "warning" "No version specified. Skipping Node.js installation."
+                fi
+                ;;
+            *)
+                print_status "info" "Skipping Node.js installation"
+                ;;
+        esac
+        
+        # Set up shell configuration
+        print_status "info" "Configuring shell initialization..."
+        
+        local shell_rc="$HOME/.bashrc"
+        [ -f "$HOME/.zshrc" ] && shell_rc="$HOME/.zshrc"
+        
+        if [ -f "$shell_rc" ]; then
+            # Check if nvm is already sourced
+            if ! grep -q 'export NVM_DIR=' "$shell_rc"; then
+                cat >> "$shell_rc" << 'EOF'
+
+# NVM configuration
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+EOF
+                print_status "success" "NVM configuration added to $shell_rc"
+            fi
+        fi
+        
+        # Usage tips
+        echo ""
+        print_status "info" "NVM usage:"
+        print_status "config" "  Install LTS: nvm install --lts"
+        print_status "config" "  Install latest: nvm install node"
+        print_status "config" "  List installed: nvm list"
+        print_status "config" "  List remote: nvm list-remote"
+        print_status "config" "  Use version: nvm use <version>"
+        print_status "config" "  Set default: nvm alias default <version>"
+        print_status "config" "  Uninstall: nvm uninstall <version>"
+        
+        print_status "warning" "Important: Reload your shell for changes to take effect:"
+        print_status "config" "source $shell_rc"
+        
+    else
+        print_status "error" "Failed to install NVM"
+        return 1
+    fi
+}
+
+# ============================================================================
 # NPX INSTALLATION
 # ============================================================================
 
@@ -897,9 +1036,10 @@ show_menu() {
     echo -e "  ${GREEN}5)${NC} Install Node.js + TypeScript"
     echo -e "  ${GREEN}6)${NC} Install Node.js + NPX"
     echo -e "  ${GREEN}7)${NC} Install Node.js + TypeScript + NPX"
-    echo -e "  ${GREEN}8)${NC} Install GitHub Copilot CLI (requires Node.js)"
-    echo -e "  ${GREEN}9)${NC} Install all toolchains and tools (Node.js, TypeScript, NPX, Rust, GitHub Copilot CLI)"
-    echo -e "  ${GREEN}10)${NC} Exit"
+    echo -e "  ${GREEN}8)${NC} Install NVM (Node Version Manager)"
+    echo -e "  ${GREEN}9)${NC} Install GitHub Copilot CLI (requires Node.js)"
+    echo -e "  ${GREEN}10)${NC} Install all toolchains and tools"
+    echo -e "  ${GREEN}11)${NC} Exit"
     echo -e "\n${CYAN}Choice: ${NC}"
 }
 
@@ -966,10 +1106,14 @@ main() {
                 break
                 ;;
             8)
-                install_github_copilot_cli
+                install_nvm
                 break
                 ;;
             9)
+                install_github_copilot_cli
+                break
+                ;;
+            10)
                 install_nodejs
                 echo ""
                 install_typescript
@@ -981,12 +1125,12 @@ main() {
                 install_github_copilot_cli
                 break
                 ;;
-            10)
+            11)
                 print_status "info" "Installation cancelled"
                 exit 0
                 ;;
             *)
-                print_status "error" "Invalid option. Please select 1-10."
+                print_status "error" "Invalid option. Please select 1-11."
                 ;;
         esac
     done

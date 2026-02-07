@@ -1,0 +1,9 @@
+name: git_reset
+description: Reset git repo hard, clean, then reopen VS Code
+
+matches:
+  - trigger: ":gitreset"
+    replace: false
+    action:
+      type: shell
+      cmd: "bash -lc \"git reset --hard HEAD && git clean -fd && code . --reuse-window\""

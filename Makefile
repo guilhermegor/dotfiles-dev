@@ -35,7 +35,7 @@ init: permissions install_programs install_toolchains vscode_setup irpf_download
 # -------------------
 # SYSTEM SETUP
 # -------------------
-.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore
+.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile
 
 install_programs:
 	@echo "Installing essential programs..."
@@ -64,6 +64,10 @@ set_shortcuts:
 ubuntu_workspace:
 	@echo "Configuring Ubuntu workspace..."
 	@bash distro_config/ubuntu_workspace.sh
+
+bash_profile:
+	@echo "Ensuring ~/.bash_profile loads ~/.bashrc..."
+	@bash distro_config/bash_profile_snippet.sh
 
 # -------------------
 # HARDWARE DRIVERS

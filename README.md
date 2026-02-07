@@ -19,6 +19,7 @@
 - [Ubuntu Workspace Setup](distro_config/ubuntu_workspace.sh) - Ubuntu-specific workspace configuration (`make ubuntu_workspace`)
 - [Custom Shortcuts](distro_config/set_custom_shortcuts.sh) - Custom keyboard and application shortcuts (`make set_shortcuts`)
 - [IRPF Download Utility](distro_config/irpf_download.sh) - Brazilian tax software downloader (`make irpf_download`)
+- [Bash Profile Loader](distro_config/bash_profile_snippet.sh) - Ensure login shells load `~/.bashrc` (`make bash_profile`)
 
 ### 🔧 Hardware Drivers
 
@@ -179,6 +180,7 @@ make install_programs
 make install_toolchains
 make vscode_setup
 make install_espanso_packages
+make bash_profile
 ```
 
 ### Direct Script Execution
@@ -205,6 +207,7 @@ linux-distro-init/
 │   ├── 🧰 install_toolchains.sh  # Toolchains installation script
 │   ├── 📥 irpf_download.sh       # Tax software downloader
 │   ├── ⌨️ set_custom_shortcuts.sh # Custom shortcuts configuration
+│   ├── 🐚 bash_profile_snippet.sh # Ensure ~/.bash_profile loads ~/.bashrc
 │   └── 🖥️ ubuntu_workspace.sh    # Ubuntu workspace setup
 │
 ├── 📁 code_editors/              # Code editors setup

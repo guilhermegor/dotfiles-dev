@@ -2380,9 +2380,14 @@ install_linear() {
     local desktop_dir="$HOME/.local/share/applications"
     local desktop_file="$desktop_dir/linear.desktop"
 
+    local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local icon_src="$script_root/data/linear_app.png"
+    local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    local icon_path="$icon_theme_dir/linear.png"
+    local icon_value="linear"
+
     if [ -f "$desktop_file" ]; then
-        print_status "info" "Linear desktop entry already exists"
-        return 0
+        print_status "info" "Linear desktop entry already exists, updating"
     fi
 
     if ! command_exists google-chrome; then
@@ -2392,13 +2397,36 @@ install_linear() {
 
     print_status "info" "Creating Linear desktop entry..."
     mkdir -p "$desktop_dir"
-    cat > "$desktop_file" << 'EOF'
+
+    if [ -f "$icon_src" ]; then
+        print_status "info" "Installing Linear icon..."
+        mkdir -p "$icon_theme_dir"
+        cp "$icon_src" "$icon_path"
+        icon_value="linear"
+        if command_exists gtk-update-icon-cache; then
+            gtk-update-icon-cache -f "$HOME/.local/share/icons" 2>/dev/null || true
+        fi
+        # Best-effort GNOME Shell refresh (X11 only). On Wayland, user must log out/in.
+        if [ "${XDG_SESSION_TYPE:-}" = "x11" ] && command_exists gdbus; then
+            gdbus call --session --dest org.gnome.Shell \
+                --object-path /org/gnome/Shell \
+                --method org.gnome.Shell.Eval \
+                "global.reexec_self()" >/dev/null 2>&1 || true
+        else
+            print_status "info" "If the icon doesn't update, press Alt+F2 then 'r' (X11) or log out/in (Wayland)."
+        fi
+    else
+        print_status "warning" "Linear icon not found at $icon_src. Using default icon."
+        icon_value="web-browser"
+    fi
+
+    cat > "$desktop_file" << EOF
 [Desktop Entry]
 Name=Linear
 Exec=google-chrome --app=https://linear.app
 Terminal=false
 Type=Application
-Icon=web-browser
+Icon=${icon_value}
 Categories=Office;ProjectManagement;
 EOF
     chmod +x "$desktop_file"

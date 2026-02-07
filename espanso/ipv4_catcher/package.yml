@@ -1,4 +1,9 @@
 name: ipv4_catcher
+description: Get local and public IPv4 addresses
 
-matches: []
-  # TODO: Add IPv4 catcher matches
+matches:
+  - trigger: ":ipv4_catcher"
+    replace: false
+    action:
+      type: shell
+      cmd: "bash -lc \"~/.config/espanso/packages/ipv4_catcher/ipv4_catcher.sh\""

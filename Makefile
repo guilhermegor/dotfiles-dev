@@ -174,7 +174,15 @@ install_espanso_packages:
 	if command -v espanso >/dev/null 2>&1; then \
 		echo "Reloading espanso..."; \
 		espanso restart >/dev/null 2>&1 || espanso start >/dev/null 2>&1 || true; \
-	fi
+	fi; \
+	# Run per-package setup scripts (for terminal wrappers like :shortcuts) \
+	for d in espanso/*; do \
+		if [ -f "$$d/setup.sh" ]; then \
+			echo "Running setup: $$d/setup.sh"; \
+			bash "$$d/setup.sh"; \
+		fi; \
+	done; \
+	echo "Note: to use new terminal wrappers in this session, run: source ~/.profile"
 
 hardware_setup: setup_bluetooth setup_keyboard setup_mouse setup_wifi
 	@echo ""

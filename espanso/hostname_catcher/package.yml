@@ -1,4 +1,9 @@
 name: hostname_catcher
+description: Get hostname information (short name, FQDN, domain)
 
-matches: []
-  # TODO: Add hostname catcher matches
+matches:
+  - trigger: ":hostname_catcher"
+    replace: false
+    action:
+      type: shell
+      cmd: "bash -lc \"~/.config/espanso/packages/hostname_catcher/hostname_catcher.sh\""

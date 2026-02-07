@@ -1,0 +1,9 @@
+name: shortcuts
+description: Show all espanso package triggers and descriptions
+
+matches:
+  - trigger: ":shortcuts"
+    replace: false
+    action:
+      type: shell
+      cmd: "bash -lc \"~/.config/espanso/packages/shortcuts/shortcuts.sh\""

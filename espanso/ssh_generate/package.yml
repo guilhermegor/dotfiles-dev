@@ -1,4 +1,5 @@
 name: ssh_generate
+description: Interactive SSH key generator with GUI prompts
 
 matches:
   - trigger: ":sshgen"

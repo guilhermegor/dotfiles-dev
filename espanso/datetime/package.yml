@@ -1,0 +1,27 @@
+name: datetime
+description: Insert current date, time, or date+time
+
+matches:
+  - trigger: ":today "
+    replace: "{{today}}"
+    vars:
+      - name: today
+        type: date
+        params:
+          format: "%Y-%m-%d"
+
+  - trigger: ":time "
+    replace: "{{time}}"
+    vars:
+      - name: time
+        type: date
+        params:
+          format: "%H:%M:%S"
+
+  - trigger: ":now "
+    replace: "{{now}}"
+    vars:
+      - name: now
+        type: date
+        params:
+          format: "%Y-%m-%d %H:%M:%S"

@@ -1,0 +1,10 @@
+name: ssh_generate
+
+matches:
+  - trigger: ":sshgen"
+    replace: false
+    vars: []
+    action:
+      type: shell
+      # Use bash -lc so ~ and $HOME are expanded at runtime
+      cmd: "bash -lc \"~/.config/espanso/packages/ssh_generate/ssh_generate.sh\""

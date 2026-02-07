@@ -9,7 +9,7 @@
 # -------------------
 .PHONY: init
 
-init: permissions install_programs install_toolchains vscode_setup irpf_download set_shortcuts ubuntu_workspace
+init: permissions install_programs install_toolchains vscode_setup irpf_download set_shortcuts ubuntu_workspace install_espanso_packages
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -145,7 +145,7 @@ storage_analysis:
 # -------------------
 # BATCH OPERATIONS
 # -------------------
-.PHONY: full_setup hardware_setup storage_setup vm_setup permissions
+.PHONY: full_setup install_espanso_packages hardware_setup storage_setup vm_setup permissions
 
 full_setup: permissions install_programs install_toolchains vscode_setup setup_all_drivers
 	@echo ""
@@ -153,6 +153,28 @@ full_setup: permissions install_programs install_toolchains vscode_setup setup_a
 	@echo "  ✅ Full system setup completed!"
 	@echo "════════════════════════════════════════════"
 	@echo ""
+
+.PHONY: install_espanso_packages
+
+
+install_espanso_packages:
+	@echo "Installing Espanso packages from repo..."
+	@PACK_DIR="$$HOME/.config/espanso/packages"; \
+	mkdir -p "$$PACK_DIR"; \
+	for d in espanso/*; do \
+		if [ -d "$$d" ]; then \
+			name=$$(basename "$$d"); \
+			echo " - Installing $$d -> $$PACK_DIR/$$name"; \
+			rm -rf "$$PACK_DIR/$$name" 2>/dev/null || true; \
+			cp -a "$$d" "$$PACK_DIR/$$name"; \
+			find "$$PACK_DIR/$$name" -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true; \
+		fi; \
+	done; \
+	echo "Espanso packages installed to $$PACK_DIR"; \
+	if command -v espanso >/dev/null 2>&1; then \
+		echo "Reloading espanso..."; \
+		espanso restart >/dev/null 2>&1 || espanso start >/dev/null 2>&1 || true; \
+	fi
 
 hardware_setup: setup_bluetooth setup_keyboard setup_mouse setup_wifi
 	@echo ""

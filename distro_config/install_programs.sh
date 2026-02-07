@@ -3055,6 +3055,112 @@ cleanup_system() {
 }
 
 # ============================================================================
+# ESPANSO INSTALLATION
+# ============================================================================
+
+install_espanso() {
+    print_status "section" "ESPANSO (Text Expander)"
+
+    if command_exists espanso; then
+        print_status "success" "espanso is already installed: $(espanso --version 2>/dev/null || echo '')"
+        return 0
+    fi
+
+    if ! check_internet; then
+        print_status "error" "Internet connection required to install espanso"
+        print_status "warning" "Skipping espanso installation due to no internet"
+        return 0
+    fi
+
+    print_status "info" "Installing espanso using the official installer..."
+
+    # Preferred method: official installer script (runs as non-root)
+    if command_exists curl; then
+        if curl -sS https://get.espanso.org/install.sh | sh; then
+            print_status "success" "espanso installer finished"
+        else
+            print_status "warning" "espanso installer script failed, attempting package fallback"
+        fi
+    else
+        print_status "info" "curl not found; installing curl and retrying installer"
+        install_package curl curl curl curl
+        if command_exists curl; then
+            curl -sS https://get.espanso.org/install.sh | sh || true
+        fi
+    fi
+
+    # If installer did not produce a usable binary, try Debian .deb fallback (requires sudo)
+    if ! command_exists espanso && [ "$PACKAGE_MANAGER" = "apt" ]; then
+        print_status "info" "Attempting Debian .deb installation as fallback (requires sudo)"
+        # Determine session type: wayland or x11
+        session_type="${XDG_SESSION_TYPE:-}"
+        session_type="${session_type,,}"
+        if [ -z "$session_type" ]; then
+            # try to probe via loginctl (best-effort); default to x11 if unknown
+            session_type=$(loginctl show-user "$USER" --property=Display | cut -d= -f2 2>/dev/null || true)
+            session_type="${session_type,,}"
+        fi
+        if [ "$session_type" != "wayland" ]; then
+            session_type="x11"
+        fi
+
+        TMPDIR=$(mktemp -d)
+        cd "$TMPDIR" || true
+        deb_url="https://github.com/espanso/espanso/releases/latest/download/espanso-debian-${session_type}-amd64.deb"
+        print_status "info" "Downloading: $deb_url"
+        # try wget then curl with retries
+        wget --tries=3 --quiet -O espanso.deb "$deb_url" || curl -L --retry 3 -o espanso.deb "$deb_url" || true
+        if [ -s espanso.deb ]; then
+            print_status "info" "Installing espanso .deb (requires sudo)"
+            sudo apt update || true
+            sudo apt install -y ./espanso.deb || true
+        else
+            print_status "warning" "Could not download espanso .deb from $deb_url"
+        fi
+        cd - >/dev/null 2>&1 || true
+        rm -rf "$TMPDIR"
+    fi
+
+    # AppImage fallback (works on any distro; registers env-path)
+    if ! command_exists espanso; then
+        print_status "info" "Attempting AppImage fallback (will place in ~/opt)"
+        mkdir -p "$HOME/opt"
+        app_image_url="https://github.com/espanso/espanso/releases/latest/download/Espanso-X11.AppImage"
+        app_image_path="$HOME/opt/Espanso.AppImage"
+        wget --tries=3 -q -O "$app_image_path" "$app_image_url" || curl -L --retry 3 -o "$app_image_path" "$app_image_url" || true
+        if [ -s "$app_image_path" ]; then
+            chmod u+x "$app_image_path" || true
+            # register env-path (may require sudo for the wrapper)
+            "$app_image_path" env-path register || true
+        else
+            print_status "warning" "AppImage fallback failed to download"
+        fi
+    fi
+
+    if command_exists espanso; then
+        print_status "success" "espanso installed: $(espanso --version 2>/dev/null || echo '')"
+        # Grant required capability if available
+        if command_exists setcap && command_exists espanso; then
+            sudo setcap "cap_dac_override+p" "$(command -v espanso)" 2>/dev/null || true
+        fi
+        # Try to register and start user service (best-effort)
+        if command_exists espanso; then
+            espanso service register 2>/dev/null || true
+            espanso start 2>/dev/null || true
+        fi
+    else
+        print_status "warning" "espanso installation failed or binary not found in PATH"
+        print_status "info" "Manual options:"
+        print_status "config" "  - Use official installer: curl -sS https://get.espanso.org/install.sh | sh"
+        print_status "config" "  - Download .deb: wget https://github.com/espanso/espanso/releases/latest/download/espanso-debian-x11-amd64.deb && sudo apt install ./espanso-debian-x11-amd64.deb"
+        print_status "config" "  - Or install the AppImage into ~/opt and run: ~/opt/Espanso.AppImage env-path register"
+    fi
+
+    # Do not abort full installation if espanso failed; leave as warning
+    return 0
+}
+
+# ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
@@ -3112,6 +3218,7 @@ run_full_installation() {
     install_neovim
     install_ollama
     install_vitals  # Added Vitals installation
+    install_espanso
     cleanup_system
     
     print_status "section" "INSTALLATION COMPLETE!"
@@ -3169,6 +3276,7 @@ run_custom_installation() {
         "install_neovim:Neovim Text Editor"
         "install_ollama:Ollama AI Platform"
         "install_vitals:Vitals System Monitor"  # Added Vitals to custom installation
+        "install_espanso:Espanso (Text Expander)"
         "cleanup_system:System Cleanup"
     )
     

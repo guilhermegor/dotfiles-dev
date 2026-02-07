@@ -2374,6 +2374,42 @@ install_miro() {
     esac
 }
 
+install_linear() {
+    print_status "section" "LINEAR"
+
+    local desktop_dir="$HOME/.local/share/applications"
+    local desktop_file="$desktop_dir/linear.desktop"
+
+    if [ -f "$desktop_file" ]; then
+        print_status "info" "Linear desktop entry already exists"
+        return 0
+    fi
+
+    if ! command_exists google-chrome; then
+        print_status "warning" "Google Chrome not found. Linear desktop entry will still be created, but may not launch."
+        print_status "info" "Install Chrome and re-run this step if needed."
+    fi
+
+    print_status "info" "Creating Linear desktop entry..."
+    mkdir -p "$desktop_dir"
+    cat > "$desktop_file" << 'EOF'
+[Desktop Entry]
+Name=Linear
+Exec=google-chrome --app=https://linear.app
+Terminal=false
+Type=Application
+Icon=web-browser
+Categories=Office;ProjectManagement;
+EOF
+    chmod +x "$desktop_file"
+
+    if command_exists update-desktop-database; then
+        update-desktop-database "$desktop_dir" 2>/dev/null || true
+    fi
+
+    print_status "success" "Linear desktop entry created"
+}
+
 install_localsend() {
     print_status "section" "LOCALSEND"
     
@@ -3210,6 +3246,7 @@ run_full_installation() {
     install_virtual_machine_manager
     configure_gsconnect
     install_miro
+    install_linear
     install_localsend
     install_rustdesk
     install_pinta
@@ -3268,6 +3305,7 @@ run_custom_installation() {
         "install_virtual_machine_manager:VM Manager"
         "configure_gsconnect:GSConnect"
         "install_miro:Miro Collaboration Tool"
+        "install_linear:Linear (Project Management)"
         "install_localsend:LocalSend File Sharing"
         "install_rustdesk:RustDesk Remote Desktop"
         "install_pinta:Pinta Image Editor"

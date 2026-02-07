@@ -24,7 +24,7 @@
 
 #### **Peripheral Configuration**
 - [Bluetooth Adapter](drivers/bluetooth_adapter.sh) - Bluetooth driver setup and configuration (`make setup_bluetooth`)
-- [Keyboard Configuration](drivers/keyboard_cdllha.sh) - Custom keyboard layout and settings (`make setup_keyboard`)
+- [Keyboard Configuration](drivers/setup_keyboard.sh) - Custom keyboard layout and settings (`make setup_keyboard`)
 - [Mouse Configuration](drivers/mouse.sh) - Mouse driver and sensitivity settings (`make setup_mouse`)
 - [WiFi Adapter](drivers/tplink_wifi_adapter.sh) - TP-Link WiFi adapter driver installation (`make setup_wifi`)
 
@@ -176,6 +176,9 @@ make storage_analysis
 # System setup
 make ubuntu_workspace
 make install_programs
+make install_toolchains
+make vscode_setup
+make install_espanso_packages
 ```
 
 ### Direct Script Execution
@@ -184,7 +187,7 @@ Alternatively, execute scripts directly:
 ```bash
 # Hardware setup
 bash drivers/bluetooth_adapter.sh
-bash drivers/keyboard_cdllha.sh
+bash drivers/setup_keyboard.sh
 
 # Storage setup
 bash drives/format_neat.sh
@@ -199,13 +202,18 @@ linux-distro-init/
 │
 ├── 📁 distro_config/             # Distribution configuration
 │   ├── 📦 install_programs.sh    # Program installation script
+│   ├── 🧰 install_toolchains.sh  # Toolchains installation script
 │   ├── 📥 irpf_download.sh       # Tax software downloader
 │   ├── ⌨️ set_custom_shortcuts.sh # Custom shortcuts configuration
 │   └── 🖥️ ubuntu_workspace.sh    # Ubuntu workspace setup
 │
+├── 📁 code_editors/              # Code editors setup
+│   ├── 🧩 vscode.sh               # VS Code setup
+│   └── ♻️ vscode_restore.sh       # VS Code restore
+│
 ├── 📁 drivers/                   # Hardware driver configurations
 │   ├── 📡 bluetooth_adapter.sh   # Bluetooth setup
-│   ├── ⌨️ keyboard_cdllha.sh     # Keyboard configuration
+│   ├── ⌨️ setup_keyboard.sh      # Keyboard configuration
 │   ├── 🖱️ mouse.sh               # Mouse settings
 │   └── 📶 tplink_wifi_adapter.sh # WiFi adapter setup
 │
@@ -215,6 +223,14 @@ linux-distro-init/
 │   ├── 🗑️ format_hard.sh         # Complete formatting
 │   ├── 🧹 format_neat.sh         # Quick formatting
 │   └── 🔒 vault.sh               # Secure vault management
+│
+├── 📁 espanso/                   # Espanso packages
+│   ├── 📦 datetime/              # Date/time shortcuts
+│   ├── 📦 git_reset/             # Git reset shortcut
+│   ├── 📦 hostname_catcher/      # Hostname shortcuts
+│   ├── 📦 ipv4_catcher/          # IPv4 shortcuts
+│   ├── 📦 shortcuts/             # List shortcuts
+│   └── 📦 ssh_generate/          # SSH key generator
 │
 ├── 📁 os/                        # OS management tools
 │   ├── 💿 isos_os_manager.sh     # ISO file management
@@ -316,9 +332,13 @@ Run `make help` to see all available commands, or check these common recipes:
 
 ### System Setup
 - `make install_programs` - Install essential programs
+- `make install_toolchains` - Install development toolchains
 - `make ubuntu_workspace` - Configure Ubuntu workspace
 - `make set_shortcuts` - Set custom keyboard shortcuts
 - `make irpf_download` - Download Brazilian tax software
+- `make vscode_setup` - Configure VS Code
+- `make vscode_restore` - Restore VS Code configuration
+- `make install_espanso_packages` - Install Espanso packages
 
 ### Hardware Drivers
 - `make setup_all_drivers` - Setup all hardware drivers at once
@@ -347,6 +367,7 @@ Run `make help` to see all available commands, or check these common recipes:
 - `make hardware_setup` - Setup all hardware drivers
 - `make storage_setup` - Complete storage configuration
 - `make vm_setup` - Setup virtual machine environment
+- `make editors_setup` - Setup code editors
 
 ### Utilities
 - `make permissions` - Make all scripts executable

@@ -123,6 +123,8 @@ install_extensions() {
         "ritwickdey.liveserver"
         "pkief.material-icon-theme"
         "github.copilot"
+        "humao.rest-client"
+        "esbenp.prettier-vscode"
     )
     
     local installed_count=0

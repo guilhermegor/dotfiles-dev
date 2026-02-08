@@ -705,6 +705,110 @@ install_typescript() {
 }
 
 # ============================================================================
+# NESTJS CLI INSTALLATION
+# ============================================================================
+
+install_nestjs() {
+    print_status "section" "NESTJS CLI INSTALLATION"
+    
+    # Check if Node.js is installed
+    if ! is_tool_installed "nodejs"; then
+        print_status "error" "Node.js is not installed! NestJS CLI requires Node.js."
+        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
+        read -r install_nodejs_first
+        
+        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
+            install_nodejs
+        else
+            print_status "warning" "Skipping NestJS CLI installation as Node.js is required"
+            return 1
+        fi
+    fi
+    
+    # Check if npm is available
+    if ! command_exists npm; then
+        print_status "error" "npm is not available. Please ensure Node.js is properly installed."
+        return 1
+    fi
+    
+    # Check if NestJS CLI is already installed globally
+    print_status "info" "Checking for existing NestJS CLI installation..."
+    
+    local nestjs_version=$(npm list -g @nestjs/cli 2>/dev/null | grep @nestjs/cli@ | head -1 | sed 's/.*@nestjs\/cli@//' | cut -d' ' -f1)
+    
+    if [ -n "$nestjs_version" ]; then
+        print_status "info" "NestJS CLI is already installed globally (version: $nestjs_version)"
+        
+        echo -e "\n${YELLOW}Do you want to update NestJS CLI to the latest version? (y/n):${NC}"
+        read -r update_nestjs
+        if [[ ! "$update_nestjs" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing NestJS CLI version $nestjs_version"
+            return 0
+        fi
+    fi
+    
+    # Ask for NestJS CLI installation
+    echo -e "\n${YELLOW}Install NestJS CLI globally? (y/n):${NC}"
+    echo -e "${CYAN}This will install NestJS CLI via: npm install -g @nestjs/cli${NC}"
+    read -r install_nestjs
+    
+    if [[ ! "$install_nestjs" =~ ^[Yy]$ ]]; then
+        print_status "info" "Skipping NestJS CLI installation"
+        return 0
+    fi
+    
+    # Ask for specific version
+    echo -e "\n${YELLOW}Enter NestJS CLI version to install (or press Enter for latest):${NC}"
+    echo -e "${CYAN}Examples: latest, 10.4.0, 10.3.2${NC}"
+    read -r nestjs_version_input
+    
+    local install_cmd="npm install -g @nestjs/cli"
+    if [ -n "$nestjs_version_input" ] && [ "$nestjs_version_input" != "latest" ]; then
+        install_cmd="npm install -g @nestjs/cli@$nestjs_version_input"
+        print_status "info" "Installing NestJS CLI $nestjs_version_input..."
+    else
+        print_status "info" "Installing latest NestJS CLI version..."
+    fi
+    
+    print_status "warning" "This may take a moment..."
+    
+    if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+        # Get the installed version
+        nestjs_version=$(npm list -g @nestjs/cli 2>/dev/null | grep @nestjs/cli@ | head -1 | sed 's/.*@nestjs\/cli@//' | cut -d' ' -f1)
+        
+        if [ -n "$nestjs_version" ]; then
+            print_status "success" "NestJS CLI $nestjs_version installed successfully"
+        else
+            print_status "success" "NestJS CLI installed successfully"
+        fi
+        
+        # Verify installation
+        print_status "info" "Verifying installation..."
+        
+        if command_exists nest; then
+            local actual_nestjs_version=$(nest --version 2>/dev/null || echo "Not available")
+            print_status "info" "NestJS CLI version: $actual_nestjs_version"
+        else
+            print_status "warning" "NestJS CLI command (nest) not found. You may need to reload your shell."
+        fi
+        
+        # Usage tips
+        echo ""
+        print_status "info" "NestJS CLI usage:"
+        print_status "config" "  Check version: nest --version"
+        print_status "config" "  Create a new project: nest new my-app"
+        print_status "config" "  Generate a resource: nest g resource users"
+        print_status "config" "  Update NestJS CLI: npm update -g @nestjs/cli"
+        print_status "config" "  Install specific version: npm install -g @nestjs/cli@10.4.0"
+        print_status "config" "  List globally installed packages: npm list -g --depth=0"
+        
+    else
+        print_status "error" "Failed to install NestJS CLI"
+        return 1
+    fi
+}
+
+# ============================================================================
 # RUST INSTALLATION
 # ============================================================================
 
@@ -1033,13 +1137,14 @@ show_menu() {
     echo -e "  ${GREEN}2)${NC} Install Rust only"
     echo -e "  ${GREEN}3)${NC} Install TypeScript only (requires Node.js)"
     echo -e "  ${GREEN}4)${NC} Install NPX only (requires Node.js)"
-    echo -e "  ${GREEN}5)${NC} Install Node.js + TypeScript"
-    echo -e "  ${GREEN}6)${NC} Install Node.js + NPX"
-    echo -e "  ${GREEN}7)${NC} Install Node.js + TypeScript + NPX"
-    echo -e "  ${GREEN}8)${NC} Install NVM (Node Version Manager)"
-    echo -e "  ${GREEN}9)${NC} Install GitHub Copilot CLI (requires Node.js)"
-    echo -e "  ${GREEN}10)${NC} Install all toolchains and tools"
-    echo -e "  ${GREEN}11)${NC} Exit"
+    echo -e "  ${GREEN}5)${NC} Install NestJS CLI only (requires Node.js)"
+    echo -e "  ${GREEN}6)${NC} Install Node.js + TypeScript"
+    echo -e "  ${GREEN}7)${NC} Install Node.js + NPX"
+    echo -e "  ${GREEN}8)${NC} Install Node.js + TypeScript + NPX"
+    echo -e "  ${GREEN}9)${NC} Install NVM (Node Version Manager)"
+    echo -e "  ${GREEN}10)${NC} Install GitHub Copilot CLI (requires Node.js)"
+    echo -e "  ${GREEN}11)${NC} Install all toolchains and tools"
+    echo -e "  ${GREEN}12)${NC} Exit"
     echo -e "\n${CYAN}Choice: ${NC}"
 }
 
@@ -1086,51 +1191,57 @@ main() {
                 break
                 ;;
             5)
-                install_nodejs
-                echo ""
-                install_typescript
+                install_nestjs
                 break
                 ;;
             6)
                 install_nodejs
                 echo ""
-                install_npx
+                install_typescript
                 break
                 ;;
             7)
                 install_nodejs
                 echo ""
-                install_typescript
-                echo ""
                 install_npx
                 break
                 ;;
             8)
-                install_nvm
-                break
-                ;;
-            9)
-                install_github_copilot_cli
-                break
-                ;;
-            10)
                 install_nodejs
                 echo ""
                 install_typescript
                 echo ""
                 install_npx
+                break
+                ;;
+            9)
+                install_nvm
+                break
+                ;;
+            10)
+                install_github_copilot_cli
+                break
+                ;;
+            11)
+                install_nodejs
+                echo ""
+                install_typescript
+                echo ""
+                install_npx
+                echo ""
+                install_nestjs
                 echo ""
                 install_rust
                 echo ""
                 install_github_copilot_cli
                 break
                 ;;
-            11)
+            12)
                 print_status "info" "Installation cancelled"
                 exit 0
                 ;;
             *)
-                print_status "error" "Invalid option. Please select 1-11."
+                print_status "error" "Invalid option. Please select 1-12."
                 ;;
         esac
     done
@@ -1165,6 +1276,11 @@ main() {
     # Check TypeScript
     if command_exists tsc; then
         print_status "config" "  TypeScript: $(tsc --version 2>/dev/null | sed 's/Version //' || echo 'Not available')"
+    fi
+
+    # Check NestJS CLI
+    if command_exists nest; then
+        print_status "config" "  NestJS CLI: $(nest --version 2>/dev/null || echo 'Not available')"
     fi
     
     # Check rustc

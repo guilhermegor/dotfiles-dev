@@ -125,6 +125,7 @@ install_extensions() {
         "github.copilot"
         "humao.rest-client"
         "esbenp.prettier-vscode"
+        "natqe.reload"
     )
     
     local installed_count=0

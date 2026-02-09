@@ -96,7 +96,7 @@ setup_all_drivers: setup_bluetooth setup_keyboard setup_mouse setup_wifi
 # -------------------
 # STORAGE MANAGEMENT
 # -------------------
-.PHONY: check_drive_legitimacy data_recovery format_hard format_neat vault_setup
+.PHONY: check_drive_legitimacy data_recovery format_hard format_neat vault_setup mount_disks
 
 check_drive_legitimacy:
 	@echo "Checking drive legitimacy and integrity..."
@@ -119,6 +119,10 @@ format_neat:
 vault_setup:
 	@echo "Setting up secure storage vault..."
 	@bash drives/vault.sh
+
+mount_disks:
+	@echo "Mounting unmounted non-NTFS partitions..."
+	@bash drives/mount_disks.sh
 
 # -------------------
 # OS MANAGEMENT
@@ -314,6 +318,7 @@ help:
 	@echo "  format_hard          - Complete drive formatting (⚠️  DANGEROUS)"
 	@echo "  format_neat          - Quick and clean formatting"
 	@echo "  vault_setup          - Setup secure storage vault"
+	@echo "  mount_disks          - Mount unmounted non-NTFS partitions"
 	@echo ""
 	@echo "OS Management:"
 	@echo "  manage_isos          - Manage ISO files and operating systems"

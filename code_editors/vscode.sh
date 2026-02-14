@@ -178,26 +178,31 @@ configure_keybindings() {
     # Read existing keybindings
     local existing_keybindings=$(cat "$keybindings_file" 2>/dev/null || echo '[]')
     
-    # Check if the shortcut already exists
-    if echo "$existing_keybindings" | grep -q '"ctrl+k ctrl+s"'; then
-        print_status "warning" "Shortcut Ctrl+K Ctrl+S for 'workbench.action.files.saveAll' already exists"
+    # Check if the shortcuts already exist
+    if echo "$existing_keybindings" | grep -q '"ctrl+k s"'; then
+        print_status "warning" "Shortcut Ctrl+K S for 'workbench.action.files.saveAll' already exists"
     else
-        # Add the new shortcut while preserving existing ones
+        # Add the new shortcuts while preserving existing ones
         echo "$existing_keybindings" | jq '. + [
             {
-                "key": "ctrl+k ctrl+s",
+                "key": "ctrl+k s",
                 "command": "workbench.action.files.saveAll",
+                "when": "editorTextFocus"
+            },
+            {
+                "key": "ctrl+k ctrl+s",
+                "command": "workbench.action.openGlobalKeybindingsFindWidget",
                 "when": "editorTextFocus"
             }
         ]' > "$temp_file" 2>/dev/null || {
             print_status "warning" "jq not found, using manual JSON manipulation"
             # Fallback if jq is not installed
             if [ "$existing_keybindings" = "[]" ]; then
-                echo '[{"key": "ctrl+k ctrl+s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"}]' > "$temp_file"
+                echo '[{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"}]' > "$temp_file"
             else
                 # Remove the last bracket, add comma and new entry, then add bracket back
                 echo "$existing_keybindings" | sed '$ s/\]//' > "$temp_file"
-                echo ',{"key": "ctrl+k ctrl+s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"}]' >> "$temp_file"
+                echo ',{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"}]' >> "$temp_file"
             fi
         }
         
@@ -207,7 +212,7 @@ configure_keybindings() {
         # Copy the new keybindings
         cp "$temp_file" "$keybindings_file"
         
-        print_status "success" "Added Ctrl+K Ctrl+S shortcut for 'Save All'"
+        print_status "success" "Added Ctrl+K S shortcut for 'Save All' and Ctrl+K Ctrl+S for 'Keyboard Shortcuts Help'"
     fi
     
     # Clean up temp file

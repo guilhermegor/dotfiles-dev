@@ -238,8 +238,18 @@ configure_settings() {
         echo '{}' > "$settings_file"
     fi
     
-    # Read current settings to preserve ALL your preferences
+    # Read current settings and validate JSON
     local current_settings=$(cat "$settings_file" 2>/dev/null || echo '{}')
+    
+    # Validate JSON - if it's malformed, repair or reset it
+    if ! echo "$current_settings" | jq empty 2>/dev/null; then
+        print_status "warning" "⚠️  Your settings.json has invalid JSON syntax"
+        print_status "info" "Backing up corrupted file and creating valid one"
+        cp "$settings_file" "$settings_file.corrupted_$(date +%Y%m%d_%H%M%S)"
+        current_settings='{}'
+        echo '{}' > "$settings_file"
+        print_status "success" "Reset to empty valid JSON"
+    fi
     
     # Extract critical visual settings for debugging
     print_status "info" "🔍 Analyzing your current settings..."
@@ -307,24 +317,33 @@ configure_settings() {
     print_status "success" "Original settings backed up to: $backup_file"
     
     if command -v jq &> /dev/null; then
-        # STRATEGY: Start with your current settings, then add recommended ones
-        # This ensures YOUR settings take priority
+        # STRATEGY: Merge settings with EDITOR CURSOR guaranteed to apply
+        # This ensures cursor settings work in BOTH editor and terminal
         
         # Step 1: Start with your current settings (this preserves everything)
         echo "$current_settings" > "$settings_file.tmp"
         
-        # Step 2: Merge with your critical settings (ensure they're always set)
-        cat "$settings_file.tmp" | jq --argjson critical "$your_critical_settings" '
-            . * $critical  # Your current settings first, critical settings override if missing
+        # Step 2: Merge with recommended settings (add if missing)
+        cat "$settings_file.tmp" | jq --argjson recommended "$recommended_settings" '
+            . as $current | $recommended | . * $current
         ' > "$settings_file.tmp2"
         
-        # Step 3: Finally, add recommended settings (only if not already set)
-        cat "$settings_file.tmp2" | jq --argjson recommended "$recommended_settings" '
-            . * $recommended  # Existing settings first, recommended only if missing
+        # Step 3: Merge with your critical settings (ensure they're always set)
+        cat "$settings_file.tmp2" | jq --argjson critical "$your_critical_settings" '
+            . * $critical  # Your critical settings take priority
         ' > "$settings_file"
         
+        # Step 4: FORCE editor cursor settings to ensure they work in the editor
+        cat "$settings_file" | jq '
+            .["editor.cursorStyle"] = "block" |
+            .["editor.cursorBlinking"] = "blink" |
+            .["editor.cursorWidth"] = 4
+        ' > "$settings_file.tmp3"
+        
+        mv "$settings_file.tmp3" "$settings_file"
+        
         # Clean up temp files
-        rm -f "$settings_file.tmp" "$settings_file.tmp2"
+        rm -f "$settings_file.tmp" "$settings_file.tmp2" "$settings_file.tmp3"
         
         # Verify the critical settings are preserved
         local final_font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
@@ -451,14 +470,14 @@ verify_configuration() {
             local checks_passed=0
             local checks_total=0
             
-            # Check theme
-            local theme=$(jq -r '.["workbench.colorTheme"] // empty' "$settings_file")
+            # Check cursor style (IMPORTANT - ensure it's set)
+            local cursor_style=$(jq -r '.["editor.cursorStyle"] // empty' "$settings_file")
             checks_total=$((checks_total + 1))
-            if [ "$theme" = "Default Dark Modern" ]; then
-                print_status "success" "✅ Theme: Default Dark Modern"
+            if [ "$cursor_style" = "block" ]; then
+                print_status "success" "✅ Editor cursor style: block"
                 checks_passed=$((checks_passed + 1))
             else
-                print_status "warning" "Theme is: ${theme:-Not set}"
+                print_status "warning" "Cursor style is: ${cursor_style:-Not set}"
             fi
             
             # Check zoom level (CRITICAL for your issue)
@@ -533,6 +552,7 @@ show_final_summary() {
     print_status "config" "📋 WHAT WAS CONFIGURED:"
     echo "  ✅ Extensions installed/verified (6 total)"
     echo "  ✅ Keyboard shortcut added: Ctrl+K Ctrl+S → Save All"
+    echo "  ✅ Editor cursor style: BLOCK (in file editing area)"
     echo "  ✅ Your personal settings PRESERVED"
     echo "  ✅ Recommended editor settings added"
     echo ""

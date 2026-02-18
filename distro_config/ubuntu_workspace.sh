@@ -412,15 +412,7 @@ configure_dock() {
         fi
     done
     
-    # 9. pgAdmin 4
-    for app in 'pgadmin4.desktop' 'pgadmin4_pgadmin4.desktop' 'org.pgadmin.pgAdmin4.desktop'; do
-        if result=$(find_desktop_file "$app"); then
-            favorites+=("'$result'")
-            break
-        fi
-    done
-    
-    # 10. Docker Desktop
+    # 9. Docker Desktop
     for app in 'docker-desktop.desktop' 'docker_docker-desktop.desktop' 'docker.desktop'; do
         if result=$(find_desktop_file "$app"); then
             favorites+=("'$result'")
@@ -880,6 +872,7 @@ organize_app_folders() {
         'cursor.desktop' 'com.cursor.Cursor.desktop' 'cursor-app.desktop'
         'notepadqq.desktop' 'com.notepadqq.Notepadqq.desktop'
         'slack.desktop' 'com.slack.Slack.desktop' 'slack_slack.desktop' 'slack-desktop.desktop'
+        'pgadmin4.desktop' 'pgadmin4_pgadmin4.desktop' 'org.pgadmin.pgAdmin4.desktop'
     )
 
     for app in "${dev_app_names[@]}"; do

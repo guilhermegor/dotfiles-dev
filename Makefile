@@ -9,7 +9,7 @@
 # -------------------
 .PHONY: init
 
-init: permissions install_programs install_toolchains vscode_setup irpf_download set_shortcuts ubuntu_workspace install_espanso_packages
+init: permissions install_programs install_espanso_packages install_toolchains vscode_setup irpf_download set_shortcuts ubuntu_workspace
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"

@@ -1,4 +1,4 @@
-# Linux Distro Init <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" align="right" width="120" style="border-radius: 15px;" alt="Linux Penguin">
+# dotfiles <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" align="right" width="120" style="border-radius: 15px;" alt="Linux Penguin">
 
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 ![Shell Version](https://img.shields.io/badge/shell-Bash%20%7C%20Zsh-blue.svg)
@@ -6,7 +6,7 @@
 ![Open Issues](https://img.shields.io/github/issues/guilhermegor/linux-distro-init)
 ![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-darkgreen.svg)
 
-**Linux Distro Init** is a comprehensive initialization and configuration toolkit for Linux distributions. It provides automated setup scripts for system configuration, driver installation, storage management, and development environment setup.
+**dotfiles** is a comprehensive initialization and configuration toolkit for Linux distributions. It provides automated setup scripts for system configuration, driver installation, storage management, and development environment setup.
 
 **🎯 Features a powerful Makefile** for easy command execution and workflow automation - no need to remember complex script paths!
 

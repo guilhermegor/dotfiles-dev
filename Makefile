@@ -1,5 +1,5 @@
 # ===========================================
-# LINUX DISTRO INIT - MAKEFILE
+# DOTFILES - MAKEFILE
 # ===========================================
 
 .DEFAULT_GOAL := help
@@ -287,7 +287,7 @@ clean:
 
 help:
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "  LINUX DISTRO INIT - Available Make Targets"
+	@echo "  DOTFILES - Available Make Targets"
 	@echo "═══════════════════════════════════════════════════════════"
 	@echo ""
 	@echo "🚀 Quick Start:"

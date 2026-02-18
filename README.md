@@ -1,12 +1,12 @@
-# dotfiles <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" align="right" width="120" style="border-radius: 15px;" alt="Linux Penguin">
+# dotfiles-dev <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" align="right" width="120" style="border-radius: 15px;" alt="Linux Penguin">
 
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 ![Shell Version](https://img.shields.io/badge/shell-Bash%20%7C%20Zsh-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Open Issues](https://img.shields.io/github/issues/guilhermegor/linux-distro-init)
+![Open Issues](https://img.shields.io/github/issues/guilhermegor/dotfiles-dev)
 ![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-darkgreen.svg)
 
-**dotfiles** is a comprehensive initialization and configuration toolkit for Linux distributions. It provides automated setup scripts for system configuration, driver installation, storage management, and development environment setup.
+**dotfiles-dev** is a comprehensive initialization and configuration toolkit for Linux distributions. It provides automated setup scripts for system configuration, driver installation, storage management, and development environment setup.
 
 **🎯 Features a powerful Makefile** for easy command execution and workflow automation - no need to remember complex script paths!
 
@@ -73,8 +73,8 @@ sudo apt install dkms git -y
 
 mkdir ~/github
 cd ~/github
-git clone https://github.com/guilhermegor/linux-distro-init.git
-cd linux-distro-init
+git clone https://github.com/guilhermegor/dotfiles-dev.git
+cd dotfiles-dev
 
 make init
 ```
@@ -120,8 +120,8 @@ make vm_setup            # Configure virtual machines
 
 **Option 1: Step-by-Step with Makefile**
 ```bash
-git clone https://github.com/guilhermegor/linux-distro-init.git
-cd linux-distro-init
+git clone https://github.com/guilhermegor/dotfiles-dev.git
+cd dotfiles-dev
 
 # Make all scripts executable
 make permissions
@@ -198,7 +198,7 @@ bash storage/storage_hiato.sh
 
 ## 📂 Project Structure
 ```
-linux-distro-init/
+dotfiles-dev/
 │
 ├── 📋 Makefile                   # Automation recipes for all scripts
 │
@@ -252,8 +252,8 @@ linux-distro-init/
 
 1. **Clone and Initialize (One Command)**
 ```bash
-   git clone https://github.com/guilhermegor/linux-distro-init.git
-   cd linux-distro-init
+   git clone https://github.com/guilhermegor/dotfiles-dev.git
+   cd dotfiles-dev
    make init
 ```
 
@@ -396,5 +396,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Useful Links
 
-- [GitHub Repository](https://github.com/guilhermegor/linux-distro-init)
-- [Issue Tracker](https://github.com/guilhermegor/linux-distro-init/issues)
+- [GitHub Repository](https://github.com/guilhermegor/dotfiles-dev)
+- [Issue Tracker](https://github.com/guilhermegor/dotfiles-dev/issues)

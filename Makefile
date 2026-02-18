@@ -1,5 +1,5 @@
 # ===========================================
-# DOTFILES - MAKEFILE
+# DOTFILES-DEV - MAKEFILE
 # ===========================================
 
 .DEFAULT_GOAL := help
@@ -287,7 +287,7 @@ clean:
 
 help:
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "  DOTFILES - Available Make Targets"
+	@echo "  DOTFILES-DEV - Available Make Targets"
 	@echo "═══════════════════════════════════════════════════════════"
 	@echo ""
 	@echo "🚀 Quick Start:"

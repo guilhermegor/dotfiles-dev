@@ -126,6 +126,8 @@ install_extensions() {
         "humao.rest-client"
         "esbenp.prettier-vscode"
         "natqe.reload"
+        "tamasfe.even-better-toml"
+        "be5invis.toml"
     )
     
     local installed_count=0

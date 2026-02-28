@@ -128,6 +128,7 @@ install_extensions() {
         "natqe.reload"
         "tamasfe.even-better-toml"
         "be5invis.toml"
+        "prisma.prisma"
     )
     
     local installed_count=0

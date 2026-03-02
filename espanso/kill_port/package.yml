@@ -1,0 +1,38 @@
+name: kill_port
+description: Kill processes running on specific ports
+parent: default
+
+matches:
+  # Interactive port killer - asks for port number
+  - trigger: ":killport"
+    replace: "{{output}}"
+    vars:
+      - name: port
+        type: form
+        params:
+          layout: |
+            Port to kill: [[port]]
+          fields:
+            port:
+              multiline: false
+      - name: output
+        type: shell
+        params:
+          cmd: "bash ~/.config/espanso/packages/kill_port/kill_port.sh {{port}}"
+
+  # Quick shorthand version
+  - trigger: ":kp"
+    replace: "{{output}}"
+    vars:
+      - name: port
+        type: form
+        params:
+          layout: |
+            Port: [[port]]
+          fields:
+            port:
+              multiline: false
+      - name: output
+        type: shell
+        params:
+          cmd: "bash ~/.config/espanso/packages/kill_port/kill_port.sh {{port}}"

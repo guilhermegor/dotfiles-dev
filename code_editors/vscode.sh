@@ -129,6 +129,7 @@ install_extensions() {
         "tamasfe.even-better-toml"
         "be5invis.toml"
         "prisma.prisma"
+        "alexcvzz.vscode-sqlite"
     )
     
     local installed_count=0

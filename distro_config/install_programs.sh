@@ -2802,6 +2802,58 @@ install_morgen() {
 }
 
 # ============================================================================
+# THUNDERBIRD EMAIL CLIENT
+# ============================================================================
+
+install_thunderbird() {
+    print_status "section" "THUNDERBIRD EMAIL CLIENT"
+    
+    # Check if Thunderbird is already installed
+    if command_exists thunderbird || flatpak list 2>/dev/null | grep -q "org.mozilla.Thunderbird"; then
+        print_status "info" "Thunderbird already installed"
+        return 0
+    fi
+    
+    case "$PACKAGE_MANAGER" in
+        apt)
+            print_status "info" "Installing Thunderbird via apt..."
+            $INSTALL_CMD thunderbird
+            print_status "success" "Thunderbird installed"
+            ;;
+        dnf|yum)
+            print_status "info" "Installing Thunderbird via $PACKAGE_MANAGER..."
+            $INSTALL_CMD thunderbird
+            print_status "success" "Thunderbird installed"
+            ;;
+        pacman)
+            print_status "info" "Installing Thunderbird via pacman..."
+            $INSTALL_CMD thunderbird
+            print_status "success" "Thunderbird installed"
+            ;;
+        zypper)
+            print_status "info" "Installing Thunderbird via zypper..."
+            $INSTALL_CMD MozillaThunderbird
+            print_status "success" "Thunderbird installed"
+            ;;
+        *)
+            # Fallback to Flatpak
+            if command_exists flatpak; then
+                print_status "info" "Installing Thunderbird via Flatpak..."
+                flatpak install -y flathub org.mozilla.Thunderbird
+                print_status "success" "Thunderbird installed via Flatpak"
+            else
+                print_status "error" "Could not install Thunderbird. Please install manually."
+                return 1
+            fi
+            ;;
+    esac
+    
+    print_status "success" "Thunderbird email client is ready to use"
+    print_status "info" "Thunderbird: Free, open-source email client by Mozilla"
+    print_status "config" "Launch with: thunderbird"
+}
+
+# ============================================================================
 # RUSTDESK REMOTE DESKTOP
 # ============================================================================
 
@@ -3334,6 +3386,7 @@ run_full_installation() {
     install_rustdesk
     install_pinta
     install_morgen
+    install_thunderbird
     install_insync
     install_clamav
     install_neovim
@@ -3394,6 +3447,7 @@ run_custom_installation() {
         "install_rustdesk:RustDesk Remote Desktop"
         "install_pinta:Pinta Image Editor"
         "install_morgen:Morgen Calendar"
+        "install_thunderbird:Thunderbird Email Client"
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"
         "install_neovim:Neovim Text Editor"

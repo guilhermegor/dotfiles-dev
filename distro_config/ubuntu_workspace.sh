@@ -34,169 +34,6 @@ print_status() {
     esac
 }
 
-remove_thunderbird_completely() {
-    print_status "info" "Completely removing Thunderbird from system..."
-    
-    # First, remove from dock favorites
-    print_status "info" "Removing Thunderbird from dock favorites..."
-    
-    # Get current favorites
-    local current_favorites=$(gsettings get org.gnome.shell favorite-apps)
-    
-    # Check if Thunderbird exists in favorites using the exact desktop file names found
-    local thunderbird_patterns=(
-        "thunderbird.desktop"
-        "thunderbird_thunderbird.desktop"
-        "org.mozilla.Thunderbird.desktop"
-        "mozilla-thunderbird.desktop"
-    )
-    
-    local found_thunderbird=false
-    local new_favorites="$current_favorites"
-    
-    for pattern in "${thunderbird_patterns[@]}"; do
-        if [[ "$current_favorites" == *"$pattern"* ]]; then
-            print_status "info" "Found Thunderbird in favorites: $pattern"
-            found_thunderbird=true
-            
-            # Remove the Thunderbird entry using robust pattern matching
-            new_favorites=$(echo "$new_favorites" | sed "s/,'$pattern'//g" | sed "s/'$pattern',//g" | sed "s/'$pattern'//g")
-            new_favorites=$(echo "$new_favorites" | sed "s/, *'$pattern'//g" | sed "s/'$pattern' *, *//g")
-        fi
-    done
-    
-    if [ "$found_thunderbird" = true ]; then
-        gsettings set org.gnome.shell favorite-apps "$new_favorites"
-        print_status "success" "Thunderbird removed from dock favorites"
-    else
-        print_status "info" "Thunderbird not found in dock favorites"
-    fi
-    
-    # Remove from app folders
-    print_status "info" "Removing Thunderbird from app folders..."
-    
-    local folder_children=$(gsettings get org.gnome.desktop.app-folders folder-children)
-    folder_children=$(echo "$folder_children" | sed "s/\[//g" | sed "s/\]//g" | sed "s/'//g")
-    IFS=',' read -ra folders <<< "$folder_children"
-    
-    for folder in "${folders[@]}"; do
-        folder=$(echo "$folder" | xargs)
-        if [ -n "$folder" ]; then
-            local folder_apps=$(gsettings get org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/${folder}/ apps)
-            
-            for pattern in "${thunderbird_patterns[@]}"; do
-                if [[ "$folder_apps" == *"$pattern"* ]]; then
-                    print_status "info" "Removing Thunderbird from folder: $folder"
-                    local new_folder_apps=$(echo "$folder_apps" | sed "s/,'$pattern'//g" | sed "s/'$pattern',//g" | sed "s/'$pattern'//g")
-                    new_folder_apps=$(echo "$new_folder_apps" | sed "s/, *'$pattern'//g" | sed "s/'$pattern' *, *//g")
-                    gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/${folder}/ apps "$new_folder_apps"
-                    print_status "success" "Thunderbird removed from $folder folder"
-                fi
-            done
-        fi
-    done
-    
-    # Kill any running Thunderbird processes
-    print_status "info" "Stopping Thunderbird processes..."
-    if pgrep -x "thunderbird" > /dev/null; then
-        killall thunderbird 2>/dev/null
-        sleep 2
-        print_status "success" "Thunderbird processes stopped"
-    else
-        print_status "info" "No Thunderbird processes running"
-    fi
-    
-    # Check for snap installation
-    if snap list 2>/dev/null | grep -q "thunderbird"; then
-        print_status "info" "Removing Thunderbird snap package..."
-        sudo snap remove thunderbird
-        if [ $? -eq 0 ]; then
-            print_status "success" "Thunderbird snap package removed"
-        else
-            print_status "error" "Failed to remove Thunderbird snap package"
-        fi
-    else
-        print_status "info" "Thunderbird snap package not found"
-    fi
-    
-    # Check for apt installation
-    if dpkg -l 2>/dev/null | grep -q "^ii.*thunderbird"; then
-        print_status "info" "Removing Thunderbird apt package..."
-        sudo apt remove --purge thunderbird thunderbird-gnome-support -y
-        sudo apt autoremove -y
-        if [ $? -eq 0 ]; then
-            print_status "success" "Thunderbird apt package removed"
-        else
-            print_status "error" "Failed to remove Thunderbird apt package"
-        fi
-    else
-        print_status "info" "Thunderbird apt package not found"
-    fi
-    
-    # Check for flatpak installation
-    if command -v flatpak &> /dev/null; then
-        if flatpak list 2>/dev/null | grep -q "thunderbird"; then
-            print_status "info" "Removing Thunderbird flatpak package..."
-            flatpak uninstall org.mozilla.Thunderbird -y
-            if [ $? -eq 0 ]; then
-                print_status "success" "Thunderbird flatpak package removed"
-            else
-                print_status "error" "Failed to remove Thunderbird flatpak package"
-            fi
-        else
-            print_status "info" "Thunderbird flatpak package not found"
-        fi
-    fi
-    
-    # Remove desktop files manually (in case of manual installation)
-    print_status "info" "Checking for manual Thunderbird desktop files..."
-    local desktop_locations=(
-        "$HOME/.local/share/applications"
-        "/usr/share/applications"
-        "/usr/local/share/applications"
-    )
-    
-    local removed_desktop_files=false
-    for location in "${desktop_locations[@]}"; do
-        for pattern in "${thunderbird_patterns[@]}"; do
-            if [ -f "$location/$pattern" ]; then
-                print_status "info" "Found desktop file: $location/$pattern"
-                if [ -w "$location/$pattern" ]; then
-                    rm "$location/$pattern"
-                    removed_desktop_files=true
-                    print_status "success" "Removed $location/$pattern"
-                else
-                    sudo rm "$location/$pattern"
-                    removed_desktop_files=true
-                    print_status "success" "Removed $location/$pattern (with sudo)"
-                fi
-            fi
-        done
-    done
-    
-    if [ "$removed_desktop_files" = false ]; then
-        print_status "info" "No orphaned desktop files found"
-    fi
-    
-    # Update desktop database
-    if [ "$removed_desktop_files" = true ]; then
-        print_status "info" "Updating desktop database..."
-        update-desktop-database ~/.local/share/applications 2>/dev/null
-        sudo update-desktop-database /usr/share/applications 2>/dev/null
-        print_status "success" "Desktop database updated"
-    fi
-    
-    # Information about user data
-    if [ -d "$HOME/.thunderbird" ]; then
-        print_status "warning" "Thunderbird configuration and data remains in ~/.thunderbird"
-        print_status "info" "To remove all Thunderbird data, run: rm -rf ~/.thunderbird"
-    else
-        print_status "info" "No Thunderbird user data found"
-    fi
-    
-    print_status "success" "Thunderbird has been completely removed from the system!"
-}
-
 configure_terminal() {
     print_status "info" "Configuring terminal profile..."
     
@@ -436,9 +273,6 @@ configure_dock() {
     
     print_status "success" "Dock configured with ${#favorites[@]} favorite apps"
     print_status "info" "Apps in order: ${favorites_str}"
-    
-    # Now explicitly remove Thunderbird to ensure it's gone
-    remove_thunderbird_completely
 }
 
 set_ubuntu_ui_interface() {
@@ -1076,6 +910,55 @@ EOF
         print_status "warning" "No Office apps found"
     fi
     
+    # ==================== ORGANIZAÇÃO PESSOAL FOLDER ====================
+    print_status "info" "Creating Organização Pessoal folder..."
+    local org_pessoal_apps=()
+
+    local org_pessoal_app_names=(
+        'morgen.desktop' 'com.morgen.Morgen.desktop' 'morgen_morgen.desktop'
+        'com.todesktop.230313mzl4w4u92.desktop'
+        'thunderbird.desktop' 'thunderbird_thunderbird.desktop'
+        'org.mozilla.Thunderbird.desktop' 'mozilla-thunderbird.desktop'
+    )
+
+    for app in "${org_pessoal_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            org_pessoal_apps+=("'$result'")
+        fi
+    done
+
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*morgen*.desktop \
+                        /usr/share/applications/*thunderbird*.desktop \
+                        /var/lib/snapd/desktop/applications/*morgen*.desktop \
+                        /var/lib/snapd/desktop/applications/*thunderbird*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*morgen*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*thunderbird*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*Thunderbird*.desktop \
+                        "$HOME/.local/share/applications"/*morgen*.desktop \
+                        "$HOME/.local/share/applications"/*thunderbird*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            if [[ ! " ${org_pessoal_apps[@]} " =~ " '$basename' " ]]; then
+                org_pessoal_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+
+    org_pessoal_apps=($(echo "${org_pessoal_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+    if [ ${#org_pessoal_apps[@]} -gt 0 ]; then
+        local org_pessoal_apps_str=$(IFS=,; echo "${org_pessoal_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ name 'Organização Pessoal'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ apps "[${org_pessoal_apps_str}]"
+        folder_ids+=("'OrgPessoal'")
+        print_status "success" "Organização Pessoal folder created with ${#org_pessoal_apps[@]} apps"
+        print_status "config" "  Apps: ${org_pessoal_apps_str}"
+    else
+        print_status "warning" "No Organização Pessoal apps found"
+    fi
+    
     # ==================== AMBIENTE VIRTUAL FOLDER ====================
     print_status "info" "Creating Ambiente Virtual folder..."
     local ambiente_virtual_apps=()
@@ -1141,7 +1024,7 @@ EOF
     # ==================== UPDATE FOLDER LIST ====================
     local ordered_folder_ids=()
 
-    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'AmbienteVirtual'"; do
+    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'OrgPessoal'" "'AmbienteVirtual'"; do
         for created_folder in "${folder_ids[@]}"; do
             if [ "$created_folder" = "$folder" ]; then
                 ordered_folder_ids+=("$folder")

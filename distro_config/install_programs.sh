@@ -2381,7 +2381,7 @@ install_linear() {
     local desktop_file="$desktop_dir/linear.desktop"
 
     local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-    local icon_src="$script_root/data/linear_app.png"
+    local icon_src="$script_root/assets/linear_app.png"
     local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
     local icon_path="$icon_theme_dir/linear.png"
     local icon_value="linear"

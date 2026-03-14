@@ -131,6 +131,7 @@ install_extensions() {
         "prisma.prisma"
         "alexcvzz.vscode-sqlite"
         "clinyong.vscode-css-modules"
+        "formulahendry.auto-rename-tag"
     )
     
     local installed_count=0

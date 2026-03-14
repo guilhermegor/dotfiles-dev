@@ -130,6 +130,7 @@ install_extensions() {
         "be5invis.toml"
         "prisma.prisma"
         "alexcvzz.vscode-sqlite"
+        "clinyong.vscode-css-modules"
     )
     
     local installed_count=0

@@ -13,6 +13,8 @@
   "editor.lineNumbers": "on",
   "files.eol": "\n",
   "workbench.editor.labelFormat": "short",
+  "editor.glyphMargin": false,
+  "workbench.activityBar.location": "bottom",
 
   // =============================================
   // LANGUAGE-SPECIFIC SETTINGS

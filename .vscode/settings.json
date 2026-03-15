@@ -5,6 +5,7 @@
   "editor.formatOnSave": true,
   "editor.minimap.enabled": false,
   "editor.bracketPairColorization.enabled": true,
+  "breadcrumbs.enabled": true,
   "editor.codeActionsOnSave": {
     "source.organizeImports": "never",
     "source.organizeFroms": "never"

@@ -10,6 +10,9 @@
     "source.organizeFroms": "never"
   },
   "editor.inlineSuggest.suppressSuggestions": true,
+  "editor.lineNumbers": "on",
+  "files.eol": "\n",
+  "workbench.editor.labelFormat": "short",
 
   // =============================================
   // LANGUAGE-SPECIFIC SETTINGS
@@ -18,6 +21,7 @@
     "editor.formatOnSave": false,
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.rulers": [99],
+    "editor.tabSize": 4,
     "editor.codeActionsOnSave": {
 			"source.organizeImports.ruff": "explicit"
 		},
@@ -51,6 +55,63 @@
     }
   },
 
+  "[javascript]": {
+    "editor.rulers": [120],
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  },
+
+  "[javascriptreact]": {
+    "editor.rulers": [120],
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  },
+
+  "[typescript]": {
+    "editor.rulers": [120],
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  },
+
+  "[typescriptreact]": {
+    "editor.rulers": [120],
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  },
+  
+  "[html]": {
+    "editor.rulers": [120],
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  "[xml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  "[svg]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  "[css]": {
+    "editor.rulers": [120]
+  },
+
 
 	// =============================================
 	// RUFF SPECIFIC SETTINGS
@@ -70,7 +131,7 @@
   // WORKBENCH APPEARANCE
   // =============================================
   "workbench.iconTheme": "material-icon-theme",
-  "workbench.colorTheme": "Default Dark Modern",
+  "workbench.colorTheme": "OM Theme (Default Dracula Italic)",
   "workbench.colorCustomizations": {
     "editorRuler.foreground": "#D3D3D3"
   },

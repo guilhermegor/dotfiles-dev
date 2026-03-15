@@ -216,7 +216,7 @@ remove_font_settings_only() {
 {
   // Minimal settings after font removal
   "window.zoomLevel": 0,
-  "workbench.colorTheme": "Default Dark Modern",
+  "workbench.colorTheme": "OM Theme (Default Dracula Italic)",
   "workbench.iconTheme": "material-icon-theme"
 }
 EOF

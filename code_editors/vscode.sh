@@ -132,6 +132,7 @@ install_extensions() {
         "alexcvzz.vscode-sqlite"
         "clinyong.vscode-css-modules"
         "formulahendry.auto-rename-tag"
+        "omthemes.omthemes"
     )
     
     local installed_count=0
@@ -310,7 +311,7 @@ configure_settings() {
     "editor.rulers": [80, 120],
     "explorer.confirmDelete": false,
     "explorer.confirmDragAndDrop": false,
-    "workbench.colorTheme": "Default Dark Modern",
+    "workbench.colorTheme": "OM Theme (Default Dracula Italic)",
     "window.zoomLevel": 0
 }'
     

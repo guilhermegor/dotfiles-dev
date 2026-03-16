@@ -16,6 +16,7 @@
   "workbench.editor.labelFormat": "short",
   "editor.glyphMargin": false,
   "workbench.activityBar.location": "bottom",
+  "explorer.compactFolders": false,
 
   // =============================================
   // LANGUAGE-SPECIFIC SETTINGS
@@ -65,7 +66,7 @@
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit",
-      "source.organizeImports": true
+      "source.organizeImports": "explicit"
     }
   },
 
@@ -76,7 +77,7 @@
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit",
-      "source.organizeImports": true
+      "source.organizeImports": "explicit"
     }
   },
 

@@ -17,116 +17,123 @@
   "editor.glyphMargin": false,
   "workbench.activityBar.location": "bottom",
   "explorer.compactFolders": false,
-
   // =============================================
   // LANGUAGE-SPECIFIC SETTINGS
   // =============================================
   "[python]": {
     "editor.formatOnSave": false,
     "editor.defaultFormatter": "charliermarsh.ruff",
-    "editor.rulers": [99],
+    "editor.rulers": [
+      99
+    ],
     "editor.tabSize": 4,
     "editor.codeActionsOnSave": {
-			"source.organizeImports.ruff": "explicit"
-		},
+      "source.organizeImports.ruff": "explicit"
+    },
     "workbench.colorCustomizations": {
       "editorRuler.foreground": "#D3D3D3"
     },
   },
-
   "[sql]": {
-    "editor.rulers": [99],
+    "editor.rulers": [
+      99
+    ],
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "workbench.colorCustomizations": {
       "editorRuler.foreground": "#D3D3D3"
     }
   },
-
   "[yaml]": {
-    "editor.rulers": [99],
+    "editor.rulers": [
+      99
+    ],
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "workbench.colorCustomizations": {
       "editorRuler.foreground": "#D3D3D3"
     }
   },
   "yaml.format.singleQuote": true,
-
   "[toml]": {
-    "editor.rulers": [99],
+    "editor.rulers": [
+      99
+    ],
     "editor.defaultFormatter": "tamasfe.even-better-toml",
     "workbench.colorCustomizations": {
       "editorRuler.foreground": "#D3D3D3"
     }
   },
-
   "[javascript]": {
-    "editor.rulers": [120],
+    "editor.rulers": [
+      120
+    ],
     "editor.tabSize": 2,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit",
-      "source.organizeImports": true
+      "source.organizeImports": "explicit"
     }
   },
-
   "[javascriptreact]": {
-    "editor.rulers": [120],
+    "editor.rulers": [
+      120
+    ],
     "editor.tabSize": 2,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit",
-      "source.organizeImports": true
+      "source.organizeImports": "explicit"
     }
   },
-
   "[typescript]": {
-    "editor.rulers": [120],
+    "editor.rulers": [
+      120
+    ],
     "editor.tabSize": 2,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit",
-      "source.organizeImports": true
+      "source.organizeImports": "explicit"
     }
   },
-
   "[typescriptreact]": {
-    "editor.rulers": [120],
+    "editor.rulers": [
+      120
+    ],
     "editor.tabSize": 2,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit",
-      "source.organizeImports": true
+      "source.organizeImports": "explicit"
     }
   },
-  
   "[html]": {
-    "editor.rulers": [120],
+    "editor.rulers": [
+      120
+    ],
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-
   "[xml]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-
   "[svg]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-
   "[css]": {
-    "editor.rulers": [120]
+    "editor.rulers": [
+      120
+    ]
   },
-
-
-	// =============================================
-	// RUFF SPECIFIC SETTINGS
-	// =============================================
-	"ruff.lint.select": ["I"],
-	"ruff.organizeImports": true,
-
+  // =============================================
+  // RUFF SPECIFIC SETTINGS
+  // =============================================
+  "ruff.lint.select": [
+    "I"
+  ],
+  "ruff.organizeImports": true,
   // =============================================
   // FORMATTER CONFIGURATIONS
   // =============================================
@@ -134,7 +141,6 @@
   "prettier.singleQuote": true,
   "prettier.requirePragma": true,
   "prettier.insertPragma": true,
-
   // =============================================
   // WORKBENCH APPEARANCE
   // =============================================
@@ -146,7 +152,6 @@
   "workbench.editorAssociations": {
     "*.ipynb": "jupyter-notebook"
   },
-
   // =============================================
   // JUPYTER NOTEBOOK SETTINGS
   // =============================================
@@ -157,7 +162,6 @@
     "default": "right",
     "jupyter-notebook": "left"
   },
-
   // =============================================
   // FILE HANDLING
   // =============================================
@@ -169,13 +173,11 @@
     "**/.gitkeep": true
   },
   "security.workspace.trust.untrustedFiles": "open",
-
   // =============================================
   // GIT SETTINGS
   // =============================================
   "git.enableSmartCommit": true,
   "git.confirmSync": false,
-
   // =============================================
   // TERMINAL SETTINGS
   // =============================================

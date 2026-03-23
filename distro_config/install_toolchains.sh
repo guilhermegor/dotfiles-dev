@@ -1124,6 +1124,107 @@ install_github_copilot_cli() {
 }
 
 # ============================================================================
+# CLAUDE CODE INSTALLATION
+# ============================================================================
+
+install_claude_code() {
+    print_status "section" "CLAUDE CODE INSTALLATION"
+
+    # Check if Node.js is installed
+    if ! is_tool_installed "nodejs"; then
+        print_status "error" "Node.js is not installed! Claude Code requires Node.js."
+        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
+        read -r install_nodejs_first
+
+        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
+            install_nodejs
+        else
+            print_status "warning" "Skipping Claude Code installation as Node.js is required"
+            return 1
+        fi
+    fi
+
+    # Check if npm is available
+    if ! command_exists npm; then
+        print_status "error" "npm is not available. Please ensure Node.js is properly installed."
+        return 1
+    fi
+
+    # Check if Claude is already installed globally
+    print_status "info" "Checking for existing Claude Code installation..."
+
+    local claude_version=""
+    if command_exists claude; then
+        claude_version=$(timeout 10 claude --version 2>/dev/null | head -n1 || echo "")
+    fi
+
+    if [ -n "$claude_version" ]; then
+        print_status "info" "Claude Code is already installed ($claude_version)"
+
+        echo -e "\n${YELLOW}Do you want to update Claude Code to the latest version? (y/n):${NC}"
+        read -r update_claude
+        if [[ ! "$update_claude" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing Claude Code installation"
+            return 0
+        fi
+    fi
+
+    echo -e "\n${YELLOW}Install Claude Code globally? (y/n):${NC}"
+    echo -e "${CYAN}This will run: npm install -g @anthropic-ai/claude-code${NC}"
+    read -r install_claude
+
+    if [[ ! "$install_claude" =~ ^[Yy]$ ]]; then
+        print_status "info" "Skipping Claude Code installation"
+        return 0
+    fi
+
+    print_status "info" "Installing Claude Code globally..."
+    print_status "warning" "This may take a moment..."
+
+    if npm install -g @anthropic-ai/claude-code 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Claude Code package installed successfully"
+
+        # Verify installation
+        print_status "info" "Verifying Claude Code installation..."
+
+        if command_exists claude; then
+            local actual_claude_version=$(timeout 10 claude --version 2>/dev/null | head -n1 || echo "Not available")
+            print_status "success" "Claude Code command is available: $actual_claude_version"
+        else
+            print_status "warning" "Claude command not found in PATH"
+            local npm_prefix=$(npm config get prefix 2>/dev/null || echo "")
+            if [ -n "$npm_prefix" ]; then
+                print_status "info" "npm global prefix detected: $npm_prefix"
+                print_status "config" "If needed, add to PATH: export PATH=\"$npm_prefix/bin:\$PATH\""
+            fi
+        fi
+
+        # Optional login
+        echo -e "\n${YELLOW}Do you want to run Claude login now? (y/n):${NC}"
+        read -r run_claude_login
+        if [[ "$run_claude_login" =~ ^[Yy]$ ]]; then
+            print_status "info" "Starting Claude login..."
+            claude login 2>&1 | tee -a "$LOG_FILE" || print_status "warning" "Claude login was not completed in this run"
+        else
+            print_status "info" "You can login later with: claude login"
+            print_status "info" "Or set API key manually: export ANTHROPIC_API_KEY=\"your_key_here\""
+        fi
+
+        # Usage tips
+        echo ""
+        print_status "info" "Claude Code usage:"
+        print_status "config" "  Check version: claude --version"
+        print_status "config" "  Login: claude login"
+        print_status "config" "  Update: npm update -g @anthropic-ai/claude-code"
+        print_status "config" "  Run in project: cd /path/to/project && claude"
+
+    else
+        print_status "error" "Failed to install Claude Code"
+        return 1
+    fi
+}
+
+# ============================================================================
 # MENU AND MAIN EXECUTION
 # ============================================================================
 
@@ -1143,8 +1244,9 @@ show_menu() {
     echo -e "  ${GREEN}8)${NC} Install Node.js + TypeScript + NPX"
     echo -e "  ${GREEN}9)${NC} Install NVM (Node Version Manager)"
     echo -e "  ${GREEN}10)${NC} Install GitHub Copilot CLI (requires Node.js)"
-    echo -e "  ${GREEN}11)${NC} Install all toolchains and tools"
-    echo -e "  ${GREEN}12)${NC} Exit"
+    echo -e "  ${GREEN}11)${NC} Install Claude Code (requires Node.js)"
+    echo -e "  ${GREEN}12)${NC} Install all toolchains and tools"
+    echo -e "  ${GREEN}13)${NC} Exit"
     echo -e "\n${CYAN}Choice: ${NC}"
 }
 
@@ -1223,6 +1325,10 @@ main() {
                 break
                 ;;
             11)
+                install_claude_code
+                break
+                ;;
+            12)
                 install_nodejs
                 echo ""
                 install_typescript
@@ -1234,14 +1340,16 @@ main() {
                 install_rust
                 echo ""
                 install_github_copilot_cli
+                echo ""
+                install_claude_code
                 break
                 ;;
-            12)
+            13)
                 print_status "info" "Installation cancelled"
                 exit 0
                 ;;
             *)
-                print_status "error" "Invalid option. Please select 1-12."
+                print_status "error" "Invalid option. Please select 1-13."
                 ;;
         esac
     done
@@ -1297,6 +1405,11 @@ main() {
     if command_exists copilot; then
         print_status "config" "  GitHub Copilot CLI: $(timeout 5 copilot --version 2>/dev/null | head -n1 || echo 'Not available')"
     fi
+
+    # Check Claude Code
+    if command_exists claude; then
+        print_status "config" "  Claude Code: $(timeout 5 claude --version 2>/dev/null | head -n1 || echo 'Not available')"
+    fi
     
     echo ""
     print_status "info" "Global versions set in ~/.tool-versions:"
@@ -1318,6 +1431,7 @@ main() {
     print_status "config" "  Update TypeScript: npm update -g typescript"
     print_status "config" "  Update NPX: npm update -g npx"
     print_status "config" "  Update GitHub Copilot CLI: npm update -g @github/copilot"
+    print_status "config" "  Update Claude Code: npm update -g @anthropic-ai/claude-code"
     echo ""
 }
 

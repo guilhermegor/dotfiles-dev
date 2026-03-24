@@ -1110,6 +1110,28 @@ install_insync() {
 # SYSTEM UPDATE
 # ============================================================================
 
+create_dev_folder() {
+    print_status "section" "DEVELOPMENT DIRECTORY"
+
+    local dev_dir="$HOME/dev"
+
+    if [ -d "$dev_dir" ]; then
+        print_status "info" "Development directory already exists: $dev_dir"
+        return 0
+    fi
+
+    print_status "info" "Creating development directory at $dev_dir..."
+    mkdir -p "$dev_dir"
+    chmod 755 "$dev_dir" 2>/dev/null || true
+
+    if [ -d "$dev_dir" ]; then
+        print_status "success" "Development directory created: $dev_dir"
+    else
+        print_status "error" "Failed to create development directory: $dev_dir"
+        return 1
+    fi
+}
+
 update_system() {
     print_status "section" "SYSTEM UPDATE"
     
@@ -3356,6 +3378,7 @@ show_menu() {
 run_full_installation() {
     print_status "section" "FULL INSTALLATION MODE"
     
+    create_dev_folder
     update_system
     install_core_dependencies
     setup_flatpak
@@ -3417,6 +3440,7 @@ run_custom_installation() {
     print_status "section" "CUSTOM INSTALLATION MODE"
     
     local components=(
+        "create_dev_folder:Create ~/dev Folder"
         "update_system:System Update"
         "install_core_dependencies:Core Dependencies"
         "setup_flatpak:Flatpak Package Manager"

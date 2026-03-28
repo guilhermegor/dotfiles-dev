@@ -944,7 +944,7 @@ run_custom_setup() {
 
 show_menu() {
     echo -e "\n${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}      ${MAGENTA}Starship Prompt and Bash Autocomplete Setup${NC}      ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}      ${MAGENTA}Starship Prompt and Bash Autocomplete Setup${NC}           ${CYAN}║${NC}"
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}\n"
 
     echo -e "${GREEN}Detected System:${NC} $DISTRO"

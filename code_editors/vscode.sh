@@ -411,6 +411,34 @@ configure_settings() {
     print_status "success" "✅ Your visual preferences preserved, missing settings added"
 }
 
+sync_dotfiles_settings() {
+    print_status "section" "SYNCING DOTFILES SETTINGS TO GLOBAL"
+
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local dotfiles_settings="$script_dir/../.vscode/settings.json"
+
+    if [ ! -f "$dotfiles_settings" ]; then
+        print_status "error" "Dotfiles settings.json not found at: $dotfiles_settings"
+        return 1
+    fi
+
+    local global_dir="$HOME/.config/Code/User"
+    local global_settings="$global_dir/settings.json"
+
+    mkdir -p "$global_dir"
+
+    if [ -f "$global_settings" ]; then
+        local backup_file="$global_settings.backup_$(date +%Y%m%d_%H%M%S)"
+        cp "$global_settings" "$backup_file"
+        print_status "success" "Existing global settings backed up to: $backup_file"
+    fi
+
+    cp "$dotfiles_settings" "$global_settings"
+    print_status "success" "Dotfiles settings.json copied to: $global_settings"
+    print_status "config" "Global VS Code settings now mirror: $dotfiles_settings"
+}
+
 install_jq_if_needed() {
     print_status "info" "Checking if jq is installed..."
     if command -v jq &> /dev/null; then
@@ -657,6 +685,7 @@ main() {
     install_extensions
     configure_keybindings
     configure_settings
+    sync_dotfiles_settings
     verify_configuration
     show_final_summary
 }

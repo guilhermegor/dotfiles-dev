@@ -20,6 +20,7 @@
 - [Custom Shortcuts](distro_config/set_custom_shortcuts.sh) - Custom keyboard and application shortcuts (`make set_shortcuts`)
 - [IRPF Download Utility](distro_config/irpf_download.sh) - Brazilian tax software downloader (`make irpf_download`)
 - [Bash Profile Loader](distro_config/bash_profile_snippet.sh) - Ensure login shells load `~/.bashrc` (`make bash_profile`)
+- [Starship + Bash Setup](distro_config/setup_starship_bash.sh) - Installs Starship with plain-text symbols, Bash integration, autocomplete, and rollback targets (`make starship_setup`)
 
 ### 🔧 Hardware Drivers
 
@@ -178,6 +179,7 @@ make storage_analysis
 make ubuntu_workspace
 make install_programs
 make install_toolchains
+make starship_setup
 make vscode_setup
 make install_espanso_packages
 make bash_profile

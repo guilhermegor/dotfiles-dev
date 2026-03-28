@@ -9,7 +9,7 @@
 # -------------------
 .PHONY: init
 
-init: permissions install_programs install_espanso_packages install_toolchains vscode_setup irpf_download set_shortcuts ubuntu_workspace
+init: permissions install_programs install_espanso_packages install_toolchains bash_profile starship_setup vscode_setup irpf_download set_shortcuts ubuntu_workspace
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -18,6 +18,8 @@ init: permissions install_programs install_espanso_packages install_toolchains v
 	@echo "║  ✅ Permissions set for all scripts                        ║"
 	@echo "║  ✅ Essential programs installed                           ║"
 	@echo "║  ✅ Toolchains installed                                   ║"
+	@echo "║  ✅ Bash profile loads ~/.bashrc                           ║"
+	@echo "║  ✅ Starship prompt and autocomplete configured            ║"
 	@echo "║  ✅ VS Code configured with extensions                     ║"
 	@echo "║  ✅ IRPF (Brazilian tax software) downloaded               ║"
 	@echo "║  ✅ Custom shortcuts configured                            ║"
@@ -35,7 +37,7 @@ init: permissions install_programs install_espanso_packages install_toolchains v
 # -------------------
 # SYSTEM SETUP
 # -------------------
-.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile
+.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original
 
 install_programs:
 	@echo "Installing essential programs..."
@@ -68,6 +70,22 @@ ubuntu_workspace:
 bash_profile:
 	@echo "Ensuring ~/.bash_profile loads ~/.bashrc..."
 	@bash distro_config/bash_profile_snippet.sh
+
+starship_setup:
+	@echo "Installing Starship, Bash integration, and autocomplete..."
+	@bash distro_config/setup_starship_bash.sh all
+
+starship_menu:
+	@echo "Opening Starship and Bash setup menu..."
+	@bash distro_config/setup_starship_bash.sh
+
+starship_undo_previous:
+	@echo "Rolling back Starship/Bash setup to previous configuration..."
+	@bash distro_config/setup_starship_bash.sh undo-previous
+
+starship_undo_original:
+	@echo "Rolling back Starship/Bash setup to original configuration..."
+	@bash distro_config/setup_starship_bash.sh undo-original
 
 # -------------------
 # HARDWARE DRIVERS
@@ -297,6 +315,10 @@ help:
 	@echo "System Setup:"
 	@echo "  install_programs     - Install essential programs"
 	@echo "  install_toolchains   - Install development toolchains"
+	@echo "  starship_setup       - Install Starship + Bash autocomplete"
+	@echo "  starship_menu        - Interactive Starship/Bash setup menu"
+	@echo "  starship_undo_previous - Roll back to previous shell config"
+	@echo "  starship_undo_original - Roll back to original shell config"
 	@echo "  vscode_setup         - Configure VS Code with extensions"
 	@echo "  irpf_download        - Download IRPF (Brazilian tax software)"
 	@echo "  set_shortcuts        - Set custom keyboard shortcuts"

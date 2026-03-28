@@ -8,6 +8,7 @@ vscode:dotjoshjohnson.xml
 vscode:dzhavat.bracket-pair-toggler
 vscode:esbenp.prettier-vscode
 vscode:github.copilot
+vscode:anthropic.claude-code
 vscode:github.copilot-chat
 vscode:github.vscode-github-actions
 vscode:mechatroner.rainbow-csv

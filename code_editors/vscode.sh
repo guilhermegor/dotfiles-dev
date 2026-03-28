@@ -119,6 +119,7 @@ install_extensions() {
     local extensions=(
         "dzhavat.bracket-pair-toggler"
         "dbaeumer.vscode-eslint"
+        "anthropic.claude-code"
         "github.copilot-chat"
         "ritwickdey.liveserver"
         "pkief.material-icon-theme"

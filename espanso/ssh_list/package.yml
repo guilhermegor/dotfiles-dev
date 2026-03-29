@@ -1,0 +1,10 @@
+name: ssh_list
+description: List available SSH public keys and copy the selected one to clipboard
+
+matches:
+  - trigger: ":sshlist"
+    replace: false
+    vars: []
+    action:
+      type: shell
+      cmd: "bash -lc \"~/.config/espanso/packages/ssh_list/ssh_list.sh\""

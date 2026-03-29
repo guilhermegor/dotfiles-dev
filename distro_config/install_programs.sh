@@ -2194,8 +2194,77 @@ install_flatpak_apps() {
     done
 }
 
+install_fastfetch() {
+    if command_exists fastfetch; then
+        print_status "info" "fastfetch already installed"
+        return 0
+    fi
+
+    print_status "info" "Installing fastfetch..."
+
+    case "$PACKAGE_MANAGER" in
+        apt)
+            # Ubuntu/Debian repos may not have fastfetch enabled by default.
+            if $INSTALL_CMD fastfetch; then
+                print_status "success" "fastfetch installed from apt repositories"
+            else
+                print_status "warning" "fastfetch not available via apt, trying official .deb release..."
+
+                local arch
+                local download_arch
+                local tmp_dir
+                local deb_url
+
+                arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
+                case "$arch" in
+                    amd64|x86_64)
+                        download_arch="amd64"
+                        ;;
+                    arm64|aarch64)
+                        download_arch="aarch64"
+                        ;;
+                    armhf|armv7l)
+                        download_arch="armv7l"
+                        ;;
+                    *)
+                        print_status "warning" "Unsupported architecture for fastfetch .deb fallback: $arch"
+                        return 1
+                        ;;
+                esac
+
+                tmp_dir=$(mktemp -d)
+                deb_url="https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-${download_arch}.deb"
+
+                if wget -O "$tmp_dir/fastfetch.deb" "$deb_url" 2>>"$LOG_FILE" || \
+                   curl -L -o "$tmp_dir/fastfetch.deb" "$deb_url" 2>>"$LOG_FILE"; then
+                    if sudo apt-get install -y "$tmp_dir/fastfetch.deb"; then
+                        print_status "success" "fastfetch installed from official .deb"
+                    else
+                        print_status "warning" "fastfetch .deb installation failed"
+                    fi
+                else
+                    print_status "warning" "Failed to download fastfetch .deb from official releases"
+                fi
+
+                rm -rf "$tmp_dir"
+            fi
+            ;;
+        dnf|yum|pacman|zypper)
+            install_package "fastfetch" "fastfetch" "fastfetch" "fastfetch" || print_status "warning" "fastfetch installation failed"
+            ;;
+    esac
+
+    if command_exists fastfetch; then
+        print_status "success" "fastfetch is ready: $(fastfetch --version 2>/dev/null | head -n1)"
+    else
+        print_status "warning" "fastfetch could not be installed automatically"
+    fi
+}
+
 install_utilities() {
     print_status "section" "SYSTEM UTILITIES"
+
+    install_fastfetch
     
     local utilities=(
         "vim:vim:vim:vim"

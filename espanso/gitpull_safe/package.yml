@@ -14,15 +14,38 @@ matches:
   - trigger: ":gitpullb"
     replace: "{{output}}"
     vars:
+      - name: proceed
+        type: form
+        params:
+          layout: |
+            Create and switch to a new branch after sync? [[proceed]]
+            
+            Branch naming convention: <purpose>/<branch-task>
+            Purposes: feature|feat, bugfix|fix, hotfix, release, docs, refactor, chore
+            Examples: feat/user-authentication, fix/login-validation-issue, docs/update-api-reference
+          fields:
+            proceed:
+              type: choice
+              values:
+                - "yes"
+                - "no"
+              default: "yes"
       - name: branch
         type: form
         params:
           layout: |
-            New branch name (optional): [[branch]]
+            Branch name (required if proceeding): [[branch]]
+            Skip validation if invalid and create anyway? [[force_invalid]]
           fields:
             branch:
               multiline: false
+            force_invalid:
+              type: choice
+              values:
+                - "no"
+                - "yes"
+              default: "no"
       - name: output
         type: shell
         params:
-          cmd: "bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh '{{branch}}' 2>&1"
+          cmd: "if [ '{{proceed}}' = 'yes' ]; then if [ -z '{{branch}}' ]; then echo 'Branch name is required when proceeding. Convention: <purpose>/<branch-task> (e.g., feat/user-authentication)'; else if [ '{{force_invalid}}' = 'yes' ]; then bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh '{{branch}}' --force-invalid 2>&1; else bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh '{{branch}}' 2>&1; fi; fi; else bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh 2>&1; fi"

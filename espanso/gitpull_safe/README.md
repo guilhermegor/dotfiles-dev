@@ -5,7 +5,30 @@ Safely update your local `main` branch from `origin/main` and optionally create 
 ## Triggers
 
 - `:gitpull`: Runs safe sync flow and prints output.
-- `:gitpullb`: Prompts for a branch name, then runs safe sync and creates that branch.
+- `:gitpullb`: Asks if you want to create a branch, shows naming convention hints, then asks for branch name.
+	- If you choose `yes`, branch name is required.
+	- You can choose whether to skip validation and create anyway if the name is invalid.
+	- If you choose `no`, it only syncs local `main`.
+
+## Branch naming convention hint (`:gitpullb`)
+
+Pattern: `<purpose>/<branch-task>`
+
+Purposes:
+
+- `feature/<name>` or `feat/<name>`
+- `bugfix/<description>` or `fix/<description>`
+- `hotfix/<description>`
+- `release/<version>`
+- `docs/<description>`
+- `refactor/<description>`
+- `chore/<description>`
+
+Examples:
+
+- `feat/user-authentication`
+- `fix/login-validation-issue`
+- `docs/update-api-reference`
 
 ## Terminal wrappers
 
@@ -32,6 +55,15 @@ If a branch name is provided, it also runs:
 
 - `git switch -c <branch-name>`
 
+When a branch name is provided, it is validated against:
+
+- `^(feature|feat|bugfix|fix|hotfix|release|docs|refactor|chore)/[a-z0-9][a-z0-9.-]*$`
+
+If invalid:
+
+- In interactive terminal use, script asks whether to proceed anyway.
+- In non-interactive use, branch creation stops unless `--force-invalid` is provided.
+
 ## Files
 
 - `gitpull_safe.sh`: Core safe git sync script.
@@ -54,6 +86,8 @@ After setup, terminal wrapper supports:
 ```bash
 gitpull-safe
 gitpull-safe feature/my-new-branch
+gitpull-safe invalid_name
+gitpull-safe invalid_name --force-invalid
 
 :gitpull
 :gitpull feature/my-new-branch

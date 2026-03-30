@@ -3,7 +3,7 @@
 
 set -e
 
-echo "Setting up gitpull-safe and :gitpull terminal commands..."
+echo "Setting up gitpull-safe terminal commands..."
 
 SCRIPT_PATH="$HOME/.config/espanso/packages/gitpull_safe/gitpull_safe.sh"
 if [ -f "$SCRIPT_PATH" ]; then
@@ -21,12 +21,12 @@ cat > "$BIN_DIR/gitpull-safe" << 'EOF'
 exec bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh "$@"
 EOF
 
-cat > "$BIN_DIR/:gitpull" << 'EOF'
+cat > "$BIN_DIR/:git_sync_main" << 'EOF'
 #!/usr/bin/env bash
 exec bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh "$@"
 EOF
 
-cat > "$BIN_DIR/:gitpullb" << 'EOF'
+cat > "$BIN_DIR/:git_sync_main_create_branch" << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -59,10 +59,33 @@ case "${proceed:-y}" in
 esac
 EOF
 
+cat > "$BIN_DIR/:git_reset_current_branch_to_main" << 'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="$HOME/.config/espanso/packages/gitpull_safe/gitpull_safe.sh"
+
+echo "This will reset the current branch to match main."
+echo "The branch will not be deleted locally or remotely, but local commits ahead of main on this branch will be discarded."
+read -r -p "Continue? [y/N]: " proceed
+
+case "${proceed:-n}" in
+  y|Y|yes|YES)
+    exec bash "$SCRIPT_PATH" --reset-current-branch-to-main
+    ;;
+  *)
+    echo "Reset cancelled."
+    exit 0
+    ;;
+esac
+EOF
+
 chmod +x "$BIN_DIR/gitpull-safe"
-chmod +x "$BIN_DIR/:gitpull"
-chmod +x "$BIN_DIR/:gitpullb"
-echo "Created wrappers at $BIN_DIR/gitpull-safe, $BIN_DIR/:gitpull, and $BIN_DIR/:gitpullb"
+chmod +x "$BIN_DIR/:git_sync_main"
+chmod +x "$BIN_DIR/:git_sync_main_create_branch"
+chmod +x "$BIN_DIR/:git_reset_current_branch_to_main"
+rm -f "$BIN_DIR/:gitpull" "$BIN_DIR/:gitpullb"
+echo "Created wrappers at $BIN_DIR/gitpull-safe, $BIN_DIR/:git_sync_main, $BIN_DIR/:git_sync_main_create_branch, and $BIN_DIR/:git_reset_current_branch_to_main"
 
 # Add ~/bin to PATH in common shell rc files if not already there
 for rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
@@ -84,10 +107,13 @@ echo ""
 echo "Use in terminal:"
 echo "  gitpull-safe"
 echo "  gitpull-safe feature/my-new-branch"
-echo "  :gitpull"
-echo "  :gitpull feature/my-new-branch"
-echo "  :gitpullb"
+echo "  gitpull-safe --reset-current-branch-to-main"
+echo "  :git_sync_main"
+echo "  :git_sync_main feature/my-new-branch"
+echo "  :git_sync_main_create_branch"
+echo "  :git_reset_current_branch_to_main"
 echo ""
 echo "Use in Espanso:"
-echo "  :gitpull"
-echo "  :gitpullb"
+echo "  :git_sync_main"
+echo "  :git_sync_main_create_branch"
+echo "  :git_reset_current_branch_to_main"

@@ -3,7 +3,7 @@ description: Safely update local main and optionally create a new branch
 parent: default
 
 matches:
-  - trigger: ":gitpull"
+  - trigger: ":git_sync_main"
     replace: "{{output}}"
     vars:
       - name: output
@@ -11,7 +11,7 @@ matches:
         params:
           cmd: "bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh 2>&1"
 
-  - trigger: ":gitpullb"
+  - trigger: ":git_sync_main_create_branch"
     replace: "{{output}}"
     vars:
       - name: proceed
@@ -49,3 +49,26 @@ matches:
         type: shell
         params:
           cmd: "if [ '{{proceed}}' = 'yes' ]; then if [ -z '{{branch}}' ]; then echo 'Branch name is required when proceeding. Convention: <purpose>/<branch-task> (e.g., feat/user-authentication)'; else if [ '{{force_invalid}}' = 'yes' ]; then bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh '{{branch}}' --force-invalid 2>&1; else bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh '{{branch}}' 2>&1; fi; fi; else bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh 2>&1; fi"
+
+  - trigger: ":git_reset_current_branch_to_main"
+    replace: "{{output}}"
+    vars:
+      - name: confirm_reset
+        type: form
+        params:
+          layout: |
+            Reset the current branch to match main? [[confirm_reset]]
+
+            This will move the current local branch tip to main and discard commits ahead of main on this branch.
+            The branch itself will not be deleted locally or remotely.
+          fields:
+            confirm_reset:
+              type: choice
+              values:
+                - "no"
+                - "yes"
+              default: "no"
+      - name: output
+        type: shell
+        params:
+          cmd: "if [ '{{confirm_reset}}' = 'yes' ]; then bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh --reset-current-branch-to-main 2>&1; else echo 'Reset cancelled.'; fi"

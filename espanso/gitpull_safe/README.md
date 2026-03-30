@@ -1,16 +1,17 @@
 # gitpull_safe espanso package
 
-Safely update your local `main` branch from `origin/main` and optionally create a new feature branch.
+Safely update your local `main` branch from `origin/main`, optionally create a new feature branch, or reset the current branch to match `main` without deleting the branch.
 
 ## Triggers
 
-- `:gitpull`: Runs safe sync flow and prints output.
-- `:gitpullb`: Asks if you want to create a branch, shows naming convention hints, then asks for branch name.
+- `:git_sync_main`: Runs safe sync flow and prints output.
+- `:git_sync_main_create_branch`: Asks if you want to create a branch, shows naming convention hints, then asks for branch name.
 	- If you choose `yes`, branch name is required.
 	- You can choose whether to skip validation and create anyway if the name is invalid.
 	- If you choose `no`, it only syncs local `main`.
+- `:git_reset_current_branch_to_main`: Confirms a destructive reset and then makes the current local branch match `main` exactly, without deleting the branch locally or remotely.
 
-## Branch naming convention hint (`:gitpullb`)
+## Branch naming convention hint (`:git_sync_main_create_branch`)
 
 Pattern: `<purpose>/<branch-task>`
 
@@ -35,8 +36,9 @@ Examples:
 `setup.sh` creates wrappers in `$HOME/bin`:
 
 - `gitpull-safe`
-- `:gitpull`
-- `:gitpullb`
+- `:git_sync_main`
+- `:git_sync_main_create_branch`
+- `:git_reset_current_branch_to_main`
 
 ## Safety checks
 
@@ -56,6 +58,11 @@ If a branch name is provided, it also runs:
 
 - `git switch -c <branch-name>`
 
+If reset mode is used, it also runs:
+
+- `git switch <current-branch>`
+- `git reset --hard main`
+
 When a branch name is provided, it is validated against:
 
 - `^(feature|feat|bugfix|fix|hotfix|release|docs|refactor|chore)/[a-z0-9][a-z0-9.-]*$`
@@ -68,10 +75,11 @@ If invalid:
 ## Files
 
 - `gitpull_safe.sh`: Core safe git sync script.
+- `gitpull_safe.sh` also defines the reset-to-main flow used by `:git_reset_current_branch_to_main` and `gitpull-safe --reset-current-branch-to-main`.
 - `package.yml`: Espanso triggers.
-- `setup.sh`: Makes script executable and creates terminal wrapper `:gitpull` in `$HOME/bin`.
+- `setup.sh`: Makes script executable and creates terminal wrappers in `$HOME/bin`.
 	It also creates `gitpull-safe` in `$HOME/bin`.
-	It also creates `:gitpullb` in `$HOME/bin`.
+	It also creates `:git_sync_main`, `:git_sync_main_create_branch`, and `:git_reset_current_branch_to_main` in `$HOME/bin`.
 
 ## Install
 
@@ -88,10 +96,12 @@ After setup, terminal wrapper supports:
 ```bash
 gitpull-safe
 gitpull-safe feature/my-new-branch
+gitpull-safe --reset-current-branch-to-main
 gitpull-safe invalid_name
 gitpull-safe invalid_name --force-invalid
 
-:gitpull
-:gitpull feature/my-new-branch
-:gitpullb
+:git_sync_main
+:git_sync_main feature/my-new-branch
+:git_sync_main_create_branch
+:git_reset_current_branch_to_main
 ```

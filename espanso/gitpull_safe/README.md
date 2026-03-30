@@ -36,6 +36,7 @@ Examples:
 
 - `gitpull-safe`
 - `:gitpull`
+- `:gitpullb`
 
 ## Safety checks
 
@@ -70,6 +71,7 @@ If invalid:
 - `package.yml`: Espanso triggers.
 - `setup.sh`: Makes script executable and creates terminal wrapper `:gitpull` in `$HOME/bin`.
 	It also creates `gitpull-safe` in `$HOME/bin`.
+	It also creates `:gitpullb` in `$HOME/bin`.
 
 ## Install
 
@@ -91,4 +93,5 @@ gitpull-safe invalid_name --force-invalid
 
 :gitpull
 :gitpull feature/my-new-branch
+:gitpullb
 ```

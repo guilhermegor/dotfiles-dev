@@ -26,9 +26,43 @@ cat > "$BIN_DIR/:gitpull" << 'EOF'
 exec bash ~/.config/espanso/packages/gitpull_safe/gitpull_safe.sh "$@"
 EOF
 
+cat > "$BIN_DIR/:gitpullb" << 'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="$HOME/.config/espanso/packages/gitpull_safe/gitpull_safe.sh"
+
+read -r -p "Create and switch to a new branch after sync? [Y/n]: " proceed
+
+case "${proceed:-y}" in
+  y|Y|yes|YES)
+    echo "Branch naming convention: <purpose>/<branch-task>"
+    echo "Purposes: feature|feat, bugfix|fix, hotfix, release, docs, refactor, chore"
+    echo "Examples: feat/user-authentication, fix/login-validation-issue, docs/update-api-reference"
+    read -r -p "Branch name: " branch_name
+
+    if [ -z "$branch_name" ]; then
+      echo "Branch name is required when proceeding. Convention: <purpose>/<branch-task> (e.g., feat/user-authentication)"
+      exit 1
+    fi
+
+    exec bash "$SCRIPT_PATH" "$branch_name"
+    ;;
+  n|N|no|NO)
+    exec bash "$SCRIPT_PATH"
+    ;;
+  *)
+    echo "Invalid answer: $proceed"
+    echo "Use y/yes or n/no."
+    exit 1
+    ;;
+esac
+EOF
+
 chmod +x "$BIN_DIR/gitpull-safe"
 chmod +x "$BIN_DIR/:gitpull"
-echo "Created wrappers at $BIN_DIR/gitpull-safe and $BIN_DIR/:gitpull"
+chmod +x "$BIN_DIR/:gitpullb"
+echo "Created wrappers at $BIN_DIR/gitpull-safe, $BIN_DIR/:gitpull, and $BIN_DIR/:gitpullb"
 
 # Add ~/bin to PATH in common shell rc files if not already there
 for rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
@@ -52,6 +86,7 @@ echo "  gitpull-safe"
 echo "  gitpull-safe feature/my-new-branch"
 echo "  :gitpull"
 echo "  :gitpull feature/my-new-branch"
+echo "  :gitpullb"
 echo ""
 echo "Use in Espanso:"
 echo "  :gitpull"

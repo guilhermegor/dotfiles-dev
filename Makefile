@@ -9,7 +9,7 @@
 # -------------------
 .PHONY: init
 
-init: permissions install_programs install_espanso_packages install_toolchains bash_profile starship_setup vscode_setup irpf_download set_shortcuts ubuntu_workspace
+init: permissions install_programs install_espanso_packages install_toolchains bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -21,6 +21,7 @@ init: permissions install_programs install_espanso_packages install_toolchains b
 	@echo "║  ✅ Bash profile loads ~/.bashrc                           ║"
 	@echo "║  ✅ Starship prompt and autocomplete configured            ║"
 	@echo "║  ✅ VS Code configured with extensions                     ║"
+	@echo "║  ✅ Claude Code configured with global settings and plugins║"
 	@echo "║  ✅ IRPF (Brazilian tax software) downloaded               ║"
 	@echo "║  ✅ Custom shortcuts configured                            ║"
 	@echo "║  ✅ Ubuntu workspace configured                            ║"
@@ -37,7 +38,7 @@ init: permissions install_programs install_espanso_packages install_toolchains b
 # -------------------
 # SYSTEM SETUP
 # -------------------
-.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original
+.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore claude_setup bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original
 
 install_programs:
 	@echo "Installing essential programs..."
@@ -50,6 +51,10 @@ install_toolchains:
 vscode_setup:
 	@echo "Configuring VS Code with extensions and shortcuts..."
 	@bash code_editors/vscode.sh
+
+claude_setup:
+	@echo "Configuring global Claude Code settings and plugins..."
+	@bash code_editors/claude_setup.sh
 
 vscode_restore:
 	@echo "Restoring VS Code configurations..."
@@ -69,23 +74,23 @@ ubuntu_workspace:
 
 bash_profile:
 	@echo "Ensuring ~/.bash_profile loads ~/.bashrc..."
-	@bash distro_config/bash_profile_snippet.sh
+	@bash code_editors/bash_profile_snippet.sh
 
 starship_setup:
 	@echo "Installing Starship, Bash integration, and autocomplete..."
-	@bash distro_config/setup_starship_bash.sh all
+	@bash code_editors/setup_starship_bash.sh all
 
 starship_menu:
 	@echo "Opening Starship and Bash setup menu..."
-	@bash distro_config/setup_starship_bash.sh
+	@bash code_editors/setup_starship_bash.sh
 
 starship_undo_previous:
 	@echo "Rolling back Starship/Bash setup to previous configuration..."
-	@bash distro_config/setup_starship_bash.sh undo-previous
+	@bash code_editors/setup_starship_bash.sh undo-previous
 
 starship_undo_original:
 	@echo "Rolling back Starship/Bash setup to original configuration..."
-	@bash distro_config/setup_starship_bash.sh undo-original
+	@bash code_editors/setup_starship_bash.sh undo-original
 
 # -------------------
 # HARDWARE DRIVERS
@@ -246,7 +251,7 @@ permissions:
 # -------------------
 .PHONY: editors_setup
 
-editors_setup: vscode_setup
+editors_setup: vscode_setup claude_setup
 	@echo ""
 	@echo "════════════════════════════════════════════"
 	@echo "  ✅ Code editors setup completed!"

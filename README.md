@@ -19,8 +19,8 @@
 - [Ubuntu Workspace Setup](distro_config/ubuntu_workspace.sh) - Ubuntu-specific workspace configuration (`make ubuntu_workspace`)
 - [Custom Shortcuts](distro_config/set_custom_shortcuts.sh) - Custom keyboard and application shortcuts (`make set_shortcuts`)
 - [IRPF Download Utility](distro_config/irpf_download.sh) - Brazilian tax software downloader (`make irpf_download`)
-- [Bash Profile Loader](distro_config/bash_profile_snippet.sh) - Ensure login shells load `~/.bashrc` (`make bash_profile`)
-- [Starship + Bash Setup](distro_config/setup_starship_bash.sh) - Installs Starship with plain-text symbols, Bash integration, autocomplete, and rollback targets (`make starship_setup`)
+- [Bash Profile Loader](code_editors/bash_profile_snippet.sh) - Ensure login shells load `~/.bashrc` (`make bash_profile`)
+- [Starship + Bash Setup](code_editors/setup_starship_bash.sh) - Installs Starship with plain-text symbols, Bash integration, autocomplete, and rollback targets (`make starship_setup`)
 
 ### 🔧 Hardware Drivers
 
@@ -209,12 +209,14 @@ dotfiles-dev/
 │   ├── 🧰 install_toolchains.sh  # Toolchains installation script
 │   ├── 📥 irpf_download.sh       # Tax software downloader
 │   ├── ⌨️ set_custom_shortcuts.sh # Custom shortcuts configuration
-│   ├── 🐚 bash_profile_snippet.sh # Ensure ~/.bash_profile loads ~/.bashrc
 │   └── 🖥️ ubuntu_workspace.sh    # Ubuntu workspace setup
 │
 ├── 📁 code_editors/              # Code editors setup
 │   ├── 🧩 vscode.sh               # VS Code setup
-│   └── ♻️ vscode_restore.sh       # VS Code restore
+│   ├── ♻️ vscode_restore.sh       # VS Code restore
+│   ├── 🤖 claude_setup.sh         # Claude Code global settings and plugins
+│   ├── 🐚 bash_profile_snippet.sh # Ensure ~/.bash_profile loads ~/.bashrc
+│   └── ⭐ setup_starship_bash.sh  # Starship prompt + Bash integration
 │
 ├── 📁 drivers/                   # Hardware driver configurations
 │   ├── 📡 bluetooth_adapter.sh   # Bluetooth setup

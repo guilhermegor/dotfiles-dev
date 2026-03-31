@@ -134,6 +134,7 @@ install_extensions() {
         "clinyong.vscode-css-modules"
         "formulahendry.auto-rename-tag"
         "omthemes.omthemes"
+        "bierner.markdown-mermaid"
     )
     
     local installed_count=0

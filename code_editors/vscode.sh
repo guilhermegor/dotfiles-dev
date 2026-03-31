@@ -135,6 +135,7 @@ install_extensions() {
         "formulahendry.auto-rename-tag"
         "omthemes.omthemes"
         "bierner.markdown-mermaid"
+        "firsttris.vscode-jest-runner"
     )
     
     local installed_count=0

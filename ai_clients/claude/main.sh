@@ -29,10 +29,20 @@ run_marketplaces() {
 }
 
 run_plugins() {
-    promote_plugin_to_user_scope "superpowers@claude-plugins-official"   "superpowers"     "claude-plugins-official"
-    promote_plugin_to_user_scope "claude-hud@claude-hud"                 "claude-hud"      "claude-hud"
-    promote_plugin_to_user_scope "codex-plugin-cc@claude-plugins-official"  "codex-plugin-cc"  "claude-plugins-official"
-    promote_plugin_to_user_scope "copilot-plugin-cc@claude-plugins-official" "copilot-plugin-cc" "claude-plugins-official"
+    promote_plugin_to_user_scope "superpowers@claude-plugins-official"        "superpowers"        "claude-plugins-official"
+    promote_plugin_to_user_scope "claude-hud@claude-hud"                      "claude-hud"         "claude-hud"
+    promote_plugin_to_user_scope "codex-plugin-cc@claude-plugins-official"    "codex-plugin-cc"    "claude-plugins-official"
+    promote_plugin_to_user_scope "copilot-plugin-cc@claude-plugins-official"  "copilot-plugin-cc"  "claude-plugins-official"
+    # LSPs — typescript-lsp covers JS, TS, JSX (.jsx), and TSX (.tsx)
+    promote_plugin_to_user_scope "typescript-lsp@claude-plugins-official"     "typescript-lsp"     "claude-plugins-official"
+    promote_plugin_to_user_scope "html-lsp@claude-plugins-official"           "html-lsp"           "claude-plugins-official"
+    promote_plugin_to_user_scope "css-lsp@claude-plugins-official"            "css-lsp"            "claude-plugins-official"
+    promote_plugin_to_user_scope "mssql-lsp@claude-plugins-official"          "mssql-lsp"          "claude-plugins-official"
+    promote_plugin_to_user_scope "postgres-lsp@claude-plugins-official"       "postgres-lsp"       "claude-plugins-official"
+    promote_plugin_to_user_scope "sqlite-lsp@claude-plugins-official"         "sqlite-lsp"         "claude-plugins-official"
+    promote_plugin_to_user_scope "mysql-lsp@claude-plugins-official"          "mysql-lsp"          "claude-plugins-official"
+    promote_plugin_to_user_scope "mariadb-lsp@claude-plugins-official"        "mariadb-lsp"        "claude-plugins-official"
+    promote_plugin_to_user_scope "mongodb-lsp@claude-plugins-official"        "mongodb-lsp"        "claude-plugins-official"
 }
 
 STEPS=(

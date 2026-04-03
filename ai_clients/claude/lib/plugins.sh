@@ -15,6 +15,15 @@ promote_plugin_to_user_scope() {
         print_status "info"    "  /plugin install claude-hud"
         print_status "info"    "  /plugin install codex-plugin-cc"
         print_status "info"    "  /plugin install copilot-plugin-cc"
+        print_status "info"    "  /plugin install typescript-lsp"
+        print_status "info"    "  /plugin install html-lsp"
+        print_status "info"    "  /plugin install css-lsp"
+        print_status "info"    "  /plugin install mssql-lsp"
+        print_status "info"    "  /plugin install postgres-lsp"
+        print_status "info"    "  /plugin install sqlite-lsp"
+        print_status "info"    "  /plugin install mysql-lsp"
+        print_status "info"    "  /plugin install mariadb-lsp"
+        print_status "info"    "  /plugin install mongodb-lsp"
         return 1
     fi
 

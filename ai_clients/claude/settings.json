@@ -11,7 +11,16 @@
     "superpowers@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "codex-plugin-cc@claude-plugins-official": true,
-    "copilot-plugin-cc@claude-plugins-official": true
+    "copilot-plugin-cc@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "html-lsp@claude-plugins-official": true,
+    "css-lsp@claude-plugins-official": true,
+    "mssql-lsp@claude-plugins-official": true,
+    "postgres-lsp@claude-plugins-official": true,
+    "sqlite-lsp@claude-plugins-official": true,
+    "mysql-lsp@claude-plugins-official": true,
+    "mariadb-lsp@claude-plugins-official": true,
+    "mongodb-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {

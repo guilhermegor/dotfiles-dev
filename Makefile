@@ -9,7 +9,7 @@
 # -------------------
 .PHONY: init
 
-init: permissions install_programs install_espanso_packages install_toolchains bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace
+init: permissions install_programs install_espanso_packages install_toolchains ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -17,11 +17,12 @@ init: permissions install_programs install_espanso_packages install_toolchains b
 	@echo "║                                                            ║"
 	@echo "║  ✅ Permissions set for all scripts                        ║"
 	@echo "║  ✅ Essential programs installed                           ║"
+	@echo "║  ✅ AI clients configured (Claude Code)                    ║"
+	@echo "║  ✅ Espanso packages installed                             ║"
 	@echo "║  ✅ Toolchains installed                                   ║"
 	@echo "║  ✅ Bash profile loads ~/.bashrc                           ║"
 	@echo "║  ✅ Starship prompt and autocomplete configured            ║"
 	@echo "║  ✅ VS Code configured with extensions                     ║"
-	@echo "║  ✅ Claude Code configured with global settings and plugins║"
 	@echo "║  ✅ IRPF (Brazilian tax software) downloaded               ║"
 	@echo "║  ✅ Custom shortcuts configured                            ║"
 	@echo "║  ✅ Ubuntu workspace configured                            ║"
@@ -38,7 +39,7 @@ init: permissions install_programs install_espanso_packages install_toolchains b
 # -------------------
 # SYSTEM SETUP
 # -------------------
-.PHONY: install_programs irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore claude_setup bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original
+.PHONY: install_programs install_toolchains irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original
 
 install_programs:
 	@echo "Installing essential programs..."
@@ -51,10 +52,6 @@ install_toolchains:
 vscode_setup:
 	@echo "Configuring VS Code with extensions and shortcuts..."
 	@bash code_editors/vscode.sh
-
-claude_setup:
-	@echo "Configuring global Claude Code settings and plugins..."
-	@bash code_editors/claude_setup.sh
 
 vscode_restore:
 	@echo "Restoring VS Code configurations..."
@@ -176,7 +173,7 @@ storage_analysis:
 # -------------------
 # BATCH OPERATIONS
 # -------------------
-.PHONY: full_setup install_espanso_packages hardware_setup storage_setup vm_setup permissions
+.PHONY: full_setup install_espanso_packages hardware_setup storage_setup vm_setup permissions ai_clients
 
 full_setup: permissions install_programs install_toolchains vscode_setup setup_all_drivers
 	@echo ""
@@ -184,9 +181,6 @@ full_setup: permissions install_programs install_toolchains vscode_setup setup_a
 	@echo "  ✅ Full system setup completed!"
 	@echo "════════════════════════════════════════════"
 	@echo ""
-
-.PHONY: install_espanso_packages
-
 
 install_espanso_packages:
 	@echo "Installing Espanso packages from repo..."
@@ -244,14 +238,19 @@ permissions:
 	@find os -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find storage -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find code_editors -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+	@find ai_clients -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@echo "✅ Permissions updated successfully!"
+
+ai_clients:
+	@echo "Configuring all AI clients (Claude, ...)..."
+	@bash ai_clients/claude/main.sh all
 
 # -------------------
 # CODE EDITORS
 # -------------------
 .PHONY: editors_setup
 
-editors_setup: vscode_setup claude_setup
+editors_setup: vscode_setup ai_clients
 	@echo ""
 	@echo "════════════════════════════════════════════"
 	@echo "  ✅ Code editors setup completed!"
@@ -274,6 +273,9 @@ check_status:
 	@echo ""
 	@echo "=== Executable Scripts ==="
 	@find distro_config drivers drives os storage code_editors -name "*.sh" -type f -executable 2>/dev/null | sort
+	@echo ""
+	@echo "=== AI Clients Modules ==="
+	@find ai_clients -name "*.sh" -type f 2>/dev/null | sort
 
 list_scripts:
 	@echo "Available bash scripts:"
@@ -295,6 +297,9 @@ list_scripts:
 	@echo ""
 	@echo "Code Editor scripts:"
 	@ls -1 code_editors/*.sh 2>/dev/null || echo "  No code editor scripts found"
+	@echo ""
+	@echo "AI Clients modules:"
+	@find ai_clients -name "*.sh" -type f 2>/dev/null | sort || echo "  No agent setup scripts found"
 
 clean:
 	@echo "Cleaning temporary files..."
@@ -329,8 +334,9 @@ help:
 	@echo "  set_shortcuts        - Set custom keyboard shortcuts"
 	@echo "  ubuntu_workspace     - Configure Ubuntu workspace"
 	@echo ""
-	@echo "Code Editors:"
-	@echo "  editors_setup        - Setup all code editors (currently VS Code)"
+	@echo "Code Editors & AI Clients:"
+	@echo "  editors_setup        - Setup all code editors + AI clients"
+	@echo "  ai_clients           - Configure all AI clients (interactive menu)"
 	@echo ""
 	@echo "Hardware Drivers:"
 	@echo "  setup_bluetooth      - Setup Bluetooth adapter"

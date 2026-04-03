@@ -243,7 +243,7 @@ permissions:
 
 ai_clients:
 	@echo "Configuring all AI clients (Claude, ...)..."
-	@bash ai_clients/main.sh all
+	@bash ai_clients/main.sh
 
 # -------------------
 # CODE EDITORS

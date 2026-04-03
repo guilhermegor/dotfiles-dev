@@ -9,7 +9,9 @@
   },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true
+    "pyright-lsp@claude-plugins-official": true,
+    "codex-plugin-cc@claude-plugins-official": true,
+    "copilot-plugin-cc@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {

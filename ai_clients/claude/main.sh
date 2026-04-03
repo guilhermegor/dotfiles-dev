@@ -29,8 +29,10 @@ run_marketplaces() {
 }
 
 run_plugins() {
-    promote_plugin_to_user_scope "superpowers@claude-plugins-official" "superpowers" "claude-plugins-official"
-    promote_plugin_to_user_scope "claude-hud@claude-hud"               "claude-hud"  "claude-hud"
+    promote_plugin_to_user_scope "superpowers@claude-plugins-official"   "superpowers"     "claude-plugins-official"
+    promote_plugin_to_user_scope "claude-hud@claude-hud"                 "claude-hud"      "claude-hud"
+    promote_plugin_to_user_scope "codex-plugin-cc@claude-plugins-official"  "codex-plugin-cc"  "claude-plugins-official"
+    promote_plugin_to_user_scope "copilot-plugin-cc@claude-plugins-official" "copilot-plugin-cc" "claude-plugins-official"
 }
 
 STEPS=(

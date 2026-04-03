@@ -13,6 +13,8 @@ promote_plugin_to_user_scope() {
         print_status "warning" "installed_plugins.json not found — install plugins in Claude Code first:"
         print_status "info"    "  /plugin install superpowers"
         print_status "info"    "  /plugin install claude-hud"
+        print_status "info"    "  /plugin install codex-plugin-cc"
+        print_status "info"    "  /plugin install copilot-plugin-cc"
         return 1
     fi
 

@@ -43,6 +43,9 @@ run_plugins() {
     promote_plugin_to_user_scope "mysql-lsp@claude-plugins-official"          "mysql-lsp"          "claude-plugins-official"
     promote_plugin_to_user_scope "mariadb-lsp@claude-plugins-official"        "mariadb-lsp"        "claude-plugins-official"
     promote_plugin_to_user_scope "mongodb-lsp@claude-plugins-official"        "mongodb-lsp"        "claude-plugins-official"
+    promote_plugin_to_user_scope "json-lsp@claude-plugins-official"           "json-lsp"           "claude-plugins-official"
+    promote_plugin_to_user_scope "yaml-lsp@claude-plugins-official"           "yaml-lsp"           "claude-plugins-official"
+    promote_plugin_to_user_scope "toml-lsp@claude-plugins-official"           "toml-lsp"           "claude-plugins-official"
 }
 
 STEPS=(

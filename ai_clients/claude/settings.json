@@ -20,7 +20,10 @@
     "sqlite-lsp@claude-plugins-official": true,
     "mysql-lsp@claude-plugins-official": true,
     "mariadb-lsp@claude-plugins-official": true,
-    "mongodb-lsp@claude-plugins-official": true
+    "mongodb-lsp@claude-plugins-official": true,
+    "json-lsp@claude-plugins-official": true,
+    "yaml-lsp@claude-plugins-official": true,
+    "toml-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {

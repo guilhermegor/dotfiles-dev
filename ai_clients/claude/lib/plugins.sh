@@ -24,6 +24,9 @@ promote_plugin_to_user_scope() {
         print_status "info"    "  /plugin install mysql-lsp"
         print_status "info"    "  /plugin install mariadb-lsp"
         print_status "info"    "  /plugin install mongodb-lsp"
+        print_status "info"    "  /plugin install json-lsp"
+        print_status "info"    "  /plugin install yaml-lsp"
+        print_status "info"    "  /plugin install toml-lsp"
         return 1
     fi
 

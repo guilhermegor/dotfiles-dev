@@ -4,7 +4,8 @@
     "allow": [
       "Bash(git add:*)",
       "Bash(git commit --no-verify -m ':*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(grep:*)"
     ]
   },
   "enabledPlugins": {

@@ -27,7 +27,7 @@ promote_plugin_to_user_scope() {
         print_status "info"    "  /plugin install json-lsp"
         print_status "info"    "  /plugin install yaml-lsp"
         print_status "info"    "  /plugin install toml-lsp"
-        return 1
+        return 0
     fi
 
     local user_count
@@ -43,7 +43,7 @@ promote_plugin_to_user_scope() {
     local cache_dir="$CLAUDE_DIR/plugins/cache/$marketplace_id/$plugin_name"
     if [ ! -d "$cache_dir" ]; then
         print_status "warning" "Cache missing for $plugin_key — install it first in Claude Code"
-        return 1
+        return 0
     fi
 
     local versioned_dir
@@ -52,7 +52,7 @@ promote_plugin_to_user_scope() {
 
     if [ -z "$versioned_dir" ]; then
         print_status "warning" "No cached version for $plugin_key"
-        return 1
+        return 0
     fi
 
     local version

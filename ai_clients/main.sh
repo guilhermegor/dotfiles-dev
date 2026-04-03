@@ -14,7 +14,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/lib/utils.sh"
 
-# Display name overrides: directory key → human label
+# Display name overrides: directory key → human label.
+# Add an entry here for each client whose directory name does not read well when capitalised.
 declare -A CLIENT_NAMES=(
     ["claude"]="Claude Code"
 )
@@ -22,12 +23,10 @@ declare -A CLIENT_NAMES=(
 # ── Discovery ──────────────────────────────────────────────────────────────────
 
 discover_clients() {
-    local clients=()
     for path in "$SCRIPT_DIR"/*/main.sh; do
         [[ -f "$path" ]] || continue
-        clients+=("$(basename "$(dirname "$path")")")
+        printf '%s\n' "$(basename "$(dirname "$path")")"
     done
-    echo "${clients[@]}"
 }
 
 get_display_name() {
@@ -43,10 +42,10 @@ run_client() {
 
     if [[ ! -f "$client_main" ]]; then
         print_status "error" "Unknown client: $key"
-        print_status "info"  "Valid clients: $(discover_clients | tr ' ' ',')"
         exit 1
     fi
 
+    print_status "section" "$(get_display_name "$key") SETUP"
     bash "$client_main" "$@"
 }
 
@@ -71,8 +70,7 @@ show_menu() {
 }
 
 interactive_menu() {
-    local clients
-    read -ra clients <<< "$(discover_clients)"
+    local clients=("$@")
 
     while true; do
         show_menu "${clients[@]}"
@@ -99,8 +97,8 @@ interactive_menu() {
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 main() {
-    local clients
-    read -ra clients <<< "$(discover_clients)"
+    local clients=()
+    mapfile -t clients < <(discover_clients)
 
     if [[ ${#clients[@]} -eq 0 ]]; then
         print_status "error" "No AI clients found under $SCRIPT_DIR"
@@ -109,7 +107,7 @@ main() {
     fi
 
     if [[ $# -eq 0 ]]; then
-        interactive_menu
+        interactive_menu "${clients[@]}"
     elif [[ "$1" == "all" ]]; then
         for key in "${clients[@]}"; do run_client "$key" all; done
     else

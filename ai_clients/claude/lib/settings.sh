@@ -5,7 +5,13 @@ configure_settings() {
     print_status "section" "CONFIGURING CLAUDE SETTINGS"
 
     local settings_file="$CLAUDE_DIR/settings.json"
+    local base_settings_file="$SCRIPT_DIR/settings.json"
     mkdir -p "$CLAUDE_DIR"
+
+    if [ ! -f "$base_settings_file" ]; then
+        print_status "error" "Base settings file not found: $base_settings_file"
+        return 1
+    fi
 
     if [ -f "$settings_file" ]; then
         cp "$settings_file" "${settings_file}.backup_$(date +%Y%m%d_%H%M%S)"
@@ -21,23 +27,7 @@ configure_settings() {
     fi
 
     local base_settings
-    base_settings=$(cat <<'EOF'
-{
-    "voiceEnabled": true,
-    "enabledPlugins": {
-        "superpowers@claude-plugins-official": true
-    },
-    "extraKnownMarketplaces": {
-        "claude-hud": {
-            "source": {
-                "source": "github",
-                "repo": "jarrodwatts/claude-hud"
-            }
-        }
-    }
-}
-EOF
-)
+    base_settings=$(cat "$base_settings_file")
 
     # Merge: base_settings take priority over current (preserves any extra user keys)
     echo "$current" | jq --argjson base "$base_settings" '. * $base' > "${settings_file}.tmp"

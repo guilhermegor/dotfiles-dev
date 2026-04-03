@@ -1,0 +1,22 @@
+{
+  "voiceEnabled": true,
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit --no-verify -m ':*)",
+      "Bash(git push:*)"
+    ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    }
+  }
+}

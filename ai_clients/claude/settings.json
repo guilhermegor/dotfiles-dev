@@ -10,8 +10,6 @@
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "codex-plugin-cc@claude-plugins-official": true,
-    "copilot-plugin-cc@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "html-lsp@claude-plugins-official": true,
     "css-lsp@claude-plugins-official": true,

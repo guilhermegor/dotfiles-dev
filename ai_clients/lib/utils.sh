@@ -11,6 +11,8 @@ NC='\033[0m'
 
 LOG_FILE="$HOME/ai_clients_setup_$(date +%Y%m%d_%H%M%S).log"
 
+readonly RED GREEN YELLOW BLUE CYAN MAGENTA NC LOG_FILE
+
 print_status() {
     local status="$1"
     local message="$2"

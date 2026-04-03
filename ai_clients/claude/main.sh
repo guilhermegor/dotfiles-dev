@@ -9,7 +9,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-source "$SCRIPT_DIR/lib/utils.sh"
+source "$SCRIPT_DIR/../lib/utils.sh"
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 source "$SCRIPT_DIR/lib/prerequisites.sh"
 source "$SCRIPT_DIR/lib/settings.sh"
 source "$SCRIPT_DIR/lib/marketplaces.sh"

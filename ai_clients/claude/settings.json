@@ -5,7 +5,12 @@
       "Bash(git add:*)",
       "Bash(git commit --no-verify -m ':*)",
       "Bash(git push:*)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)",
       "Bash(grep:*)",
+      "WebSearch",
+      "Skill(update-config)",
+      "Bash(claude mcp:*)",
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs"
     ]

@@ -15,7 +15,32 @@ install_mcp_servers() {
     fi
 
     _install_context7 "$env_file"
+    _install_tavily "$env_file"
     _install_playwright_mcp
+}
+
+_install_tavily() {
+    local env_file="$1"
+
+    local tavily_key
+    tavily_key=$(grep -E '^TAVILY_API_KEY=' "$env_file" | head -1 | cut -d'=' -f2-)
+
+    if [ -z "$tavily_key" ]; then
+        print_status "warning" "TAVILY_API_KEY not found in .env — skipping tavily"
+        return 0
+    fi
+
+    if claude mcp list 2>/dev/null | grep -q '^tavily'; then
+        print_status "info" "tavily MCP already registered — skipping"
+        return 0
+    fi
+
+    claude mcp add --scope user \
+        --transport http \
+        tavily \
+        "https://mcp.tavily.com/mcp/?tavilyApiKey=${tavily_key}"
+
+    print_status "success" "tavily MCP registered (HTTP transport, user scope)"
 }
 
 _install_playwright_mcp() {

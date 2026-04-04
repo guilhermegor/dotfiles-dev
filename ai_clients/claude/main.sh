@@ -56,6 +56,7 @@ run_plugins() {
     promote_plugin_to_user_scope "math-olympiad@claude-plugins-official"       "math-olympiad"      "claude-plugins-official"
     promote_plugin_to_user_scope "learning-output-style@claude-plugins-official" "learning-output-style" "claude-plugins-official"
     promote_plugin_to_user_scope "pr-review-toolkit@claude-plugins-official"   "pr-review-toolkit"  "claude-plugins-official"
+    promote_plugin_to_user_scope "supabase-postgres-best-practices@claude-plugins-official" "supabase-postgres-best-practices" "claude-plugins-official"
 }
 
 STEPS=(

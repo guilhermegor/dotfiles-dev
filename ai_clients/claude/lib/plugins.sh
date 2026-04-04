@@ -35,6 +35,7 @@ promote_plugin_to_user_scope() {
         print_status "info"    "  /plugin install math-olympiad"
         print_status "info"    "  /plugin install learning-output-style"
         print_status "info"    "  /plugin install pr-review-toolkit"
+        print_status "info"    "  /plugin install supabase-postgres-best-practices"
         return 0
     fi
 

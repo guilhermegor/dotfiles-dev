@@ -18,6 +18,7 @@ source "$SCRIPT_DIR/lib/plugins.sh"
 source "$SCRIPT_DIR/lib/slash_commands.sh"
 source "$SCRIPT_DIR/lib/claude_md.sh"
 source "$SCRIPT_DIR/lib/rules.sh"
+source "$SCRIPT_DIR/lib/mcp_servers.sh"
 
 # ── Step registry ─────────────────────────────────────────────────────────────
 # Each entry: "key|label|function_or_block"
@@ -55,6 +56,7 @@ STEPS=(
     "rules|Install language rules (python.md, ...)"
     "marketplaces|Register plugin marketplaces"
     "plugins|Promote plugins to user scope"
+    "mcp_servers|Install MCP servers"
 )
 
 dispatch_step() {
@@ -66,6 +68,7 @@ dispatch_step() {
         rules)          install_rules ;;
         marketplaces)   print_status "section" "REGISTERING MARKETPLACES"    && run_marketplaces ;;
         plugins)        print_status "section" "PROMOTING PLUGINS TO USER SCOPE" && run_plugins ;;
+        mcp_servers)    install_mcp_servers ;;
         *) print_status "error" "Unknown step: $key"; return 1 ;;
     esac
 }

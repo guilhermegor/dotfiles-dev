@@ -37,6 +37,7 @@ promote_plugin_to_user_scope() {
         print_status "info"    "  /plugin install pr-review-toolkit"
         print_status "info"    "  /plugin install supabase-postgres-best-practices"
         print_status "info"    "  /plugin install senior-prompt-engineer"
+        print_status "info"    "  /plugin install clean-code"
         return 0
     fi
 

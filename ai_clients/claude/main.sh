@@ -58,6 +58,7 @@ run_plugins() {
     promote_plugin_to_user_scope "pr-review-toolkit@claude-plugins-official"   "pr-review-toolkit"  "claude-plugins-official"
     promote_plugin_to_user_scope "supabase-postgres-best-practices@claude-plugins-official" "supabase-postgres-best-practices" "claude-plugins-official"
     promote_plugin_to_user_scope "senior-prompt-engineer@claude-plugins-official"           "senior-prompt-engineer"           "claude-plugins-official"
+    promote_plugin_to_user_scope "clean-code@claude-plugins-official"                       "clean-code"                       "claude-plugins-official"
 }
 
 STEPS=(

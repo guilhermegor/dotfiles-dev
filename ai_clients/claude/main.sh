@@ -47,6 +47,15 @@ run_plugins() {
     promote_plugin_to_user_scope "json-lsp@claude-plugins-official"           "json-lsp"           "claude-plugins-official"
     promote_plugin_to_user_scope "yaml-lsp@claude-plugins-official"           "yaml-lsp"           "claude-plugins-official"
     promote_plugin_to_user_scope "toml-lsp@claude-plugins-official"           "toml-lsp"           "claude-plugins-official"
+    # Skills
+    promote_plugin_to_user_scope "security-guidance@claude-plugins-official"  "security-guidance"  "claude-plugins-official"
+    promote_plugin_to_user_scope "code-review@claude-plugins-official"         "code-review"        "claude-plugins-official"
+    promote_plugin_to_user_scope "code-simplifier@claude-plugins-official"     "code-simplifier"    "claude-plugins-official"
+    promote_plugin_to_user_scope "feature-dev@claude-plugins-official"         "feature-dev"        "claude-plugins-official"
+    promote_plugin_to_user_scope "frontend-design@claude-plugins-official"     "frontend-design"    "claude-plugins-official"
+    promote_plugin_to_user_scope "math-olympiad@claude-plugins-official"       "math-olympiad"      "claude-plugins-official"
+    promote_plugin_to_user_scope "learning-output-style@claude-plugins-official" "learning-output-style" "claude-plugins-official"
+    promote_plugin_to_user_scope "pr-review-toolkit@claude-plugins-official"   "pr-review-toolkit"  "claude-plugins-official"
 }
 
 STEPS=(

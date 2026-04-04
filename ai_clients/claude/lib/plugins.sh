@@ -27,6 +27,14 @@ promote_plugin_to_user_scope() {
         print_status "info"    "  /plugin install json-lsp"
         print_status "info"    "  /plugin install yaml-lsp"
         print_status "info"    "  /plugin install toml-lsp"
+        print_status "info"    "  /plugin install security-guidance"
+        print_status "info"    "  /plugin install code-review"
+        print_status "info"    "  /plugin install code-simplifier"
+        print_status "info"    "  /plugin install feature-dev"
+        print_status "info"    "  /plugin install frontend-design"
+        print_status "info"    "  /plugin install math-olympiad"
+        print_status "info"    "  /plugin install learning-output-style"
+        print_status "info"    "  /plugin install pr-review-toolkit"
         return 0
     fi
 

@@ -16,6 +16,24 @@ already been provided in `$ARGUMENTS`:
 Do not infer or auto-derive either path. Wait for explicit confirmation of both before
 reading the source file or writing any code.
 
+## Prerequisites
+
+Before generating tests, check the project's dependency file (`pyproject.toml`,
+`requirements*.txt`, or `setup.cfg`) for the following:
+
+- **pytest** — required; abort and notify user if absent
+- **pytest-mock** — required for `mocker: MockerFixture`; if absent, fall back to
+  `unittest.mock.patch` and `unittest.mock.MagicMock` only
+- **pytest-asyncio** — required for `@pytest.mark.asyncio`; skip async test patterns
+  if absent
+- **numpy** — required for `NDArray` type hints; skip numpy-specific patterns if absent
+
+State which dependencies were detected at the top of the generated test file as a comment:
+
+```python
+# Dependencies detected: pytest, pytest-mock, numpy
+```
+
 ## Code quality standards
 
 - **Line length**: Maximum 99 characters
@@ -123,8 +141,24 @@ def test_something() -> None:
     ...
 ```
 
+## Do Not
+
+- **Do not test private methods directly** (`_method`, `__method`). Test them
+  through the public API that calls them. If a private method is only reachable
+  via a public one, cover it by exercising the public method.
+- **Do not use `@pytest.mark.skip` or `@pytest.mark.xfail`** unless the source
+  module itself is known-broken. Never generate skipped tests as coverage placeholders.
+- **Do not assert on log output** unless the function's documented contract guarantees
+  specific log messages. Use `caplog` only when log content is a tested behaviour.
+- **Do not use `time.sleep` in tests.** Mock `time.sleep`, `datetime.now()`, and
+  `time.time()` unconditionally.
+- **Do not import from `typing` when primitives suffice.** `list[str]` not `List[str]`.
+- **Do not leave unused imports.** Every import must be referenced (Ruff F401).
+
 ## Test Quality Standards
-- **100% code coverage**: All functions, classes and methods
+- **100% coverage**: Line, branch, and function coverage of the target module.
+  Every `if`/`else`, every `try`/`except`, every early `return` must be exercised.
+  Run with: `pytest --cov=<module> --cov-branch --cov-report=term-missing`
 - **Zero Ruff violations**: Code must pass all Ruff checks without warnings
 - **Fallback testing**: Include tests for fallback mechanisms and error recovery
 - **Reload logic**: Test module reloading scenarios when applicable
@@ -251,8 +285,9 @@ Test every guard clause in the source (shape constraints, range checks, callable
 empty-array checks, etc.).
 
 ```python
+# NOTE: Replace `CurveFitter` with the actual class under test from your fixture.
 def test_non_callable_func(
-    instance: Any,
+    instance: CurveFitter,
     sample_data: tuple[NDArray[np.float64], NDArray[np.float64]],
 ) -> None:
     """Test raises TypeError when func is not callable.
@@ -264,7 +299,7 @@ def test_non_callable_func(
 
     Parameters
     ----------
-    instance : Any
+    instance : CurveFitter
         Instance of the class containing the method under test
     sample_data : tuple[NDArray[np.float64], NDArray[np.float64]]
         Tuple of (x, y) test data from fixture
@@ -279,7 +314,7 @@ def test_non_callable_func(
 
 
 def test_empty_array_x(
-    instance: Any,
+    instance: CurveFitter,
     sample_data: tuple[NDArray[np.float64], NDArray[np.float64]],
     linear_func: Callable[[NDArray[np.float64], float, float], NDArray[np.float64]],
 ) -> None:
@@ -292,7 +327,7 @@ def test_empty_array_x(
 
     Parameters
     ----------
-    instance : Any
+    instance : CurveFitter
         Instance of the class containing the method under test
     sample_data : tuple[NDArray[np.float64], NDArray[np.float64]]
         Tuple of (x, y) test data from fixture
@@ -352,7 +387,11 @@ def test_empty_array_x(
 - **Dependency fallbacks**: Test graceful degradation without optional deps
 - **Data source fallbacks**: Test switching between data sources
 
-### 6. Reload Logic
+### 6. Reload Logic *(only if the module uses `importlib.reload`)*
+
+> Skip this section unless the source file explicitly calls `importlib.reload()`.
+> Check with `grep -n "importlib.reload" <source_file>` before generating these tests.
+
 - **Module reloading**: Test importlib.reload() behavior
 - **State preservation**: Test what state survives reloads
 - **Cache invalidation**: Test cache clearing during reloads
@@ -388,7 +427,7 @@ def test_empty_array_x(
 - `assert len(result) == 3` over `assert result`
 - Use `pytest.raises()` for exception testing
 - Use `pytest.warns()` for warning testing
-- Use `pytest.approx(result, abs=...) == pytest.approx(expected, abs=...)` in order to avoid raising errors due to different floating points, irrelevant significance-wise
+- Use `assert result == pytest.approx(expected, abs=1e-6)` for float comparisons; for relative tolerance use `pytest.approx(expected, rel=1e-3)`. Never wrap both sides in `pytest.approx`.
 
 ### Common Assertion Patterns
 ```python
@@ -404,8 +443,9 @@ with pytest.raises((ValueError, TypeError)):
 with pytest.warns(UserWarning, match="deprecation"):
     deprecated_function()
 
-# approximate comparisons
-assert result == pytest.approx(expected, rel=1e-3, abs=1e-6)
+# approximate comparisons (wrap expected only, never both sides)
+assert result == pytest.approx(expected, abs=1e-6)
+assert result == pytest.approx(expected, rel=1e-3)
 
 # collection assertions
 assert set(result) == set(expected)  # order doesn't matter

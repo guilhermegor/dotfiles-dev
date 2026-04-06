@@ -9,7 +9,7 @@
 # -------------------
 .PHONY: init
 
-init: permissions install_programs install_espanso_packages install_toolchains ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace
+init: permissions setup_env install_programs install_espanso_packages install_toolchains ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -39,7 +39,10 @@ init: permissions install_programs install_espanso_packages install_toolchains a
 # -------------------
 # SYSTEM SETUP
 # -------------------
-.PHONY: install_programs install_toolchains irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original
+.PHONY: setup_env install_programs install_toolchains irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original
+
+setup_env:
+	@bash distro_config/setup_env.sh
 
 install_programs:
 	@echo "Installing essential programs..."
@@ -323,6 +326,7 @@ help:
 	@echo "                         Runs: permissions + all system config"
 	@echo ""
 	@echo "System Setup:"
+	@echo "  setup_env            - Prompt to create .env from .env.example"
 	@echo "  install_programs     - Install essential programs"
 	@echo "  install_toolchains   - Install development toolchains"
 	@echo "  starship_setup       - Install Starship + Bash autocomplete"

@@ -16,6 +16,7 @@ source "$SCRIPT_DIR/lib/settings.sh"
 source "$SCRIPT_DIR/lib/marketplaces.sh"
 source "$SCRIPT_DIR/lib/plugins.sh"
 source "$SCRIPT_DIR/lib/slash_commands.sh"
+source "$SCRIPT_DIR/lib/skills.sh"
 source "$SCRIPT_DIR/lib/claude_md.sh"
 source "$SCRIPT_DIR/lib/rules.sh"
 source "$SCRIPT_DIR/lib/mcp_servers.sh"
@@ -64,6 +65,7 @@ run_plugins() {
 STEPS=(
     "settings|Configure settings.json"
     "slash_commands|Install custom slash commands"
+    "skills|Install user skills"
     "claude_md|Install global CLAUDE.md"
     "rules|Install language rules (python.md, ...)"
     "marketplaces|Register plugin marketplaces"
@@ -76,6 +78,7 @@ dispatch_step() {
     case "$key" in
         settings)       configure_settings ;;
         slash_commands) install_slash_commands ;;
+        skills)         install_skills ;;
         claude_md)      install_claude_md ;;
         rules)          install_rules ;;
         marketplaces)   print_status "section" "REGISTERING MARKETPLACES"    && run_marketplaces ;;

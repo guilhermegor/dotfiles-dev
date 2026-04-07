@@ -34,75 +34,14 @@ State which dependencies were detected at the top of the generated test file as 
 # Dependencies detected: pytest, pytest-mock, numpy
 ```
 
-## Code quality standards
+## Coding standards
 
-- **Line length**: Maximum 99 characters
-- **Indentation**: Use tabs (4 spaces equivalent) — never mix tabs and spaces
-- **Target Python version**: read `.python-version` from the project root; fall back to 3.9+ if the file is absent
-- **Quote style**: Double quotes
-- **Imported but unused**: please avoid F401 Ruff violation
-- **Type hints**:
-1. Avoid `Any` type hint whenever possible; use specific types
-2. Avoid `typing import Dict, Tuple, List` and affiliated, please resort to primitive ones, like dict, tuple, list, which would avoid Ruff linting raising warnings
-3. Use from numpy.typing import NDArray, NDArray[...] (e.g. NDArray[np.float64]) instead of np.ndarray for type hints
-4. Use class Return<method_name>(TypedDict) for dictionaries typing (import from typing import TypedDict)
-5. Add type hints to every method, function and whenever is possible
-- **Docstring format**:
-1. Numpy style with 79 character line limits, Parameters/Returns/Raises/Notes/References sections
-2. Include brief description of what is being tested
-3. Include module description
-4. Example of docstring formatting:
-```python
-"""Unit tests for BinaryComparator class.
+Before writing any code, read the shared standards document:
 
-Tests the binary comparison functionality with various input scenarios including:
-- Initialization with valid inputs
-- Comparison operations
-- Edge cases and error conditions
-"""
+    Read ~/.claude/skills/py-standards.md
 
-import pytest
-
-from stpstone.analytics.arithmetic.binary_comparator import BinaryComparator
-
-
-# --------------------------
-# Fixtures
-# --------------------------
-@pytest.fixture
-def comparator_a_less_than_b() -> BinaryComparator:
-    """Fixture providing BinaryComparator instance where a < b.
-
-    Returns
-    -------
-    BinaryComparator
-        Instance initialized with a=5 and b=10
-    """
-    return BinaryComparator(a=5, b=10)
-
-
-# --------------------------
-# Tests
-# --------------------------
-def test_init_with_valid_inputs() -> None:
-    """Test initialization with valid integer inputs.
-
-    Verifies
-    --------
-    - The BinaryComparator can be initialized with integer values
-    - The values are correctly stored in the instance attributes
-    - The values maintain their original types and values
-
-    Returns
-    -------
-    None
-    """
-    comparator = BinaryComparator(a=5, b=10)
-    assert comparator.a == 5
-    assert comparator.b == 10
-```
-- **Comments**: Use lowercase (not in docstrings)
-- **Import organization**: Follow isort with single-line imports when logical
+Apply every rule in that document to the test code you produce. The sections
+below are additional standards specific to test files.
 
 ## Test structure
 

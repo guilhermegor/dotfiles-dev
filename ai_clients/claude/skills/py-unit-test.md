@@ -37,7 +37,7 @@ State which dependencies were detected at the top of the generated test file as 
 ## Code quality standards
 
 - **Line length**: Maximum 99 characters
-- **Indentation**: Use tabs (4 spaces equivalent)
+- **Indentation**: Use tabs (4 spaces equivalent) — never mix tabs and spaces
 - **Target Python version**: read `.python-version` from the project root; fall back to 3.9+ if the file is absent
 - **Quote style**: Double quotes
 - **Imported but unused**: please avoid F401 Ruff violation

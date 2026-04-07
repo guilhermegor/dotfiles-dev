@@ -28,7 +28,7 @@ install_skills() {
 
         cp "$skill_file" "$dst"
         print_status "success" "Installed skill: $filename → $dst"
-        (( installed++ ))
+        (( ++installed ))
     done
 
     if (( installed == 0 )); then

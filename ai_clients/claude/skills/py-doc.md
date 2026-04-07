@@ -24,7 +24,13 @@ Do not infer the source path. Wait for explicit confirmation before reading file
 
 ## Prerequisites check
 
-Before generating pages, verify the project's `mkdocs.yml`:
+Before generating pages, verify the project has mkdocs configured:
+
+- **mkdocs.yml must exist** — search for `mkdocs.yml` (or `mkdocs.yaml`) in the
+  project root. If absent, **abort** with a clear message:
+  > "No mkdocs.yml found in the project root. This skill generates pages for an
+  > existing mkdocs project — it does not scaffold one from scratch. Set up mkdocs
+  > first, then re-run this skill."
 
 - **mkdocstrings plugin** — check that `mkdocstrings` (or `mkdocstrings[python]`)
   appears in the `plugins:` list. If absent, **warn the user** that the generated
@@ -130,6 +136,7 @@ nav:
 
 ## Do Not
 
+- Do not scaffold a new mkdocs project — abort if `mkdocs.yml` does not exist.
 - Do not write or modify Python source code.
 - Do not extract docstrings into static markdown — use mkdocstrings directives only.
 - Do not remove existing nav entries unrelated to the generated pages.

@@ -28,6 +28,7 @@ source "$SCRIPT_DIR/lib/mcp_servers.sh"
 
 run_marketplaces() {
     register_marketplace "claude-plugins-official" "anthropics/claude-plugins-official"
+    register_marketplace "claude-skills"           "anthropics/skills"
     register_marketplace "claude-hud"              "jarrodwatts/claude-hud"
 }
 

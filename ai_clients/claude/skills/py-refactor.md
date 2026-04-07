@@ -1,6 +1,8 @@
 ---
 name: py-refactor
 description: Refactor Python source code to comply with project style, typing, and linting standards. Trigger when asked to refactor, reformat, clean up, or standardise a Python file.
+effort: high
+argument-hint: [source-file]
 ---
 
 Refactor the provided Python module according to the rules below. Return only the

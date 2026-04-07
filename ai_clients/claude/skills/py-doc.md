@@ -1,6 +1,8 @@
 ---
 name: py-doc
 description: Generate mkdocs documentation pages from Python source code using mkdocstrings directives. Trigger when asked to document, generate docs, create API reference, or build mkdocs pages for a Python module or package.
+effort: high
+argument-hint: [source-file-or-directory]
 ---
 
 Generate mkdocs-compatible markdown pages for Python source code using

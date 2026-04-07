@@ -116,10 +116,20 @@ using lxml for XPath-based data extraction and requests for HTTP operations.
 """
 ```
 
+## Method ordering: top-down call order
+
+Within every class, methods must follow **top-down reading order** — the caller
+appears above the callee. Reading the file from top to bottom follows the logical
+execution flow: `run` → `get_response` → `parse_raw_file` → `transform_data`.
+
+Dunder methods (`__init__`, `__repr__`, `__eq__`, etc.) go first as the class
+preamble. Everything after follows call order — no exceptions.
+
 ## Validation methods
 
 - Extract reusable guard logic into `_validate_<name>(self, ...)` methods.
-- Place all `_validate_*` methods at the **top** of the class, before other methods.
+- Place each `_validate_*` method immediately before the first method that calls it.
+  If shared by multiple methods, place it immediately before the earliest caller.
 - Each validation method raises a descriptive exception with the variable name and
   the violated constraint in the message.
 - Document every `Raises` case in the method's docstring.

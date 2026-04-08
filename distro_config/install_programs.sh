@@ -2838,61 +2838,6 @@ install_pinta() {
 }
 
 # ============================================================================
-# MORGEN CALENDAR
-# ============================================================================
-
-install_morgen() {
-    print_status "section" "MORGEN CALENDAR"
-    
-    # Check if Morgen is already installed
-    if snap list 2>/dev/null | grep -q morgen || flatpak list 2>/dev/null | grep -q "com.todesktop.230313mzl4w4u92"; then
-        print_status "info" "Morgen already installed"
-        return 0
-    fi
-    
-    case "$PACKAGE_MANAGER" in
-        apt|dnf|yum|zypper)
-            # Morgen is best installed via Snap on most distributions
-            if command_exists snap; then
-                print_status "info" "Installing Morgen via Snap..."
-                sudo snap install morgen
-                print_status "success" "Morgen installed via Snap"
-            else
-                print_status "warning" "Snap not available. Installing Morgen via Flatpak..."
-                if command_exists flatpak; then
-                    flatpak install -y flathub com.todesktop.230313mzl4w4u92
-                    print_status "success" "Morgen installed via Flatpak"
-                else
-                    print_status "error" "Neither Snap nor Flatpak available. Please install one first."
-                    print_status "config" "Or download Morgen manually from: https://morgen.so/download"
-                    return 1
-                fi
-            fi
-            ;;
-        pacman)
-            # For Arch-based systems, try Flatpak first
-            if command_exists flatpak; then
-                print_status "info" "Installing Morgen via Flatpak..."
-                flatpak install -y flathub com.todesktop.230313mzl4w4u92
-                print_status "success" "Morgen installed via Flatpak"
-            elif command_exists yay; then
-                print_status "info" "Installing Morgen from AUR..."
-                yay -S --noconfirm morgen-bin || yay -S --noconfirm morgen
-                print_status "success" "Morgen installed from AUR"
-            else
-                print_status "warning" "Please install Morgen manually from AUR or via Flatpak"
-                print_status "config" "Or download from: https://morgen.so/download"
-                return 1
-            fi
-            ;;
-    esac
-    
-    print_status "success" "Morgen calendar app is ready to use"
-    print_status "info" "Morgen: Unified calendar with scheduling features"
-    print_status "config" "Launch with: morgen"
-}
-
-# ============================================================================
 # THUNDERBIRD EMAIL CLIENT
 # ============================================================================
 
@@ -3477,7 +3422,6 @@ run_full_installation() {
     install_localsend
     install_rustdesk
     install_pinta
-    install_morgen
     install_thunderbird
     install_insync
     install_clamav
@@ -3539,7 +3483,6 @@ run_custom_installation() {
         "install_localsend:LocalSend File Sharing"
         "install_rustdesk:RustDesk Remote Desktop"
         "install_pinta:Pinta Image Editor"
-        "install_morgen:Morgen Calendar"
         "install_thunderbird:Thunderbird Email Client"
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"

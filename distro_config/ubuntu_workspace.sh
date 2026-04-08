@@ -915,7 +915,8 @@ EOF
     local org_pessoal_apps=()
 
     local org_pessoal_app_names=(
-        'routine.desktop'
+        'morgen.desktop' 'com.morgen.Morgen.desktop' 'morgen_morgen.desktop'
+        'com.todesktop.230313mzl4w4u92.desktop'
         'thunderbird.desktop' 'thunderbird_thunderbird.desktop'
         'org.mozilla.Thunderbird.desktop' 'mozilla-thunderbird.desktop'
     )
@@ -927,12 +928,14 @@ EOF
     done
 
     shopt -s nullglob
-    for desktop_file in /usr/share/applications/*routine*.desktop \
+    for desktop_file in /usr/share/applications/*morgen*.desktop \
                         /usr/share/applications/*thunderbird*.desktop \
+                        /var/lib/snapd/desktop/applications/*morgen*.desktop \
                         /var/lib/snapd/desktop/applications/*thunderbird*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*morgen*.desktop \
                         /var/lib/flatpak/exports/share/applications/*thunderbird*.desktop \
                         /var/lib/flatpak/exports/share/applications/*Thunderbird*.desktop \
-                        "$HOME/.local/share/applications"/*routine*.desktop \
+                        "$HOME/.local/share/applications"/*morgen*.desktop \
                         "$HOME/.local/share/applications"/*thunderbird*.desktop; do
         if [ -f "$desktop_file" ]; then
             local basename=$(basename "$desktop_file")

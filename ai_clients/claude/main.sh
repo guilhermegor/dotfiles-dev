@@ -21,6 +21,7 @@ source "$SCRIPT_DIR/lib/agents.sh"
 source "$SCRIPT_DIR/lib/claude_md.sh"
 source "$SCRIPT_DIR/lib/rules.sh"
 source "$SCRIPT_DIR/lib/mcp_servers.sh"
+source "$SCRIPT_DIR/lib/env.sh"
 
 # ── Step registry ─────────────────────────────────────────────────────────────
 # Each entry: "key|label|function_or_block"
@@ -66,6 +67,7 @@ run_plugins() {
 
 STEPS=(
     "settings|Configure settings.json"
+    "env|Configure .env (backup path, etc.)"
     "slash_commands|Install custom slash commands"
     "skills|Install user skills"
     "agents|Install pipeline agents"
@@ -80,6 +82,7 @@ dispatch_step() {
     local key="$1"
     case "$key" in
         settings)       configure_settings ;;
+        env)            configure_env ;;
         slash_commands) install_slash_commands ;;
         skills)         install_skills ;;
         agents)         install_agents ;;

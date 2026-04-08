@@ -2838,6 +2838,48 @@ install_pinta() {
 }
 
 # ============================================================================
+# GOOGLE CALENDAR (Chrome PWA)
+# ============================================================================
+
+install_google_calendar() {
+    print_status "section" "GOOGLE CALENDAR"
+
+    local desktop_dir="$HOME/.local/share/applications"
+    local desktop_file="$desktop_dir/google-calendar.desktop"
+
+    if [ -f "$desktop_file" ]; then
+        print_status "info" "Google Calendar desktop entry already exists, updating"
+    fi
+
+    if ! command_exists google-chrome; then
+        print_status "error" "Google Chrome not found. Google Calendar PWA requires Chrome."
+        print_status "info" "Install Chrome first and re-run this step."
+        return 1
+    fi
+
+    print_status "info" "Creating Google Calendar desktop entry..."
+    mkdir -p "$desktop_dir"
+
+    cat > "$desktop_file" << EOF
+[Desktop Entry]
+Name=Google Calendar
+Exec=google-chrome --app=https://calendar.google.com
+Terminal=false
+Type=Application
+Icon=calendar
+Categories=Office;Calendar;
+EOF
+    chmod +x "$desktop_file"
+
+    if command_exists update-desktop-database; then
+        update-desktop-database "$desktop_dir" 2>/dev/null || true
+    fi
+
+    print_status "success" "Google Calendar desktop entry created"
+    print_status "info" "Google Calendar: Chrome PWA for calendar.google.com"
+}
+
+# ============================================================================
 # THUNDERBIRD EMAIL CLIENT
 # ============================================================================
 
@@ -3422,6 +3464,7 @@ run_full_installation() {
     install_localsend
     install_rustdesk
     install_pinta
+    install_google_calendar
     install_thunderbird
     install_insync
     install_clamav
@@ -3483,6 +3526,7 @@ run_custom_installation() {
         "install_localsend:LocalSend File Sharing"
         "install_rustdesk:RustDesk Remote Desktop"
         "install_pinta:Pinta Image Editor"
+        "install_google_calendar:Google Calendar (PWA)"
         "install_thunderbird:Thunderbird Email Client"
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"

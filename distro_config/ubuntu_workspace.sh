@@ -915,6 +915,7 @@ EOF
     local org_pessoal_apps=()
 
     local org_pessoal_app_names=(
+        'google-calendar.desktop'
         'thunderbird.desktop' 'thunderbird_thunderbird.desktop'
         'org.mozilla.Thunderbird.desktop' 'mozilla-thunderbird.desktop'
     )

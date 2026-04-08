@@ -2838,58 +2838,76 @@ install_pinta() {
 }
 
 # ============================================================================
-# MORGEN CALENDAR
+# ROUTINE CALENDAR
 # ============================================================================
 
-install_morgen() {
-    print_status "section" "MORGEN CALENDAR"
-    
-    # Check if Morgen is already installed
-    if snap list 2>/dev/null | grep -q morgen || flatpak list 2>/dev/null | grep -q "com.todesktop.230313mzl4w4u92"; then
-        print_status "info" "Morgen already installed"
-        return 0
+install_routine() {
+    print_status "section" "ROUTINE CALENDAR"
+
+    local appimage_name="Routine.AppImage"
+    local install_dir="$HOME/.local/bin"
+    local appimage_path="${install_dir}/${appimage_name}"
+    local desktop_file="$HOME/.local/share/applications/routine.desktop"
+    local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local icon_src="$script_root/assets/routine_app.png"
+    local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    local icon_path="$icon_theme_dir/routine.png"
+    local icon_value="routine"
+
+    # Ensure libfuse2 is available (required by AppImages on Ubuntu 22.04+)
+    if ! ldconfig -p 2>/dev/null | grep -q libfuse.so.2; then
+        print_status "info" "Installing libfuse2 (required for AppImages)..."
+        case "$PACKAGE_MANAGER" in
+            apt) sudo apt-get install -y libfuse2t64 2>/dev/null || sudo apt-get install -y libfuse2 ;;
+            dnf|yum) sudo "$PACKAGE_MANAGER" install -y fuse-libs ;;
+            pacman) sudo pacman -S --noconfirm fuse2 ;;
+            zypper) sudo zypper install -y libfuse2 ;;
+        esac
     fi
-    
-    case "$PACKAGE_MANAGER" in
-        apt|dnf|yum|zypper)
-            # Morgen is best installed via Snap on most distributions
-            if command_exists snap; then
-                print_status "info" "Installing Morgen via Snap..."
-                sudo snap install morgen
-                print_status "success" "Morgen installed via Snap"
-            else
-                print_status "warning" "Snap not available. Installing Morgen via Flatpak..."
-                if command_exists flatpak; then
-                    flatpak install -y flathub com.todesktop.230313mzl4w4u92
-                    print_status "success" "Morgen installed via Flatpak"
-                else
-                    print_status "error" "Neither Snap nor Flatpak available. Please install one first."
-                    print_status "config" "Or download Morgen manually from: https://morgen.so/download"
-                    return 1
-                fi
-            fi
-            ;;
-        pacman)
-            # For Arch-based systems, try Flatpak first
-            if command_exists flatpak; then
-                print_status "info" "Installing Morgen via Flatpak..."
-                flatpak install -y flathub com.todesktop.230313mzl4w4u92
-                print_status "success" "Morgen installed via Flatpak"
-            elif command_exists yay; then
-                print_status "info" "Installing Morgen from AUR..."
-                yay -S --noconfirm morgen-bin || yay -S --noconfirm morgen
-                print_status "success" "Morgen installed from AUR"
-            else
-                print_status "warning" "Please install Morgen manually from AUR or via Flatpak"
-                print_status "config" "Or download from: https://morgen.so/download"
-                return 1
-            fi
-            ;;
-    esac
-    
-    print_status "success" "Morgen calendar app is ready to use"
-    print_status "info" "Morgen: Unified calendar with scheduling features"
-    print_status "config" "Launch with: morgen"
+
+    # Download AppImage if not present
+    if [ -x "$appimage_path" ]; then
+        print_status "info" "Routine AppImage already present at ${appimage_path}"
+    else
+        print_status "info" "Routine is only available as AppImage for Linux"
+        print_status "info" "Downloading Routine AppImage..."
+
+        mkdir -p "$install_dir"
+        if ! curl -fSL "https://releases.routine.co/routine/linux/Routine.AppImage" -o "$appimage_path"; then
+            print_status "error" "Failed to download Routine AppImage"
+            return 1
+        fi
+        chmod +x "$appimage_path"
+    fi
+
+    # Install icon to hicolor theme (always ensure it's up to date)
+    if [ -f "$icon_src" ]; then
+        print_status "info" "Installing Routine icon..."
+        mkdir -p "$icon_theme_dir"
+        cp "$icon_src" "$icon_path"
+        if command_exists gtk-update-icon-cache; then
+            gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+        fi
+    else
+        print_status "warning" "Icon not found at ${icon_src}, .desktop entry will have no icon"
+        icon_value=""
+    fi
+
+    # Create .desktop entry for application launchers (always ensure it's up to date)
+    mkdir -p "$(dirname "$desktop_file")"
+    cat > "$desktop_file" <<DESKTOP_EOF
+[Desktop Entry]
+Name=Routine
+Comment=Calendar and productivity app
+Exec=${appimage_path}
+Icon=${icon_value}
+Type=Application
+Categories=Office;Calendar;Productivity;
+StartupNotify=true
+DESKTOP_EOF
+
+    print_status "success" "Routine calendar app installed"
+    print_status "config" "Launch with: ${appimage_path} or from your app launcher"
 }
 
 # ============================================================================
@@ -3477,7 +3495,7 @@ run_full_installation() {
     install_localsend
     install_rustdesk
     install_pinta
-    install_morgen
+    install_routine
     install_thunderbird
     install_insync
     install_clamav
@@ -3539,7 +3557,7 @@ run_custom_installation() {
         "install_localsend:LocalSend File Sharing"
         "install_rustdesk:RustDesk Remote Desktop"
         "install_pinta:Pinta Image Editor"
-        "install_morgen:Morgen Calendar"
+        "install_routine:Routine Calendar"
         "install_thunderbird:Thunderbird Email Client"
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"

@@ -505,6 +505,217 @@ EOF
 }
 
 # ============================================================================
+# DIM COMPLETED CALENDAR EVENTS (GNOME EXTENSION)
+# ============================================================================
+
+install_dim_calendar_events() {
+    print_status "section" "DIM COMPLETED CALENDAR EVENTS"
+
+    local EXT_UUID="dim-completed-calendar-events@marcinjahn.com"
+    local EXT_PK=5979
+
+    # Check if already installed and enabled
+    if gnome-extensions list 2>/dev/null | grep -q "$EXT_UUID"; then
+        print_status "info" "Dim Completed Calendar Events already installed"
+
+        if gnome-extensions info "$EXT_UUID" 2>/dev/null | grep -q "ENABLED"; then
+            print_status "success" "Dim Completed Calendar Events is already enabled"
+        else
+            print_status "info" "Enabling Dim Completed Calendar Events..."
+            if gnome-extensions enable "$EXT_UUID" 2>&1 | tee -a "$LOG_FILE"; then
+                print_status "success" "Dim Completed Calendar Events enabled"
+            else
+                print_status "warning" "Could not enable extension"
+                print_status "info" "You may need to log out and log back in"
+            fi
+        fi
+        return 0
+    fi
+
+    print_status "info" "Installing Dim Completed Calendar Events extension..."
+
+    if ! command_exists gnome-shell; then
+        print_status "warning" "GNOME Shell not detected. This extension requires GNOME desktop environment."
+        print_status "info" "Skipping installation for non-GNOME systems."
+        return 1
+    fi
+
+    # Detect GNOME Shell major version
+    local shell_version
+    shell_version=$(gnome-shell --version 2>/dev/null | grep -oP '\d+' | head -1)
+    if [ -z "$shell_version" ]; then
+        print_status "error" "Could not detect GNOME Shell version"
+        return 1
+    fi
+    print_status "info" "Detected GNOME Shell version: $shell_version"
+
+    # Get the correct version_tag for this GNOME Shell version
+    local version_tag=""
+    local api_url="https://extensions.gnome.org/extension-info/?pk=${EXT_PK}&shell_version=${shell_version}"
+
+    print_status "info" "Querying extensions.gnome.org for compatible version..."
+    if command_exists curl; then
+        version_tag=$(curl -s "$api_url" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('version_tag',''))" 2>/dev/null)
+    elif command_exists wget; then
+        version_tag=$(wget -qO- "$api_url" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('version_tag',''))" 2>/dev/null)
+    fi
+
+    # Fallback to hardcoded version_tag if API fails
+    if [ -z "$version_tag" ]; then
+        print_status "warning" "Could not query extensions.gnome.org API, using fallback"
+        case "$shell_version" in
+            46) version_tag=59030 ;;
+            47|48|49) version_tag=66346 ;;
+            *)
+                print_status "error" "No known version_tag for GNOME Shell $shell_version"
+                print_status "info" "Install manually from: https://extensions.gnome.org/extension/${EXT_PK}/"
+                return 1
+                ;;
+        esac
+    fi
+
+    print_status "info" "Using version_tag: $version_tag"
+
+    # Download the extension zip
+    local tmp_zip="/tmp/${EXT_UUID}.zip"
+    local download_url="https://extensions.gnome.org/download-extension/${EXT_UUID}.shell-extension.zip?version_tag=${version_tag}"
+
+    print_status "info" "Downloading extension..."
+    if command_exists curl; then
+        curl -L -o "$tmp_zip" "$download_url" 2>&1 | tee -a "$LOG_FILE"
+    elif command_exists wget; then
+        wget -O "$tmp_zip" "$download_url" 2>&1 | tee -a "$LOG_FILE"
+    else
+        print_status "error" "Neither curl nor wget found. Cannot download extension."
+        return 1
+    fi
+
+    if [ ! -f "$tmp_zip" ] || [ ! -s "$tmp_zip" ]; then
+        print_status "error" "Download failed or file is empty"
+        rm -f "$tmp_zip"
+        return 1
+    fi
+
+    # Install using gnome-extensions
+    print_status "info" "Installing extension..."
+    if gnome-extensions install --force "$tmp_zip" 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Extension installed"
+    else
+        print_status "error" "gnome-extensions install failed"
+        rm -f "$tmp_zip"
+        return 1
+    fi
+
+    rm -f "$tmp_zip"
+
+    # Compile schemas if present
+    local ext_dir="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
+    if [ -d "$ext_dir/schemas" ]; then
+        print_status "info" "Compiling extension schemas..."
+        if command_exists glib-compile-schemas; then
+            glib-compile-schemas "$ext_dir/schemas" 2>&1 | tee -a "$LOG_FILE"
+        fi
+    fi
+
+    verify_dim_calendar_events
+}
+
+verify_dim_calendar_events() {
+    print_status "info" "Verifying Dim Completed Calendar Events installation..."
+
+    local EXT_UUID="dim-completed-calendar-events@marcinjahn.com"
+    local max_attempts=3
+    local attempt=1
+    local ext_installed=false
+
+    while [ $attempt -le $max_attempts ]; do
+        print_status "info" "Verification attempt $attempt/$max_attempts..."
+
+        if gnome-extensions list 2>/dev/null | grep -q "$EXT_UUID"; then
+            ext_installed=true
+            print_status "success" "Extension detected in extension list"
+            break
+        fi
+
+        print_status "info" "Refreshing extension list..."
+        if command_exists dbus-send; then
+            dbus-send --session --type=method_call \
+                --dest=org.gnome.Shell \
+                /org/gnome/Shell \
+                org.gnome.Shell.Extensions.ReloadExtensionInfo \
+                string:"$EXT_UUID" 2>/dev/null || true
+        fi
+        if command_exists gdbus; then
+            gdbus call --session --dest org.gnome.Shell \
+                --object-path /org/gnome/Shell \
+                --method org.gnome.Shell.Extensions.ReloadExtensionInfo \
+                "$EXT_UUID" 2>/dev/null || true
+        fi
+
+        sleep 3
+        attempt=$((attempt + 1))
+    done
+
+    if [ "$ext_installed" = true ]; then
+        print_status "info" "Enabling extension..."
+        if gnome-extensions enable "$EXT_UUID" 2>&1 | tee -a "$LOG_FILE"; then
+            print_status "success" "Extension enabled successfully"
+            sleep 2
+            if gnome-extensions info "$EXT_UUID" 2>/dev/null | grep -q "ENABLED"; then
+                print_status "success" "Extension is active and running"
+            else
+                print_status "warning" "Extension enabled but may not be active until next login"
+            fi
+        else
+            print_status "warning" "Could not enable extension automatically"
+            print_status "info" "You may need to enable it manually via Extensions app"
+        fi
+    else
+        print_status "warning" "Installation could not be verified automatically"
+        local ext_dir="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
+        if [ -d "$ext_dir" ]; then
+            print_status "info" "Extension files are present at: $ext_dir"
+            print_status "info" "The extension will be available after you:"
+            print_status "config" "1. Log out and log back in, OR"
+            print_status "config" "2. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+        else
+            print_status "error" "Extension files not found"
+            print_status "info" "Install manually from: https://extensions.gnome.org/extension/5979/"
+        fi
+    fi
+}
+
+uninstall_dim_calendar_events() {
+    print_status "section" "UNINSTALL DIM COMPLETED CALENDAR EVENTS"
+
+    local EXT_UUID="dim-completed-calendar-events@marcinjahn.com"
+
+    if ! gnome-extensions list 2>/dev/null | grep -q "$EXT_UUID"; then
+        local ext_dir="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
+        if [ ! -d "$ext_dir" ]; then
+            print_status "info" "Extension is not installed, nothing to do"
+            return 0
+        fi
+    fi
+
+    print_status "info" "Disabling extension..."
+    gnome-extensions disable "$EXT_UUID" 2>/dev/null || true
+
+    print_status "info" "Uninstalling extension..."
+    if gnome-extensions uninstall "$EXT_UUID" 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Extension uninstalled"
+    else
+        local ext_dir="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
+        if [ -d "$ext_dir" ]; then
+            rm -rf "$ext_dir"
+            print_status "success" "Extension removed manually"
+        fi
+    fi
+
+    print_status "info" "Calendar dropdown restored to default behavior"
+}
+
+# ============================================================================
 # OLLAMA INSTALLATION
 # ============================================================================
 
@@ -3572,6 +3783,7 @@ run_full_installation() {
     install_neovim
     install_ollama
     install_vitals  # Added Vitals installation
+    install_dim_calendar_events
     install_espanso
     cleanup_system
     
@@ -3584,6 +3796,7 @@ run_full_installation() {
     print_status "config" "  - asdf: asdf --version"
     print_status "config" "  - Cursor: cursor --version"
     print_status "config" "  - Insync: insync start"
+    print_status "config" "  - Calendar Events: Click the clock in the top bar"
     print_status "config" "  - RustDesk: rustdesk"
     print_status "config" "  - Pinta: pinta (image editor)"
     print_status "config" "  - Flameshot: flameshot gui (for screenshots)"
@@ -3635,6 +3848,8 @@ run_custom_installation() {
         "install_neovim:Neovim Text Editor"
         "install_ollama:Ollama AI Platform"
         "install_vitals:Vitals System Monitor"
+        "install_dim_calendar_events:Calendar Events Enhancement"
+        "uninstall_dim_calendar_events:Uninstall Calendar Events Extension"
         "install_espanso:Espanso (Text Expander)"
         "cleanup_system:System Cleanup"
     )

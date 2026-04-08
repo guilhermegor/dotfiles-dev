@@ -1185,8 +1185,47 @@ configure_vitals() {
     fi
 }
 
+configure_dim_calendar_events() {
+    print_status "info" "Configuring Dim Completed Calendar Events..."
+
+    local EXT_UUID="dim-completed-calendar-events@marcinjahn.com"
+    local ext_installed=false
+
+    if [ -d "$HOME/.local/share/gnome-shell/extensions/$EXT_UUID" ] || \
+       [ -d "/usr/share/gnome-shell/extensions/$EXT_UUID" ]; then
+        ext_installed=true
+    fi
+
+    if command -v gnome-extensions &> /dev/null; then
+        if gnome-extensions list 2>/dev/null | grep -q "$EXT_UUID"; then
+            ext_installed=true
+        fi
+    fi
+
+    if [ "$ext_installed" = false ]; then
+        print_status "warning" "Dim Completed Calendar Events not installed"
+        print_status "info" "Install it from: https://extensions.gnome.org/extension/5979/"
+        print_status "info" "Or run: make install_programs (select Calendar Events Enhancement)"
+        return 1
+    fi
+
+    print_status "success" "Dim Completed Calendar Events found"
+
+    # Ensure the extension is enabled
+    if command -v gnome-extensions &> /dev/null; then
+        if ! gnome-extensions info "$EXT_UUID" 2>/dev/null | grep -q "ENABLED"; then
+            print_status "info" "Enabling Dim Completed Calendar Events..."
+            gnome-extensions enable "$EXT_UUID" 2>/dev/null || true
+        fi
+    fi
+
+    print_status "success" "Calendar events extension configured"
+    print_status "info" "Past events will appear dimmed, ongoing events highlighted"
+    print_status "info" "Click the clock in the top bar to see your schedule"
+}
+
 main() {
-    if [ "$EUID" -eq 0 ]; then 
+    if [ "$EUID" -eq 0 ]; then
         print_status "error" "This script should NOT be run with sudo!"
         print_status "info" "Please run as: bash $0"
         exit 1
@@ -1206,7 +1245,8 @@ main() {
     configure_power_settings
     organize_app_folders
     configure_vitals
-    
+    configure_dim_calendar_events
+
     echo -e "${MAGENTA}========================================${NC}"
     print_status "success" "All appearance settings configured successfully!"
     print_status "info" "Changes should take effect immediately. If not, try logging out and back in."

@@ -2847,6 +2847,12 @@ install_google_calendar() {
     local desktop_dir="$HOME/.local/share/applications"
     local desktop_file="$desktop_dir/google-calendar.desktop"
 
+    local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local icon_src="$script_root/assets/google_calendar_app.png"
+    local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    local icon_path="$icon_theme_dir/google-calendar.png"
+    local icon_value="google-calendar"
+
     if [ -f "$desktop_file" ]; then
         print_status "info" "Google Calendar desktop entry already exists, updating"
     fi
@@ -2860,13 +2866,36 @@ install_google_calendar() {
     print_status "info" "Creating Google Calendar desktop entry..."
     mkdir -p "$desktop_dir"
 
+    if [ -f "$icon_src" ]; then
+        print_status "info" "Installing Google Calendar icon..."
+        mkdir -p "$icon_theme_dir"
+        cp "$icon_src" "$icon_path"
+        if command_exists gtk-update-icon-cache; then
+            gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+        fi
+        if command_exists update-desktop-database; then
+            update-desktop-database "$desktop_dir" 2>/dev/null || true
+        fi
+        if [ "${XDG_SESSION_TYPE:-}" = "x11" ] && command_exists gdbus; then
+            gdbus call --session --dest org.gnome.Shell \
+                --object-path /org/gnome/Shell \
+                --method org.gnome.Shell.Eval \
+                "global.reexec_self()" >/dev/null 2>&1 || true
+        else
+            print_status "info" "If the icon doesn't update, press Alt+F2 then 'r' (X11) or log out/in (Wayland)."
+        fi
+    else
+        print_status "warning" "Google Calendar icon not found at $icon_src. Using default icon."
+        icon_value="calendar"
+    fi
+
     cat > "$desktop_file" << EOF
 [Desktop Entry]
 Name=Google Calendar
 Exec=google-chrome --app=https://calendar.google.com
 Terminal=false
 Type=Application
-Icon=calendar
+Icon=${icon_value}
 Categories=Office;Calendar;
 EOF
     chmod +x "$desktop_file"

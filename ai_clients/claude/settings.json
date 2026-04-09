@@ -1,4 +1,6 @@
 {
+  "model": "sonnet",
+  "smallFastModel": "haiku",
   "voiceEnabled": true,
   "permissions": {
     "allow": [

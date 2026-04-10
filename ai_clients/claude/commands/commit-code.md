@@ -7,6 +7,15 @@ argument-hint: <type> [scope] - e.g. feat auth | fix rounding | refactor ingesti
 
 You are creating a git commit for this repository. Follow these steps exactly.
 
+## 0. Verification gate
+
+Before doing anything else, ask the user:
+
+> "Do you want to skip pre-commit verification and commit immediately? (yes = skip, no = run full workflow)"
+
+- If the user answers **yes** (or any affirmative): jump straight to step 5, staging and committing all currently staged changes as-is. Infer the commit message from `git diff --staged` and `git log --oneline -3` without further prompts.
+- If the user answers **no** (or any negative): continue with the full workflow below.
+
 ## 1. Gather context
 
 Run these in parallel:

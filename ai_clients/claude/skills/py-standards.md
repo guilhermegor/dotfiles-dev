@@ -1,6 +1,6 @@
 # Python Coding Standards
 
-Shared coding standards for all py-\* skills. Not a skill itself —
+Shared coding standards for all s:py-\* skills. Not a skill itself —
 read by other skills via the Read tool.
 
 ## Linting compliance

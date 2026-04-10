@@ -1,5 +1,5 @@
 ---
-name: py-debug
+name: s:py-debug
 description: Debug Python errors by tracing tracebacks and identifying root cause. Trigger when asked to debug, diagnose, trace, or investigate a Python error.
 effort: high
 argument-hint: [source-file] [error-or-traceback]

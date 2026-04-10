@@ -1,4 +1,5 @@
 ---
+name: c:export-memory
 allowed-tools: Bash(ls *), Bash(find *), Bash(mkdir *), Bash(cp *), Bash(rsync *), Bash(date *), Bash(echo *), Bash(cat *), Bash(tree *), Read, Glob
 description: Export Claude Code memory, commands, and settings to external backup
 ---

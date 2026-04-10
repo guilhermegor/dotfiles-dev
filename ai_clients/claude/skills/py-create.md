@@ -1,5 +1,5 @@
 ---
-name: py-create
+name: s:py-create
 description: Write a new Python module from scratch. Trigger when asked to create, write, implement, or build a new Python file, module, class, or function.
 effort: high
 argument-hint: [description] [target-file]

@@ -1,5 +1,5 @@
 ---
-name: py-unit-test
+name: s:py-unit-test
 description: Generate comprehensive pytest unit tests for a target Python module. Trigger when asked to write, generate, or create unit tests for a Python file.
 effort: high
 argument-hint: [source-file] [output-file]

@@ -1,5 +1,5 @@
 ---
-name: py-review
+name: s:py-review
 description: Review Python code for standards compliance, design issues, and bugs. Trigger when asked to review, check, or critique a Python file.
 effort: high
 argument-hint: [source-file]

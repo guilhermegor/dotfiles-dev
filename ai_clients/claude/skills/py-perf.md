@@ -1,5 +1,5 @@
 ---
-name: py-perf
+name: s:py-perf
 description: Review Python code for performance issues and optimization opportunities. Trigger when asked to check performance, optimize, or find bottlenecks in Python code.
 effort: high
 argument-hint: [source-file-or-directory]

@@ -1,5 +1,5 @@
 ---
-name: py-dev
+name: a:py-dev
 description: Run the full Python development pipeline — create/improve, audit, optimise, refactor, review, test, and document a Python module.
 model: sonnet
 color: green
@@ -19,14 +19,14 @@ in `$ARGUMENTS`:
 
 1. **Source** — one of:
    - A **file path** (`.py` file or package directory) — skips straight to audit.
-   - A **description** of what to build + a target file path — starts from py-create.
+   - A **description** of what to build + a target file path — starts from s:py-create.
 
 Do not infer. Wait for explicit confirmation.
 
 ## Detect entry point
 
-- If the source is an existing `.py` file or directory → start at **Step 2** (py-audit).
-- If the source is a description of what to build → start at **Step 1** (py-create).
+- If the source is an existing `.py` file or directory → start at **Step 2** (s:py-audit).
+- If the source is a description of what to build → start at **Step 1** (s:py-create).
 
 ---
 
@@ -34,20 +34,20 @@ Do not infer. Wait for explicit confirmation.
 
 ### Step 1: Create (skip if source is an existing file)
 
-Invoke `/py-create` with the description and target file path.
+Invoke `/s:py-create` with the description and target file path.
 
 After completion, note the created file path — this becomes the source for all
 subsequent steps.
 
 ### Step 2: Audit
 
-Invoke `/py-audit` on the source file or directory.
+Invoke `/s:py-audit` on the source file or directory.
 
 Collect all findings (critical, high, medium, low, informational).
 
 ### Step 3: Performance analysis
 
-Invoke `/py-perf` on the source file or directory.
+Invoke `/s:py-perf` on the source file or directory.
 
 Collect all findings (critical, high, medium, low).
 
@@ -75,14 +75,14 @@ Wait for user confirmation before continuing. If the user wants to stop, respect
 
 ### Step 4: Refactor
 
-Invoke `/py-refactor` on the source file.
+Invoke `/s:py-refactor` on the source file.
 
 The refactor step should address issues found in the audit and performance
 analysis, in addition to applying standard style and quality improvements.
 
 ### Step 5: Review
 
-Invoke `/py-review` on the refactored file.
+Invoke `/s:py-review` on the refactored file.
 
 ### --- Checkpoint 2 ---
 
@@ -97,7 +97,7 @@ Invoke `/py-review` on the refactored file.
 - Suggestions: <count>
 
 ### Overall assessment
-<summary from py-review>
+<summary from s:py-review>
 
 Proceed to testing and documentation?
 ```
@@ -107,7 +107,7 @@ to re-run refactor before continuing.
 
 ### Step 6: Unit tests
 
-Invoke `/py-unit-test` with the source file and an appropriate test output path.
+Invoke `/s:py-unit-test` with the source file and an appropriate test output path.
 
 Derive the test path from the source path:
 - `src/module.py` → `tests/test_module.py`
@@ -117,7 +117,7 @@ Ask the user to confirm the test output path before writing.
 
 ### Step 7: Documentation
 
-Invoke `/py-doc` on the source file or directory.
+Invoke `/s:py-doc` on the source file or directory.
 
 ---
 

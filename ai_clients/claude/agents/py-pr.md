@@ -1,5 +1,5 @@
 ---
-name: py-pr
+name: a:py-pr
 description: Validate Python code is PR-ready — review, audit, test coverage, and summary report. Trigger before creating a pull request.
 model: sonnet
 color: blue
@@ -27,13 +27,13 @@ Do not infer the path. Wait for explicit confirmation.
 
 ### Step 1: Code review
 
-Invoke `/py-review` on the source.
+Invoke `/s:py-review` on the source.
 
 Collect: error count, warning count, suggestion count, and all findings.
 
 ### Step 2: Security audit
 
-Invoke `/py-audit` on the source.
+Invoke `/s:py-audit` on the source.
 
 Collect: findings by severity (critical, high, medium, low, informational).
 
@@ -91,8 +91,8 @@ All checks passed. Code is ready for pull request.
 ### Blocking criteria
 
 The verdict is **BLOCKED** if any of:
-- py-review found **errors** (warnings and suggestions do not block)
-- py-audit found **critical** or **high** severity findings
+- s:py-review found **errors** (warnings and suggestions do not block)
+- s:py-audit found **critical** or **high** severity findings
 - Test coverage is below **80%** line coverage
 - No tests exist for the module
 

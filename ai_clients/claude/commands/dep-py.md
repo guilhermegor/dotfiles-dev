@@ -1,4 +1,5 @@
 ---
+name: c:dep-py
 allowed-tools: Bash(poetry*), Bash(uv*), Bash(pip*), Bash(pip-audit*), Bash(python -m*), Bash(cat pyproject.toml*), Read, Glob, Grep, WebSearch
 description: Add, remove, bump, or audit a Python dependency with compatibility reasoning
 argument-hint: "<add|remove|bump|audit> [package] [version] — e.g. dep add httpx | dep bump pydantic 2.0 | dep audit"

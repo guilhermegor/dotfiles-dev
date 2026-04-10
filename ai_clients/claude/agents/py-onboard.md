@@ -1,5 +1,5 @@
 ---
-name: py-onboard
+name: a:py-onboard
 description: Onboard to a Python module or package — map architecture, document patterns, summarize dependencies. Trigger when asked to explain, onboard, or understand a Python codebase.
 model: sonnet
 color: cyan

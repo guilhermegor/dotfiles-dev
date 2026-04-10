@@ -1,4 +1,5 @@
 ---
+name: c:branch-summary
 allowed-tools: Bash(git log*), Bash(git diff*), Bash(git status*), Bash(git merge-base*), Bash(git branch*), Bash(git rev-parse*), Read, Glob, Grep
 description: Summarize all changes on the current branch vs its base
 argument-hint: "[--pr] — optional flag to format output as a PR description"

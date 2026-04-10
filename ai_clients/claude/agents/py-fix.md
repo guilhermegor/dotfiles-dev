@@ -1,5 +1,5 @@
 ---
-name: py-fix
+name: a:py-fix
 description: Fix a Python bug using test-driven development — diagnose, write failing test, fix, verify, review.
 model: sonnet
 color: red
@@ -28,7 +28,7 @@ Do not infer either. Wait for explicit confirmation.
 
 ### Step 1: Diagnose
 
-Invoke `/py-debug` with the source file and error.
+Invoke `/s:py-debug` with the source file and error.
 
 Collect the diagnosis: root cause, evidence, call chain, suggested fix.
 
@@ -40,13 +40,13 @@ Collect the diagnosis: root cause, evidence, call chain, suggested fix.
 ## Checkpoint: Diagnosis Complete
 
 ### Root cause
-<from py-debug output>
+<from s:py-debug output>
 
 ### Suggested fix
-<from py-debug output>
+<from s:py-debug output>
 
 ### Confidence
-<from py-debug output>
+<from s:py-debug output>
 
 Proceed with test-driven fix?
 ```
@@ -123,7 +123,7 @@ continuing.
 
 ### Step 7: Review
 
-Invoke `/py-review` on the modified source file.
+Invoke `/s:py-review` on the modified source file.
 
 Report any findings. If errors are found, fix them before completing.
 

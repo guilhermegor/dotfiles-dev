@@ -1,4 +1,5 @@
 ---
+name: c:restore-memory
 allowed-tools: Bash(ls *), Bash(find *), Bash(mkdir *), Bash(cp *), Bash(rsync *), Bash(date *), Bash(echo *), Bash(cat *), Bash(tree *), Bash(stat *), Bash(readlink *), Bash(wc *), Read, Glob, AskUserQuestion
 description: Restore Claude Code memory, commands, and settings from external backup
 ---

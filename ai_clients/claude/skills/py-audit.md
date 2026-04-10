@@ -1,5 +1,5 @@
 ---
-name: py-audit
+name: s:py-audit
 description: Audit Python code for security vulnerabilities. Trigger when asked to audit, scan for vulnerabilities, check security, or find security issues in Python code.
 effort: high
 argument-hint: [source-file-or-directory]

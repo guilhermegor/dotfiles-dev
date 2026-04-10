@@ -1,5 +1,5 @@
 ---
-name: py-migrate
+name: s:py-migrate
 description: Migrate Python code between versions or upgrade major dependencies. Trigger when asked to migrate, upgrade, update Python version, or upgrade a library.
 effort: high
 argument-hint: [source-file-or-directory] [from-version] [to-version]

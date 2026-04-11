@@ -1,6 +1,6 @@
 ---
 name: c:backup-env
-allowed-tools: Bash(git check-ignore*), Bash(git rev-parse*), Bash(find *), Bash(ls *), Bash(cat *), Bash(cp *), Bash(mkdir *), Bash(date *), Bash(echo *), Read, Glob
+allowed-tools: Bash(git check-ignore*), Bash(git rev-parse*), Bash(find *), Bash(ls *), Bash(cat *), Bash(cp *), Bash(mkdir *), Bash(date *), Bash(echo *), Bash(id *), Read, Glob
 description: Copy git-ignored .env files from the project root to a timestamped backup
 argument-hint: "[target-path] — e.g. /mnt/usb/env_files (optional)"
 ---
@@ -9,16 +9,23 @@ You are backing up git-ignored `.env` files from this project. Follow these step
 
 ## 1. Resolve target path
 
+Trim leading and trailing whitespace from `$ARGUMENTS` before use.
+
 If `$ARGUMENTS` is non-empty, use it directly as the target path and skip to step 2.
 
 Otherwise, resolve the default in this order:
 
 1. Run `cat ~/.claude/.env 2>/dev/null` and look for a line matching
    `CLAUDE_BACKUP_DIR=<path>`. If found, set target to `<path>/env_files`.
-2. If not found, run `ls /media/$USER/ 2>/dev/null` to list mounted drives.
-   Select the first drive whose name contains "BKP" or "backup"
-   (case-insensitive) or that already contains an `env_files/` subdirectory.
-   Set target to `/media/$USER/<drive>/env_files`.
+2. If not found, run `current_user=$(id -un)` to get the current username,
+   then run `ls /media/$current_user/ 2>/dev/null` to list mounted drives.
+   Use this priority to select the drive:
+   a. First, prefer drives that already contain an `env_files/` subdirectory.
+   b. If no drive has `env_files/`, prefer drives whose name contains "BKP" or
+      "backup" (case-insensitive).
+   c. If multiple drives still match the same priority level, show a numbered
+      list and ask the user to choose.
+   Set target to `/media/$current_user/<drive>/env_files`.
 3. If no drive matches, leave the target blank.
 
 Present the resolved default (or a blank prompt if nothing was found):
@@ -61,6 +68,10 @@ Then run:
 find "<git-root>" -maxdepth 1 -name ".env*" ! -name "*.md"
 ```
 
+Note: patterns like `.envrc`, `.env.yml`, and `.env.json` match this search.
+They will only appear as candidates if git-ignored. Review the list before
+confirming.
+
 For each file in the result, run:
 
 ```bash
@@ -94,7 +105,7 @@ commas (e.g. 1 3), or "all" to select everything:
 Wait for the user's response. Parse their input:
 - `"all"` → select every candidate
 - Numbers → select only the files at those positions (1-indexed)
-- Invalid input → ask again
+- Numbers outside the valid range or non-numeric input → ask again
 
 Store the selected files as `<selected>`.
 
@@ -117,10 +128,17 @@ For each file in `<selected>`:
 2. Build the destination path:
    `<target>/<project_name>.<env_name>_<timestamp>`
 
+   Note: if `project_name` contains dots, the destination filename will have
+   multiple dots before the timestamp. This is by design — the timestamp suffix
+   `_YYYYMMDD_HHMMSS` is the unambiguous delimiter when parsing backups.
+
 3. Run:
    ```bash
    cp "<file>" "<destination>"
    ```
+   Capture stderr from the `cp` tool call and include it verbatim in the
+   failure message.
+
    If `cp` fails, print a per-file error:
    > "Failed to copy `<file>` → `<destination>`: <error>"
    Continue with the remaining files — do not abort the whole operation.
@@ -131,8 +149,8 @@ Print a summary of every file that was successfully copied:
 
 ```
 Backed up:
-  .env      → /media/guilhermegor/BKP_GOR/env_files/myproject.env_20260411_080312
-  .env.prd  → /media/guilhermegor/BKP_GOR/env_files/myproject.env.prd_20260411_080312
+  .env      → /media/<user>/BKP_GOR/env_files/myproject.env_20260411_080312
+  .env.prd  → /media/<user>/BKP_GOR/env_files/myproject.env.prd_20260411_080312
 ```
 
 If any files failed to copy, list them separately:

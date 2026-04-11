@@ -50,6 +50,8 @@ Format (follow exactly — no deviations):
 
 Rules:
 - The title line must not exceed 72 characters.
+- Each bullet line in the body must be under 80 characters. If a topic is
+  too long, shorten the description — do not wrap it onto a continuation line.
 - Omit `(<scope>)` if no scope was provided and none is obvious.
 - Each bullet covers one logical change; combine trivially related files on the same bullet with `, `.
 - Do not add boilerplate footers or `Co-Authored-By` lines unless explicitly asked.

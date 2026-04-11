@@ -78,6 +78,10 @@ For each matched filename, parse out:
 - `timestamp`: the final `_YYYYMMDD_HHMMSS` portion, formatted as a
   human-readable date for display (e.g. `2026-04-11 08:03:12`).
 
+Note: treat `<project_name>.` as a **literal prefix** — not a glob — when
+parsing `env_name`. Use the full project name as a string anchor to avoid
+false matches from projects whose names share a common prefix.
+
 Group files by `env_name`. Within each group, sort by timestamp descending.
 
 ## 5. Select backup(s)
@@ -116,9 +120,11 @@ All backups for .env.prd:
 Pick a version (number):
 ```
 
-Wait for the user to pick a version number. Replace the default candidate for
-that env type with the chosen version, then return to the main selection
-prompt.
+Wait for the user to pick a version number. If the user enters a number
+outside the valid range or non-numeric input, re-display the sub-list and
+ask again. Replace the default candidate for that env type with the chosen
+version, then re-display the updated numbered list (with the chosen version
+shown for that env type) and wait for the user's selection.
 
 Store all final selected backup files as `<selected>`.
 
@@ -182,3 +188,7 @@ Failed:
 ```
 
 Omit any section (Restored / Skipped / Failed) that has no entries.
+
+Files skipped due to a failed backup `mv` (step 6) are reported under
+**Failed** with the note "(could not back up existing file — original
+untouched)".

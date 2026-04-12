@@ -133,13 +133,30 @@ Show the proposed title and body to the user:
 
 Wait for the user's response:
 
-- **Approved / yes / LGTM** → proceed to step 5.
+- **Approved / yes / LGTM** → proceed to step 4a.
 - **Suggestions** → apply them and re-present from step 4.
 - **No / cancel** → stop.
 
 Accept as many revision rounds as the user needs.
 
+## 4a. Draft and reviewers
+
+Ask both questions together in a single prompt:
+
+> "Two quick questions before opening:  
+> 1. Open as a **draft** PR? (yes/no)  
+> 2. Assign reviewers? Enter GitHub usernames separated by commas, or press  
+>    Enter to skip."
+
+Parse the response:
+
+- **Draft**: set `draft=true` if the user answers yes; otherwise `draft=false`.
+- **Reviewers**: split the comma-separated list into individual handles,
+  stripping whitespace. If the user left it empty, set `reviewers=()`.
+
 ## 5. Open the PR
+
+Build the `gh pr create` command from the approved values:
 
 ```bash
 gh pr create \
@@ -148,16 +165,21 @@ gh pr create \
   --body "$(cat <<'EOF'
 <approved body>
 EOF
-)"
+)" \
+  [--draft]                          # include only when draft=true
+  [--reviewer <handle1,handle2,...>] # include only when reviewers is non-empty
 ```
 
-Report the resulting PR URL:
+Report the result:
 
-> "PR opened: <url>"
+> "PR opened: <url>  
+> Draft: <yes/no>  
+> Reviewers: <handles or 'none'>"
 
 ## Do Not
 
 - Do not open the PR without explicit user approval of title and body.
 - Do not skip the confirmation gate (step 0) even when invoked from an agent.
+- Do not skip step 4a — always ask about draft and reviewers before opening.
 - Do not truncate or omit template sections without noting it to the user.
 - Do not push commits — only create the PR against already-pushed commits.

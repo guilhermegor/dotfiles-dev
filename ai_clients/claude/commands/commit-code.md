@@ -7,14 +7,21 @@ argument-hint: <type> [scope] - e.g. feat auth | fix rounding | refactor ingesti
 
 You are creating a git commit for this repository. Follow these steps exactly.
 
-## 0. Verification gate
+## 0. Workflow gate
 
 Before doing anything else, ask the user:
 
-> "Do you want to skip pre-commit verification and commit immediately? (yes = skip, no = run full workflow) [default: no]"
+> "Do you want to skip the message-composition workflow and commit immediately? (yes = infer message and commit now, no = run full workflow) [default: no]"
 
 - If the user answers **yes** (or any affirmative): jump straight to step 5, staging and committing all currently staged changes as-is. Infer the commit message from `git diff --staged` and `git log --oneline -3` without further prompts.
 - If the user answers **no**, presses Enter without input, or gives any non-affirmative response: continue with the full workflow below.
+
+Then ask a second, independent question:
+
+> "Do you want to bypass git hooks for this commit? (yes = add --no-verify, no = run hooks normally) [default: no]"
+
+- If **yes**: add `--no-verify` to the `git commit` call in step 5.
+- If **no** (or empty): omit `--no-verify`; hooks run normally.
 
 ## 1. Gather context
 
@@ -87,7 +94,7 @@ Only proceed to step 5 once every line shows PASS.
 
 1. If there are unstaged changes the user likely wants included, stage them with `git add` targeting specific files — never `git add -A` blindly. Ask the user if it is ambiguous which files to include.
 2. Show the composed message to the user for confirmation before running `git commit`.
-3. Run `git commit -m "$(cat <<'EOF' ... EOF)"` using a heredoc to preserve formatting.
+3. Run `git commit [--no-verify] -m "$(cat <<'EOF' ... EOF)"` using a heredoc to preserve formatting, including `--no-verify` only if the user requested it in step 0.
 4. Run `git push origin HEAD` to push the branch to the remote.
 5. Report the resulting commit hash, one-line summary, and push status.
 

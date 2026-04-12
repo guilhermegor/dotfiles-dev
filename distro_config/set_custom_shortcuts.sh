@@ -14,29 +14,23 @@ print_status() {
     echo -e "${color}${message}${NC}"
 }
 
-# function to check if a keybinding already exists
+# function to check if a keybinding conflicts with a GNOME default binding.
+# Custom bindings are skipped — this script fully owns and overwrites that
+# array, so existing custom slots are never real conflicts.
 keybinding_exists() {
     local binding="$1"
-    
-    # check in custom keybindings
-    local custom_bindings=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null)
-    for i in $(seq 0 $(($(echo "$custom_bindings" | grep -o "custom" | wc -l)-1))); do
-        existing_binding=$(gsettings get org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom${i}/ binding 2>/dev/null)
-        if [ "$existing_binding" = "'$binding'" ]; then
-            echo "Conflict found in custom keybinding $i: $existing_binding"
-            return 0
-        fi
-    done
-    
-    # check in default keybindings
-    local default_bindings=$(gsettings list-recursively org.gnome.settings-daemon.plugins.media-keys | grep -v "custom-keybindings")
+
+    local default_bindings
+    default_bindings=$(gsettings list-recursively org.gnome.settings-daemon.plugins.media-keys \
+        | grep -v "custom-keybindings")
+
     while read -r line; do
         if [[ "$line" == *"'$binding'"* ]]; then
             echo "Conflict found in default keybinding: $line"
             return 0
         fi
     done <<< "$default_bindings"
-    
+
     return 1
 }
 
@@ -82,7 +76,8 @@ set_keybindings_array() {
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom6/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom7/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom8/', \
-    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom9/']"
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom9/', \
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom10/']"
 }
 
 # function to set individual keybindings
@@ -181,7 +176,7 @@ set_all_keybindings() {
     print_status $GREEN "Configuring GNOME custom keybindings..."
     
     # Define the keybindings we'll be using
-    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c" "<Super>b")
+    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c" "<Super>b" "<Super>j")
     
     # Ask user if they want to verify conflicts
     read -p "Do you want to verify for shortcut conflicts before proceeding? [Y/n] " -n 1 -r
@@ -196,7 +191,7 @@ set_all_keybindings() {
     # Create the backup script and install to ~/.local/bin
     create_backup_script
 
-    # Increase the array size to accommodate the new keybindings (now 10 items)
+    # Increase the array size to accommodate the new keybindings (now 11 items)
     set_keybindings_array
     
     # Set individual keybindings
@@ -210,6 +205,7 @@ set_all_keybindings() {
     set_individual_keybinding 7 "Gerenciador de Tarefas" "flatpak run io.missioncenter.MissionCenter" "<Ctrl><Shift>Escape"
     set_individual_keybinding 8 "Open Characters" "gnome-characters" "<Super>c"
     set_individual_keybinding 9 "Backup External SSDs" "$HOME/.local/bin/backup-external-ssd.sh" "<Super>b"
+    set_individual_keybinding 10 "Show All Shortcuts" "gnome-control-center keyboard" "<Super>j"
 
     print_status $GREEN "All keybindings have been configured successfully!"
     print_status $YELLOW "You can now use:"
@@ -219,6 +215,7 @@ set_all_keybindings() {
     print_status $YELLOW "  - Ctrl+Shift+Esc to open Task Manager"
     print_status $YELLOW "  - Super+C to open GNOME Characters"
     print_status $YELLOW "  - Super+B to back up external SSDs to the BKP cloud-sync drive"
+    print_status $YELLOW "  - Super+J to open GNOME keyboard shortcuts (custom + default)"
 }
 
 # execute the main function

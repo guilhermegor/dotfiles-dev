@@ -44,6 +44,35 @@ def process(data):
     return transform(data)
 ```
 
+## Module Structure
+
+### One Class Per File
+
+Each source file must contain exactly **one public class**.
+
+- Public classes: one per file, named after the file (`user_service.py` → `UserService`).
+- Private/shared base classes: allowed in their own file with a leading underscore prefix
+  (`_base_ingestion.py`). Must not appear in the same file as a public class.
+- Utility functions with no shared state or lifecycle: write them as module-level functions,
+  not wrapped in a utility class.
+
+**Why:** Single-class files make `git blame` accurate, keep test files focused, and eliminate
+the implicit coupling that arises when two classes share a module boundary.
+
+### Three Files per Feature Module
+
+Every new or refactored feature module requires three files created together:
+
+| File | Purpose |
+|------|---------|
+| Implementation | Business logic — the class or functions |
+| Tests | Unit tests mirroring the implementation path |
+| Example | Runnable usage demonstration (zero-config path) |
+
+No module is complete until all three exist and pass CI.
+
+---
+
 ## Design Patterns
 
 ### Prefer always

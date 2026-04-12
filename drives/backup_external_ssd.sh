@@ -1,133 +1,132 @@
 #!/bin/bash
 
-# Backup external SSDs to the BKP cloud-sync drive.
+# Backup a mounted external SSD to a cloud folder on this PC.
+#
+# GUI flow (zenity — works from GNOME keyboard shortcut):
+#   1. Pick the source drive from drives mounted under /media/$USER/
+#   2. Enter / confirm the cloud destination path (remembered between runs)
+#   3. Show a pulsing progress dialog while rsync runs
+#   4. Notify on success or failure
 #
 # Destination structure:
-#   <bkp_drive>/<source_drive_name>/<yyyymmdd_hhmmss>/
+#   <cloud_path>/<source_drive_name>/<yyyymmdd_hhmmss>/
 #
-# BKP drive selection: first drive under /media/$USER/ whose name starts with
-# "BKP" or contains "backup" (case-insensitive), matching the convention used
-# in ai_clients/claude/commands/backup-env.md.
-#
-# Designed to run from a GNOME keybinding (Super+B): uses notify-send for
-# feedback instead of a terminal. Run directly for verbose rsync output.
+# Last-used destination is saved to ~/.config/backup-external-ssd.conf
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
+CONF_FILE="$HOME/.config/backup-external-ssd.conf"
 CURRENT_USER=$(id -un)
 MEDIA_BASE="/media/$CURRENT_USER"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-print_status() {
-    local status="$1"
-    local message="$2"
-    case "$status" in
-        success) echo -e "${GREEN}[✓]${NC} ${message}" ;;
-        error)   echo -e "${RED}[✗]${NC} ${message}" >&2 ;;
-        warning) echo -e "${YELLOW}[!]${NC} ${message}" ;;
-        info)    echo -e "${BLUE}[i]${NC} ${message}" ;;
-        *)       echo -e "[ ] ${message}" ;;
-    esac
+# ── Config helpers ────────────────────────────────────────────────────────────
+
+load_last_dest() {
+    [ -f "$CONF_FILE" ] || return
+    grep '^LAST_DEST=' "$CONF_FILE" | cut -d= -f2-
 }
 
-notify_user() {
-    local urgency="$1"
-    local summary="$2"
-    local body="${3:-}"
-    notify-send --urgency="$urgency" "SSD Backup" "${summary}${body:+ — $body}" 2>/dev/null || true
+save_last_dest() {
+    mkdir -p "$(dirname "$CONF_FILE")"
+    echo "LAST_DEST=$1" > "$CONF_FILE"
 }
 
-find_bkp_drive() {
-    if [ ! -d "$MEDIA_BASE" ]; then
-        echo ""
-        return
-    fi
+# ── Drive discovery ───────────────────────────────────────────────────────────
 
+find_mounted_drives() {
     for drive_path in "$MEDIA_BASE"/*/; do
         [ -d "$drive_path" ] || continue
-        local name
-        name=$(basename "$drive_path")
-        if echo "$name" | grep -iqE '(^BKP|backup)'; then
-            echo "$drive_path"
-            return
-        fi
-    done
-
-    echo ""
-}
-
-find_source_drives() {
-    if [ ! -d "$MEDIA_BASE" ]; then
-        return
-    fi
-
-    for drive_path in "$MEDIA_BASE"/*/; do
-        [ -d "$drive_path" ] || continue
-        local name
-        name=$(basename "$drive_path")
-        if ! echo "$name" | grep -iqE '(^BKP|backup)'; then
-            echo "$drive_path"
-        fi
+        basename "$drive_path"
     done
 }
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 main() {
-    print_status "info" "External SSD backup — $TIMESTAMP"
-    notify_user "low" "Backup started" "$TIMESTAMP"
+    # 1. Collect mounted drives
+    local -a drives
+    mapfile -t drives < <(find_mounted_drives)
 
-    local bkp_drive
-    bkp_drive=$(find_bkp_drive)
-
-    if [ -z "$bkp_drive" ]; then
-        local msg="No BKP drive found under $MEDIA_BASE. Mount a drive named BKP* first."
-        print_status "error" "$msg"
-        notify_user "critical" "Backup failed" "$msg"
+    if [ ${#drives[@]} -eq 0 ]; then
+        zenity --error --title="Backup" \
+            --text="No drives found under <tt>$MEDIA_BASE</tt>.\n\nMount your external SSD first."
         exit 1
     fi
 
-    print_status "info" "Destination: $bkp_drive"
-
-    local -a sources
-    mapfile -t sources < <(find_source_drives)
-
-    if [ ${#sources[@]} -eq 0 ]; then
-        local msg="No source drives found under $MEDIA_BASE."
-        print_status "warning" "$msg"
-        notify_user "normal" "Nothing to back up" "$msg"
-        exit 0
+    # 2. Pick source drive
+    local source_name
+    if [ ${#drives[@]} -eq 1 ]; then
+        source_name="${drives[0]}"
+        zenity --question --title="Backup" \
+            --text="Back up <b>$source_name</b> to the cloud?\n\nPress OK to continue." \
+            --ok-label="OK" --cancel-label="Cancel" || exit 0
+    else
+        source_name=$(
+            zenity --list \
+                --title="Backup — select source drive" \
+                --text="Choose the drive to back up:" \
+                --column="Drive" \
+                "${drives[@]}"
+        ) || exit 0
     fi
 
-    local backed_up=0
-    local failed=0
+    local src="$MEDIA_BASE/$source_name"
 
-    for src in "${sources[@]}"; do
-        local drive_name
-        drive_name=$(basename "$src")
-        local dest="${bkp_drive}${drive_name}/${TIMESTAMP}"
+    # 3. Ask for destination cloud path (pre-filled with last-used value)
+    local last_dest
+    last_dest=$(load_last_dest)
 
-        print_status "info" "Backing up '$drive_name' → $dest"
+    local dest_base
+    dest_base=$(
+        zenity --entry \
+            --title="Backup — destination" \
+            --text="Enter the cloud folder path on this PC\n(files will be saved under <b>$source_name/&lt;timestamp&gt;/</b>):" \
+            --entry-text="${last_dest:-$HOME/}"
+    ) || exit 0
 
-        if mkdir -p "$dest" && rsync -a --info=progress2 "$src" "$dest/"; then
-            print_status "success" "Done: $drive_name"
-            backed_up=$((backed_up + 1))
-        else
-            print_status "error" "Failed: $drive_name"
-            failed=$((failed + 1))
-        fi
-    done
+    if [ -z "$dest_base" ]; then
+        zenity --error --title="Backup" --text="No destination path provided."
+        exit 1
+    fi
 
-    if [ "$failed" -eq 0 ]; then
-        local msg="$backed_up drive(s) → $(basename "$bkp_drive")/$TIMESTAMP"
-        print_status "success" "Backup complete — $msg"
-        notify_user "normal" "Backup complete" "$msg"
+    save_last_dest "$dest_base"
+
+    local dest="${dest_base%/}/${source_name}/${TIMESTAMP}"
+
+    if ! mkdir -p "$dest"; then
+        zenity --error --title="Backup" \
+            --text="Cannot create destination:\n<tt>$dest</tt>\n\nCheck the path and permissions."
+        exit 1
+    fi
+
+    # 4. Run rsync with a pulsing progress dialog
+    notify-send --urgency=low "Backup started" \
+        "$source_name → $dest_base" 2>/dev/null || true
+
+    rsync -a --exclude='lost+found' "$src/" "$dest/" &
+    local rsync_pid=$!
+
+    zenity --progress --pulsate --no-cancel --auto-close \
+        --title="Backing up $source_name" \
+        --text="Copying <b>$source_name</b> to:\n<tt>$dest</tt>" 2>/dev/null &
+    local zenity_pid=$!
+
+    wait "$rsync_pid"
+    local exit_code=$?
+
+    kill "$zenity_pid" 2>/dev/null || true
+    wait "$zenity_pid" 2>/dev/null || true
+
+    # 5. Report result
+    if [ "$exit_code" -eq 0 ]; then
+        notify-send --urgency=normal "Backup complete" \
+            "$source_name → $dest_base/$source_name/$TIMESTAMP" 2>/dev/null || true
+        zenity --info --title="Backup complete" \
+            --text="<b>$source_name</b> backed up successfully.\n\n<tt>$dest</tt>"
     else
-        local msg="$backed_up succeeded, $failed failed"
-        print_status "warning" "$msg"
-        notify_user "critical" "Backup completed with errors" "$msg"
+        notify-send --urgency=critical "Backup failed" \
+            "rsync exited with code $exit_code" 2>/dev/null || true
+        zenity --error --title="Backup failed" \
+            --text="rsync exited with error <b>$exit_code</b>.\n\nCheck available space and permissions."
         exit 1
     fi
 }

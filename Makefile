@@ -123,29 +123,29 @@ setup_all_drivers: setup_bluetooth setup_keyboard setup_mouse setup_wifi
 
 check_drive_legitimacy:
 	@echo "Checking drive legitimacy and integrity..."
-	@bash drives/check_legitimity.sh
+	@bash storage/check_legitimity.sh
 
 data_recovery:
 	@echo "Running data recovery tools..."
-	@bash drives/data_recovery.sh
+	@bash storage/data_recovery.sh
 
 format_hard:
 	@echo "⚠️  WARNING: Performing hard format (complete drive formatting)..."
 	@echo "This operation is IRREVERSIBLE. Press Ctrl+C to cancel."
 	@sleep 3
-	@bash drives/format_hard.sh
+	@bash storage/format_hard.sh
 
 format_neat:
 	@echo "Performing neat format (quick and clean)..."
-	@bash drives/format_neat.sh
+	@bash storage/format_neat.sh
 
 vault_setup:
 	@echo "Setting up secure storage vault..."
-	@bash drives/vault.sh
+	@bash storage/vault.sh
 
 mount_disks:
 	@echo "Mounting unmounted non-NTFS partitions..."
-	@bash drives/mount_disks.sh
+	@bash storage/mount_disks.sh
 
 # -------------------
 # OS MANAGEMENT
@@ -237,7 +237,6 @@ permissions:
 	@echo "Making all scripts executable..."
 	@find distro_config -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find drivers -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
-	@find drives -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find os -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find storage -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find code_editors -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
@@ -272,10 +271,10 @@ check_status:
 	@lsb_release -a 2>/dev/null || cat /etc/os-release
 	@echo ""
 	@echo "=== Available Scripts ==="
-	@find distro_config drivers drives os storage code_editors -name "*.sh" -type f 2>/dev/null | sort
+	@find distro_config drivers os storage code_editors -name "*.sh" -type f 2>/dev/null | sort
 	@echo ""
 	@echo "=== Executable Scripts ==="
-	@find distro_config drivers drives os storage code_editors -name "*.sh" -type f -executable 2>/dev/null | sort
+	@find distro_config drivers os storage code_editors -name "*.sh" -type f -executable 2>/dev/null | sort
 	@echo ""
 	@echo "=== AI Clients Modules ==="
 	@find ai_clients -name "*.sh" -type f 2>/dev/null | sort
@@ -289,14 +288,11 @@ list_scripts:
 	@echo "Driver scripts:"
 	@ls -1 drivers/*.sh 2>/dev/null || echo "  No driver scripts found"
 	@echo ""
-	@echo "Drive scripts:"
-	@ls -1 drives/*.sh 2>/dev/null || echo "  No drive scripts found"
+	@echo "Storage scripts:"
+	@ls -1 storage/*.sh 2>/dev/null || echo "  No storage scripts found"
 	@echo ""
 	@echo "OS scripts:"
 	@ls -1 os/*.sh 2>/dev/null || echo "  No OS scripts found"
-	@echo ""
-	@echo "Storage scripts:"
-	@ls -1 storage/*.sh 2>/dev/null || echo "  No storage scripts found"
 	@echo ""
 	@echo "Code Editor scripts:"
 	@ls -1 code_editors/*.sh 2>/dev/null || echo "  No code editor scripts found"
@@ -306,9 +302,9 @@ list_scripts:
 
 clean:
 	@echo "Cleaning temporary files..."
-	@find distro_config drivers drives os storage code_editors -name "*.log" -type f -delete 2>/dev/null || true
-	@find distro_config drivers drives os storage code_editors -name "*.tmp" -type f -delete 2>/dev/null || true
-	@find distro_config drivers drives os storage code_editors -name "*~" -type f -delete 2>/dev/null || true
+	@find distro_config drivers os storage code_editors -name "*.log" -type f -delete 2>/dev/null || true
+	@find distro_config drivers os storage code_editors -name "*.tmp" -type f -delete 2>/dev/null || true
+	@find distro_config drivers os storage code_editors -name "*~" -type f -delete 2>/dev/null || true
 	@echo "✅ Cleanup completed!"
 
 # -------------------

@@ -35,11 +35,11 @@
 ### 💾 Storage Management
 
 #### **Drive Operations**
-- [Legitimacy Check](drives/check_legitimity.sh) - Drive authenticity and integrity verification (`make check_drive_legitimacy`)
-- [Data Recovery](drives/data_recovery.sh) - Data recovery tools and procedures (`make data_recovery`)
-- [Hard Format](drives/format_hard.sh) - Complete drive formatting (`make format_hard`)
-- [Neat Format](drives/format_neat.sh) - Quick and clean formatting (`make format_neat`)
-- [Vault Management](drives/vault.sh) - Secure storage vault setup (`make vault_setup`)
+- [Legitimacy Check](storage/check_legitimity.sh) - Drive authenticity and integrity verification (`make check_drive_legitimacy`)
+- [Data Recovery](storage/data_recovery.sh) - Data recovery tools and procedures (`make data_recovery`)
+- [Hard Format](storage/format_hard.sh) - Complete drive formatting (`make format_hard`)
+- [Neat Format](storage/format_neat.sh) - Quick and clean formatting (`make format_neat`)
+- [Vault Management](storage/vault.sh) - Secure storage vault setup (`make vault_setup`)
 
 **Quick setup:** Run `make storage_setup` for complete storage configuration.
 
@@ -52,9 +52,7 @@
 
 **Quick setup:** Run `make vm_setup` to configure the complete VM environment.
 
-### 📊 Storage Analytics
-
-#### **Storage Monitoring**
+#### **Storage Analysis**
 - [Storage Hiato](storage/storage_hiato.sh) - Storage gap analysis and monitoring (`make storage_analysis`)
 
 ## 🚀 Getting Started
@@ -194,7 +192,7 @@ bash drivers/bluetooth_adapter.sh
 bash drivers/setup_keyboard.sh
 
 # Storage setup
-bash drives/format_neat.sh
+bash storage/format_neat.sh
 bash storage/storage_hiato.sh
 ```
 
@@ -224,13 +222,6 @@ dotfiles-dev/
 │   ├── 🖱️ mouse.sh               # Mouse settings
 │   └── 📶 tplink_wifi_adapter.sh # WiFi adapter setup
 │
-├── 📁 drives/                    # Storage management
-│   ├── 🔍 check_legitimity.sh    # Drive legitimacy verification
-│   ├── 💾 data_recovery.sh       # Data recovery tools
-│   ├── 🗑️ format_hard.sh         # Complete formatting
-│   ├── 🧹 format_neat.sh         # Quick formatting
-│   └── 🔒 vault.sh               # Secure vault management
-│
 ├── 📁 espanso/                   # Espanso packages
 │   ├── 📦 datetime/              # Date/time shortcuts
 │   ├── 📦 git_reset/             # Git reset shortcut
@@ -244,8 +235,15 @@ dotfiles-dev/
 │   ├── 🖥️ vm_creator.sh          # VM creation utility
 │   └── 🚀 vm_launcher.sh         # VM management
 │
-├── 📁 storage/                   # Storage analytics
-│   └── 📊 storage_hiato.sh       # Storage monitoring
+├── 📁 storage/                   # Storage management & analytics
+│   ├── 🔍 check_legitimity.sh    # Drive legitimacy verification
+│   ├── 💾 data_recovery.sh       # Data recovery tools
+│   ├── 🗑️ format_hard.sh         # Complete formatting
+│   ├── 🧹 format_neat.sh         # Quick formatting
+│   ├── 💿 mount_disks.sh         # Auto-mount partitions
+│   ├── 🔒 vault.sh               # Secure vault management
+│   ├── ☁️  backup_external_ssd.sh # GUI SSD backup to cloud folder
+│   └── 📊 storage_hiato.sh       # Storage capacity analysis
 │
 └── 📖 README.md                  # Project documentation
 ```

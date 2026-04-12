@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A Bash-based Linux dotfiles and system-setup toolkit. Everything is orchestrated through `make`. Scripts are organised by concern under `distro_config/`, `drivers/`, `drives/`, `os/`, `storage/`, `code_editors/`, `espanso/`, and `ai_clients/`.
+A Bash-based Linux dotfiles and system-setup toolkit. Everything is orchestrated through `make`. Scripts are organised by concern under `distro_config/`, `drivers/`, `storage/`, `os/`, `code_editors/`, `espanso/`, and `ai_clients/`.
 
 ## Common commands
 

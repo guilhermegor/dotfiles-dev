@@ -153,7 +153,7 @@ EOF
 create_backup_script() {
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local src_script="$script_dir/../drives/backup_external_ssd.sh"
+    local src_script="$script_dir/../storage/backup_external_ssd.sh"
     local dest_script="$HOME/.local/bin/backup-external-ssd.sh"
 
     print_status $BLUE "Installing backup-external-ssd.sh to $dest_script..."

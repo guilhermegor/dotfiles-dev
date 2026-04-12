@@ -81,7 +81,8 @@ set_keybindings_array() {
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom5/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom6/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom7/', \
-    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom8/']"
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom8/', \
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom9/']"
 }
 
 # function to set individual keybindings
@@ -153,12 +154,34 @@ EOF
     print_status $GREEN "Nautilus integration set up automatically!"
 }
 
+# function to install the external SSD backup script to ~/.local/bin
+create_backup_script() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local src_script="$script_dir/../drives/backup_external_ssd.sh"
+    local dest_script="$HOME/.local/bin/backup-external-ssd.sh"
+
+    print_status $BLUE "Installing backup-external-ssd.sh to $dest_script..."
+
+    mkdir -p "$HOME/.local/bin"
+
+    if [ ! -f "$src_script" ]; then
+        print_status $RED "Source script not found: $src_script"
+        return 1
+    fi
+
+    cp "$src_script" "$dest_script"
+    chmod +x "$dest_script"
+
+    print_status $GREEN "Backup script installed at $dest_script"
+}
+
 # Modified main function to set up all keybindings including Insync kill
 set_all_keybindings() {
     print_status $GREEN "Configuring GNOME custom keybindings..."
     
-    # Define the keybindings we'll be using (including new Super+K, Super+., and Ctrl+Shift+Escape)
-    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c")
+    # Define the keybindings we'll be using
+    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c" "<Super>b")
     
     # Ask user if they want to verify conflicts
     read -p "Do you want to verify for shortcut conflicts before proceeding? [Y/n] " -n 1 -r
@@ -170,7 +193,10 @@ set_all_keybindings() {
     # Create the enhanced copy-path script and set up Nautilus integration
     create_copy_path_script
     
-    # Increase the array size to accommodate the new keybindings (now 9 items)
+    # Create the backup script and install to ~/.local/bin
+    create_backup_script
+
+    # Increase the array size to accommodate the new keybindings (now 10 items)
     set_keybindings_array
     
     # Set individual keybindings
@@ -183,6 +209,7 @@ set_all_keybindings() {
     set_individual_keybinding 6 "Kill Insync" "pkill -f insync" "<Super>k"
     set_individual_keybinding 7 "Gerenciador de Tarefas" "flatpak run io.missioncenter.MissionCenter" "<Ctrl><Shift>Escape"
     set_individual_keybinding 8 "Open Characters" "gnome-characters" "<Super>c"
+    set_individual_keybinding 9 "Backup External SSDs" "$HOME/.local/bin/backup-external-ssd.sh" "<Super>b"
 
     print_status $GREEN "All keybindings have been configured successfully!"
     print_status $YELLOW "You can now use:"
@@ -191,6 +218,7 @@ set_all_keybindings() {
     print_status $YELLOW "  - Super+K to kill Insync processes"
     print_status $YELLOW "  - Ctrl+Shift+Esc to open Task Manager"
     print_status $YELLOW "  - Super+C to open GNOME Characters"
+    print_status $YELLOW "  - Super+B to back up external SSDs to the BKP cloud-sync drive"
 }
 
 # execute the main function

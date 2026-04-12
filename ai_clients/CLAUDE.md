@@ -117,6 +117,31 @@ allowed-tools: Read Glob Grep  # space-separated for skills (no commas)
 | `a:` | Agent | `a:name` in task list |
 | `s:` | Skill | Loaded by Skill tool |
 
+## File naming standard
+
+Filenames (without `.md`) follow the pattern **`<tool>-<action>`** or
+**`<language>-<action>`**, where the prefix identifies the primary tool or
+language the artifact targets:
+
+| Prefix | Targets | Examples |
+|--------|---------|---------|
+| `py-` | Python language | `py-audit`, `py-create`, `py-unit-test` |
+| `bash-` | Bash scripts | `bash-create` |
+| `gh-` | GitHub CLI (`gh`) | `gh-create-pr` |
+| `git-` | Git commands | `git-rebase` (hypothetical) |
+
+**Rules:**
+- Use the tool/CLI name as prefix when the skill wraps a specific external
+  tool (e.g. `gh`, `git`, `docker`).
+- Use the language name as prefix when the skill targets a programming
+  language workflow (e.g. `py`, `bash`).
+- The action segment is a short imperative verb phrase: `create`, `audit`,
+  `unit-test`, `create-pr`.
+- Never use a bare action without a prefix (e.g. `create-pr.md` is wrong;
+  `gh-create-pr.md` is correct).
+- The `name` field in frontmatter follows the same pattern with the
+  namespace prefix: `s:gh-create-pr`, `s:py-audit`, `c:commit-code`.
+
 ## Deployment
 
 ```bash

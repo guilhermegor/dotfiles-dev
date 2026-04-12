@@ -1,5 +1,5 @@
 ---
-name: s:create-pr
+name: s:gh-create-pr
 description: Use when creating a pull request — analyses branch changes vs main, proposes a title and structured PR body for user approval, then opens the PR via gh CLI.
 effort: high
 argument-hint: [base-branch — default: main]

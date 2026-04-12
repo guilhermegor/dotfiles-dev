@@ -133,7 +133,7 @@ Otherwise the verdict is **READY**.
 When the verdict is **READY** and no PR was found in Step 0, invoke:
 
 ```
-/s:create-pr
+/s:gh-create-pr
 ```
 
 The skill handles the confirmation gate, template composition, user approval
@@ -152,6 +152,6 @@ After each PR check, save a brief note about:
 
 - Do not modify any files — this is a read-only validation.
 - Do not create or fix tests — only report coverage gaps.
-- Do not auto-create the PR — wait for s:create-pr confirmation gate.
+- Do not auto-create the PR — wait for s:gh-create-pr confirmation gate.
 - Do not lower the blocking thresholds without user approval.
 - Do not offer to open a PR when the verdict is BLOCKED.

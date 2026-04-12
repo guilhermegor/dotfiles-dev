@@ -50,9 +50,9 @@ def process(data):
 
 Each source file must contain exactly **one public class**.
 
-- Public classes: one per file, named after the file (`user_service.py` → `UserService`).
+- Public classes: one per file, named after the file (`user_service.<extension_language>` → `UserService`).
 - Private/shared base classes: allowed in their own file with a leading underscore prefix
-  (`_base_ingestion.py`). Must not appear in the same file as a public class.
+  (`_base_ingestion.<extension_language>`). Must not appear in the same file as a public class.
 - Utility functions with no shared state or lifecycle: write them as module-level functions,
   not wrapped in a utility class.
 
@@ -92,7 +92,7 @@ class StringUtils:
     @staticmethod
     def slugify(text: str) -> str: ...
 
-# Prefer — just a function in utils/text.py
+# Prefer — just a function in utils/text.<extension_language>
 def slugify(text: str) -> str: ...
 ```
 

@@ -1,6 +1,6 @@
 ---
 name: c:commit-code
-allowed-tools: Bash(git diff*), Bash(git diff --staged*), Bash(git status*), Bash(git log*), Bash(git add*), Bash(git commit*), Bash(git push*), Bash(find .claude/*), Read, Glob, Grep
+allowed-tools: Bash(git diff*), Bash(git diff --staged*), Bash(git status*), Bash(git log*), Bash(git add*), Bash(git commit*), Bash(git push*), Bash(git tag*), Bash(find .claude/*), Read, Glob, Grep
 description: Stage changes and create a conventional commit with structured message
 argument-hint: <type> [scope] - e.g. feat auth | fix rounding | refactor ingestion
 ---
@@ -83,3 +83,25 @@ Only proceed to step 5 once every line passes.
 3. Run `git commit -m "$(cat <<'EOF' ... EOF)"` using a heredoc to preserve formatting.
 4. Run `git push origin HEAD` to push the branch to the remote.
 5. Report the resulting commit hash, one-line summary, and push status.
+
+## 6. Tag (optional)
+
+After reporting the commit result, ask:
+
+> "Do you want to create a git tag for this commit? (yes / no)"
+
+- If **no**: skip this step entirely.
+- If **yes**: ask:
+
+  > "What should the tag name be? (e.g. v1.2.0)"
+
+  Then:
+  1. Create an annotated tag pointing at the new commit:
+     ```bash
+     git tag -a "<tag-name>" -m "<tag-name>"
+     ```
+  2. Push the tag to the remote:
+     ```bash
+     git push origin "<tag-name>"
+     ```
+  3. Report the tag name and the push status.

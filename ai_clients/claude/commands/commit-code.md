@@ -11,10 +11,10 @@ You are creating a git commit for this repository. Follow these steps exactly.
 
 Before doing anything else, ask the user:
 
-> "Do you want to skip pre-commit verification and commit immediately? (yes = skip, no = run full workflow)"
+> "Do you want to skip pre-commit verification and commit immediately? (yes = skip, no = run full workflow) [default: no]"
 
 - If the user answers **yes** (or any affirmative): jump straight to step 5, staging and committing all currently staged changes as-is. Infer the commit message from `git diff --staged` and `git log --oneline -3` without further prompts.
-- If the user answers **no** (or any negative): continue with the full workflow below.
+- If the user answers **no**, presses Enter without input, or gives any non-affirmative response: continue with the full workflow below.
 
 ## 1. Gather context
 
@@ -73,8 +73,15 @@ echo -n "<type>(<scope>): <your title here>" | wc -c
 echo -n "  - <your bullet text> → <filename>" | wc -c
 ```
 
-If any measurement exceeds the limit, shorten the text and re-measure.
-Only proceed to step 5 once every line passes.
+Report results in this format:
+
+```
+Title:  <N> chars — must be ≤ 72 → PASS / FAIL
+Bullet: <N> chars — must be ≤ 80 → PASS / FAIL
+```
+
+If any line fails, shorten the text, re-measure, and update the report before proceeding.
+Only proceed to step 5 once every line shows PASS.
 
 ## 5. Stage, commit, and push
 
@@ -88,9 +95,9 @@ Only proceed to step 5 once every line passes.
 
 After reporting the commit result, ask:
 
-> "Do you want to create a git tag for this commit? (yes / no)"
+> "Do you want to create a git tag for this commit? (yes / no) [default: no]"
 
-- If **no**: skip this step entirely.
+- If **no** (or the user presses Enter without input): skip this step entirely.
 - If **yes**: ask:
 
   > "What should the tag name be? (e.g. v1.2.0)"

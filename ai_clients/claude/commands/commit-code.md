@@ -49,12 +49,32 @@ Format (follow exactly — no deviations):
 ```
 
 Rules:
-- The title line must not exceed 72 characters.
-- Each bullet line in the body must be under 80 characters. If a topic is
-  too long, shorten the description — do not wrap it onto a continuation line.
+- The title line must not exceed **72 characters** (including `type(scope): `).
+- Each bullet line in the body must not exceed **80 characters total**
+  (including the leading `  - ` prefix and the ` → filename` suffix).
+- If any line is too long, shorten the description text — never wrap onto
+  a continuation line.
 - Omit `(<scope>)` if no scope was provided and none is obvious.
-- Each bullet covers one logical change; combine trivially related files on the same bullet with `, `.
-- Do not add boilerplate footers or `Co-Authored-By` lines unless explicitly asked.
+- Each bullet covers one logical change; combine trivially related files on
+  the same bullet with `, `.
+- Do not add boilerplate footers or `Co-Authored-By` lines unless explicitly
+  asked.
+
+## 4a. Verify line lengths before committing
+
+After composing the message, measure every line with the shell and fix any
+violations **before** proceeding to step 5:
+
+```bash
+# Check title (must be ≤ 72)
+echo -n "<type>(<scope>): <your title here>" | wc -c
+
+# Check each bullet (must be ≤ 80)
+echo -n "  - <your bullet text> → <filename>" | wc -c
+```
+
+If any measurement exceeds the limit, shorten the text and re-measure.
+Only proceed to step 5 once every line passes.
 
 ## 5. Stage, commit, and push
 

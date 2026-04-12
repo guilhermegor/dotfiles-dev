@@ -10,12 +10,13 @@ argument-hint: [source-file-or-directory]
 ---
 
 Validate that Python code is ready for a pull request. Run review, audit, and
-test coverage checks, then produce a go/no-go report.
+test coverage checks, then produce a go/no-go report. Offer to open the PR
+when the code passes all checks.
 
 ## Required inputs
 
-Before doing anything else, ask the user for the following if not already provided
-in `$ARGUMENTS`:
+Before doing anything else, ask the user for the following if not already
+provided in `$ARGUMENTS`:
 
 1. **Source** — path to a `.py` file or package directory to validate.
 
@@ -24,6 +25,35 @@ Do not infer the path. Wait for explicit confirmation.
 ---
 
 ## Pipeline
+
+### Step 0: PR status check
+
+Run in parallel:
+
+```bash
+git branch --show-current
+gh pr list --head "$(git branch --show-current)" \
+  --json number,title,url,state --limit 1
+```
+
+**If a PR already exists for this branch**, report it before proceeding:
+
+```
+Existing PR found: #<number> — <title>
+State: <state>
+URL:   <url>
+```
+
+Then ask:
+
+> "A PR already exists. Run validation against it anyway? (yes/no)"
+
+- **yes** → continue with the pipeline below; use the existing PR URL in the
+  final report instead of offering to create a new one.
+- **no** → stop.
+
+**If no PR exists**, continue silently — the pipeline will offer to open one
+after the READY verdict.
 
 ### Step 1: Code review
 
@@ -98,6 +128,19 @@ The verdict is **BLOCKED** if any of:
 
 Otherwise the verdict is **READY**.
 
+### Step 5: Open PR (READY verdict only, no existing PR)
+
+When the verdict is **READY** and no PR was found in Step 0, invoke:
+
+```
+/s:create-pr
+```
+
+The skill handles the confirmation gate, template composition, user approval
+loop, and `gh pr create` call. Do not duplicate any of that logic here.
+
+If the verdict is **BLOCKED**, do not offer to open a PR — report blockers only.
+
 ## Memory
 
 After each PR check, save a brief note about:
@@ -109,5 +152,6 @@ After each PR check, save a brief note about:
 
 - Do not modify any files — this is a read-only validation.
 - Do not create or fix tests — only report coverage gaps.
-- Do not auto-create the PR — only produce the readiness report.
+- Do not auto-create the PR — wait for s:create-pr confirmation gate.
 - Do not lower the blocking thresholds without user approval.
+- Do not offer to open a PR when the verdict is BLOCKED.

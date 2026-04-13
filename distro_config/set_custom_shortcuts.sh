@@ -255,6 +255,128 @@ create_restore_memory_script() {
     print_status $GREEN "restore-memory.sh installed at $dest_script"
 }
 
+# function to create the show-shortcuts rofi popup script
+create_show_shortcuts_script() {
+    local script_path="$HOME/.local/bin/show-shortcuts.sh"
+
+    print_status $BLUE "Creating show-shortcuts.sh at $script_path..."
+    mkdir -p "$HOME/.local/bin"
+
+    cat > "$script_path" << 'EOF'
+#!/bin/bash
+
+# Rofi shortcut cheat-sheet
+# Shows curated GNOME system shortcuts and all custom dconf bindings.
+# Selecting an entry shows its description via notify-send.
+
+build_system_entries() {
+    local -a entries=(
+        "HEADER:── Window Management ──────────────────────────"
+        "Super+Up|Maximise Window|Expands the focused window to fill the screen"
+        "Super+Down|Restore Window|Restores a maximised window to its previous size"
+        "Super+Left|Tile Left|Snaps the focused window to the left half of the screen"
+        "Super+Right|Tile Right|Snaps the focused window to the right half of the screen"
+        "Alt+F4|Close Window|Closes the focused window"
+        "Super+H|Hide Window|Minimises the focused window"
+        "Alt+F7|Move Window|Move the window using the keyboard arrow keys"
+        "Alt+F8|Resize Window|Resize the window using the keyboard arrow keys"
+        "HEADER:── Workspaces ────────────────────────────────"
+        "Super+1|Workspace 1|Switch to workspace 1"
+        "Super+2|Workspace 2|Switch to workspace 2"
+        "Super+3|Workspace 3|Switch to workspace 3"
+        "Super+4|Workspace 4|Switch to workspace 4"
+        "Super+Shift+1|Move to Workspace 1|Move the current window to workspace 1"
+        "Super+Shift+2|Move to Workspace 2|Move the current window to workspace 2"
+        "Super+Shift+3|Move to Workspace 3|Move the current window to workspace 3"
+        "Super+Shift+4|Move to Workspace 4|Move the current window to workspace 4"
+        "Ctrl+Alt+Left|Previous Workspace|Switch to the previous workspace"
+        "Ctrl+Alt+Right|Next Workspace|Switch to the next workspace"
+        "HEADER:── Screenshots ───────────────────────────────"
+        "Print|Screenshot Desktop|Capture the entire desktop"
+        "Shift+Print|Screenshot Area|Select a screen region to capture"
+        "Alt+Print|Screenshot Window|Capture only the active window"
+        "HEADER:── System & Navigation ───────────────────────"
+        "Super|Activities Overview|Open the Activities overview"
+        "Super+A|App Grid|Open the application grid"
+        "Super+L|Lock Screen|Lock the screen immediately"
+        "Alt+F2|Run Dialog|Open the run command dialog"
+        "Super+Tab|Switch Apps|Cycle through running applications"
+        "Alt+Tab|Switch Windows|Cycle through open windows"
+        "Ctrl+Alt+T|Terminal|Open a terminal window"
+    )
+
+    for entry in "${entries[@]}"; do
+        if [[ "$entry" == HEADER:* ]]; then
+            printf '%s\0nonselectable\x1ftrue\n' "${entry#HEADER:}"
+        else
+            IFS='|' read -r binding name desc <<< "$entry"
+            printf '  %-24s │  %s\0info\x1f%s\n' "$binding" "$name" "$desc"
+        fi
+    done
+}
+
+build_custom_entries() {
+    local raw_paths
+    raw_paths=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
+        2>/dev/null | tr -d "[]' " | tr ',' '\n' | grep -v '^$')
+
+    [ -z "$raw_paths" ] && return
+
+    while IFS= read -r path; do
+        local name binding command
+        name=$(gsettings get \
+            "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${path}" \
+            name 2>/dev/null | tr -d "'")
+        binding=$(gsettings get \
+            "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${path}" \
+            binding 2>/dev/null | tr -d "'")
+        command=$(gsettings get \
+            "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${path}" \
+            command 2>/dev/null | tr -d "'")
+
+        [ -z "$name" ] && continue
+
+        local readable_binding
+        readable_binding=$(echo "$binding" \
+            | sed 's/<Super>/Super+/g; s/<Ctrl>/Ctrl+/g; s/<Shift>/Shift+/g; s/<Alt>/Alt+/g' \
+            | sed 's/+$//')
+
+        printf '  %-24s │  %s\0info\x1f%s\n' "$readable_binding" "$name" "$command"
+    done <<< "$raw_paths"
+}
+
+main() {
+    if ! command -v rofi &>/dev/null; then
+        notify-send "Missing dependency" "Please install rofi: sudo apt install rofi"
+        exit 1
+    fi
+
+    local description
+    description=$(
+        {
+            printf '── System Shortcuts ─────────────────────────────\0nonselectable\x1ftrue\n'
+            build_system_entries
+            printf ' \0nonselectable\x1ftrue\n'
+            printf '── Custom Shortcuts ─────────────────────────────\0nonselectable\x1ftrue\n'
+            build_custom_entries
+        } | rofi -dmenu -i \
+                 -p " Shortcuts" \
+                 -format 'i' \
+                 -theme-str 'window {width: 780px;} listview {lines: 22;}' \
+                 -no-custom
+    )
+
+    [ -n "$description" ] && [ "$description" != " " ] && \
+        notify-send --expire-time=6000 "Shortcut Info" "$description"
+}
+
+main
+EOF
+
+    chmod +x "$script_path"
+    print_status $GREEN "show-shortcuts.sh created successfully!"
+}
+
 # Modified main function to set up all keybindings including Insync kill
 set_all_keybindings() {
     print_status $GREEN "Configuring GNOME custom keybindings..."
@@ -278,6 +400,7 @@ set_all_keybindings() {
     create_export_memory_script
     create_restore_env_script
     create_restore_memory_script
+    create_show_shortcuts_script
 
     # Increase the array size to accommodate the new keybindings (now 15 items)
     set_keybindings_array
@@ -293,7 +416,7 @@ set_all_keybindings() {
     set_individual_keybinding 7 "Gerenciador de Tarefas" "flatpak run io.missioncenter.MissionCenter" "<Ctrl><Shift>Escape"
     set_individual_keybinding 8 "Open Characters" "gnome-characters" "<Super>c"
     set_individual_keybinding 9 "Backup External SSDs" "$HOME/.local/bin/backup-external-ssd.sh" "<Super>b"
-    set_individual_keybinding 10 "Show All Shortcuts" "gnome-control-center keyboard" "<Super>j"
+    set_individual_keybinding 10 "Show All Shortcuts" "$HOME/.local/bin/show-shortcuts.sh" "<Super>j"
     set_individual_keybinding 11 "Backup Env Files" "$HOME/.local/bin/backup-env.sh" "<Super><Shift>e"
     set_individual_keybinding 12 "Export Claude Memory" "$HOME/.local/bin/export-memory.sh" "<Super><Shift>m"
     set_individual_keybinding 13 "Restore Env Files" "$HOME/.local/bin/restore-env.sh" "<Super><Alt>e"
@@ -307,7 +430,7 @@ set_all_keybindings() {
     print_status $YELLOW "  - Ctrl+Shift+Esc to open Task Manager"
     print_status $YELLOW "  - Super+C to open GNOME Characters"
     print_status $YELLOW "  - Super+B to back up external SSDs to the BKP cloud-sync drive"
-    print_status $YELLOW "  - Super+J to open GNOME keyboard shortcuts (custom + default)"
+    print_status $YELLOW "  - Super+J to open the shortcut cheat-sheet (rofi popup)"
     print_status $YELLOW "  - Super+Shift+E to back up .env files from all ~/github repos"
     print_status $YELLOW "  - Super+Shift+M to export Claude Code memory to backup"
     print_status $YELLOW "  - Super+Alt+E to restore .env files from backup"

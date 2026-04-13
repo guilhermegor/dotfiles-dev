@@ -2566,6 +2566,21 @@ install_flameshot() {
     print_status "info" "You can set up keyboard shortcuts for quick access"
 }
 
+install_rofi() {
+    print_status "section" "ROFI LAUNCHER"
+
+    if command_exists rofi; then
+        print_status "info" "Rofi already installed"
+        return 0
+    fi
+
+    print_status "info" "Installing Rofi..."
+    install_package "rofi" "rofi" "rofi" "rofi"
+
+    print_status "success" "Rofi installed"
+    print_status "info" "Used by Super+J shortcut cheat-sheet popup"
+}
+
 install_warp_terminal() {
     print_status "section" "WARP TERMINAL"
     
@@ -3767,6 +3782,7 @@ run_full_installation() {
     install_flatpak_apps
     install_utilities
     install_flameshot
+    install_rofi
     install_warp_terminal
     install_virtual_machine_manager
     configure_gsconnect
@@ -3832,6 +3848,7 @@ run_custom_installation() {
         "install_flatpak_apps:Flatpak Applications"
         "install_utilities:System Utilities"
         "install_flameshot:Flameshot Screenshot Tool"
+        "install_rofi:Rofi Launcher"
         "install_warp_terminal:Warp Terminal"
         "install_virtual_machine_manager:VM Manager"
         "configure_gsconnect:GSConnect"

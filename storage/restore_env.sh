@@ -26,7 +26,7 @@ main() {
 
     local source="$backup_dir/env_files"
 
-    if ! ls "$source" &>/dev/null 2>&1; then
+    if [[ ! -d "$source" ]]; then
         zenity --error --title="Restore Env" \
             --text="Cannot access source directory:\n<tt>$source</tt>\n\nCheck that the drive is mounted."
         exit 1

@@ -16,7 +16,7 @@ Before doing anything else, ask the user:
 - If the user answers **yes** (or any affirmative): jump straight to step 5, staging and committing all currently staged changes as-is. Infer the commit message from `git diff --staged` and `git log --oneline -3` without further prompts.
 - If the user answers **no**, presses Enter without input, or gives any non-affirmative response: continue with the full workflow below.
 
-Then ask a second, independent question:
+Wait for the user's answer to the first question, then ask:
 
 > "Do you want to bypass git hooks for this commit? (yes = add --no-verify, no = run hooks normally) [default: no]"
 

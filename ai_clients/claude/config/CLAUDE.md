@@ -20,6 +20,8 @@
 - Consistent indentation per language convention; never mix tabs and spaces.
 - Max line length: 88–100 chars depending on language.
 - Delete dead code — don't comment it out.
+- Never import unused libraries or modules — remove any import that is not
+  referenced in the file.
 - No magic numbers; use named constants or enums.
 - **Early returns / guard clauses:** validate preconditions and return (or raise) at the top
   of a function instead of nesting logic inside `if/elif/else` chains. Happy path last,

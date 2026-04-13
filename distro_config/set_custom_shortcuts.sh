@@ -77,7 +77,11 @@ set_keybindings_array() {
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom7/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom8/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom9/', \
-    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom10/']"
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom10/', \
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom11/', \
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom12/', \
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom13/', \
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom14/']"
 }
 
 # function to set individual keybindings
@@ -171,12 +175,92 @@ create_backup_script() {
     print_status $GREEN "Backup script installed at $dest_script"
 }
 
+# function to install backup-env.sh to ~/.local/bin
+create_backup_env_script() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local src_script="$script_dir/../storage/backup_env.sh"
+    local dest_script="$HOME/.local/bin/backup-env.sh"
+
+    print_status $BLUE "Installing backup-env.sh to $dest_script..."
+    mkdir -p "$HOME/.local/bin"
+
+    if [ ! -f "$src_script" ]; then
+        print_status $RED "Source script not found: $src_script"
+        return 1
+    fi
+
+    cp "$src_script" "$dest_script"
+    chmod +x "$dest_script"
+    print_status $GREEN "backup-env.sh installed at $dest_script"
+}
+
+# function to install export-memory.sh to ~/.local/bin
+create_export_memory_script() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local src_script="$script_dir/../storage/export_memory.sh"
+    local dest_script="$HOME/.local/bin/export-memory.sh"
+
+    print_status $BLUE "Installing export-memory.sh to $dest_script..."
+    mkdir -p "$HOME/.local/bin"
+
+    if [ ! -f "$src_script" ]; then
+        print_status $RED "Source script not found: $src_script"
+        return 1
+    fi
+
+    cp "$src_script" "$dest_script"
+    chmod +x "$dest_script"
+    print_status $GREEN "export-memory.sh installed at $dest_script"
+}
+
+# function to install restore-env.sh to ~/.local/bin
+create_restore_env_script() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local src_script="$script_dir/../storage/restore_env.sh"
+    local dest_script="$HOME/.local/bin/restore-env.sh"
+
+    print_status $BLUE "Installing restore-env.sh to $dest_script..."
+    mkdir -p "$HOME/.local/bin"
+
+    if [ ! -f "$src_script" ]; then
+        print_status $RED "Source script not found: $src_script"
+        return 1
+    fi
+
+    cp "$src_script" "$dest_script"
+    chmod +x "$dest_script"
+    print_status $GREEN "restore-env.sh installed at $dest_script"
+}
+
+# function to install restore-memory.sh to ~/.local/bin
+create_restore_memory_script() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local src_script="$script_dir/../storage/restore_memory.sh"
+    local dest_script="$HOME/.local/bin/restore-memory.sh"
+
+    print_status $BLUE "Installing restore-memory.sh to $dest_script..."
+    mkdir -p "$HOME/.local/bin"
+
+    if [ ! -f "$src_script" ]; then
+        print_status $RED "Source script not found: $src_script"
+        return 1
+    fi
+
+    cp "$src_script" "$dest_script"
+    chmod +x "$dest_script"
+    print_status $GREEN "restore-memory.sh installed at $dest_script"
+}
+
 # Modified main function to set up all keybindings including Insync kill
 set_all_keybindings() {
     print_status $GREEN "Configuring GNOME custom keybindings..."
     
     # Define the keybindings we'll be using
-    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c" "<Super>b" "<Super>j")
+    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c" "<Super>b" "<Super>j" "<Super><Shift>e" "<Super><Shift>m" "<Super><Alt>e" "<Super><Alt>m")
     
     # Ask user if they want to verify conflicts
     read -p "Do you want to verify for shortcut conflicts before proceeding? [Y/n] " -n 1 -r
@@ -190,6 +274,10 @@ set_all_keybindings() {
     
     # Create the backup script and install to ~/.local/bin
     create_backup_script
+    create_backup_env_script
+    create_export_memory_script
+    create_restore_env_script
+    create_restore_memory_script
 
     # Increase the array size to accommodate the new keybindings (now 11 items)
     set_keybindings_array
@@ -206,6 +294,10 @@ set_all_keybindings() {
     set_individual_keybinding 8 "Open Characters" "gnome-characters" "<Super>c"
     set_individual_keybinding 9 "Backup External SSDs" "$HOME/.local/bin/backup-external-ssd.sh" "<Super>b"
     set_individual_keybinding 10 "Show All Shortcuts" "gnome-control-center keyboard" "<Super>j"
+    set_individual_keybinding 11 "Backup Env Files" "$HOME/.local/bin/backup-env.sh" "<Super><Shift>e"
+    set_individual_keybinding 12 "Export Claude Memory" "$HOME/.local/bin/export-memory.sh" "<Super><Shift>m"
+    set_individual_keybinding 13 "Restore Env Files" "$HOME/.local/bin/restore-env.sh" "<Super><Alt>e"
+    set_individual_keybinding 14 "Restore Claude Memory" "$HOME/.local/bin/restore-memory.sh" "<Super><Alt>m"
 
     print_status $GREEN "All keybindings have been configured successfully!"
     print_status $YELLOW "You can now use:"
@@ -216,6 +308,10 @@ set_all_keybindings() {
     print_status $YELLOW "  - Super+C to open GNOME Characters"
     print_status $YELLOW "  - Super+B to back up external SSDs to the BKP cloud-sync drive"
     print_status $YELLOW "  - Super+J to open GNOME keyboard shortcuts (custom + default)"
+    print_status $YELLOW "  - Super+Shift+E to back up .env files from all ~/github repos"
+    print_status $YELLOW "  - Super+Shift+M to export Claude Code memory to backup"
+    print_status $YELLOW "  - Super+Alt+E to restore .env files from backup"
+    print_status $YELLOW "  - Super+Alt+M to restore Claude Code memory from backup"
 }
 
 # execute the main function

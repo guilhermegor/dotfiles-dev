@@ -3,7 +3,7 @@
 # Reads CLAUDE_BACKUP_DIR from ~/.claude/.env.
 
 read_backup_dir() {
-    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2-
+    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]'
 }
 
 main() {
@@ -104,9 +104,13 @@ main() {
         local backup_json="$selected_snapshot/settings/settings.json"
         local current_json="$HOME/.claude/settings.json"
         if command -v jq &>/dev/null && [[ -f "$current_json" ]]; then
-            jq -s '.[0] * .[1]' "$current_json" "$backup_json" \
-                > /tmp/merged_settings.json \
-                && mv /tmp/merged_settings.json "$current_json"
+            local tmp_merged
+            tmp_merged=$(mktemp /tmp/merged_settings.XXXXXX.json)
+            if jq -s '.[0] * .[1]' "$current_json" "$backup_json" > "$tmp_merged"; then
+                mv "$tmp_merged" "$current_json"
+            else
+                rm -f "$tmp_merged"
+            fi
         else
             cp "$backup_json" "$HOME/.claude/settings.json"
         fi

@@ -5,7 +5,7 @@
 GITHUB_DIR="$HOME/github"
 
 read_backup_dir() {
-    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2-
+    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]'
 }
 
 format_timestamp() {
@@ -42,9 +42,9 @@ main() {
         timestamp=$(echo "$filename" | grep -oE '_[0-9]{8}_[0-9]{6}$')
         [[ -z "$timestamp" ]] && continue
         local prefix="${filename%$timestamp}"
-        local project_name="${prefix%%.*}"
-        local env_name="${prefix#*.}"
-        local key="${project_name}|${env_name}"
+        local proj_key="${prefix%__*}"
+        local env_name="${prefix##*__}"
+        local key="${proj_key}|${env_name}"
 
         if [[ -z "${latest_ts_per_key[$key]+x}" ]] || \
            [[ "$timestamp" > "${latest_ts_per_key[$key]}" ]]; then
@@ -62,12 +62,13 @@ main() {
     local -a checklist_args=()
 
     for key in "${!latest_path_per_key[@]}"; do
-        local project_name="${key%%|*}"
+        local proj_key="${key%%|*}"
         local env_name="${key#*|}"
+        local project_rel="${proj_key//__//}"
         local ts_display
         ts_display=$(format_timestamp "${latest_ts_per_key[$key]}")
         local file_path="${latest_path_per_key[$key]}"
-        checklist_args+=(TRUE "$project_name" ".$env_name" "$ts_display" "$file_path")
+        checklist_args+=(TRUE "$project_rel" ".$env_name" "$ts_display" "$file_path")
     done
 
     local selected
@@ -110,13 +111,14 @@ main() {
         local timestamp
         timestamp=$(echo "$filename" | grep -oE '_[0-9]{8}_[0-9]{6}$')
         local prefix="${filename%$timestamp}"
-        local project_name="${prefix%%.*}"
-        local env_name="${prefix#*.}"
-        local dest_dir="$GITHUB_DIR/$project_name"
+        local proj_key="${prefix%__*}"
+        local env_name="${prefix##*__}"
+        local project_rel="${proj_key//__//}"
+        local dest_dir="$GITHUB_DIR/$project_rel"
         local dest="$dest_dir/.$env_name"
 
         if [[ ! -d "$dest_dir" ]]; then
-            failed+=(".$env_name ($project_name): project dir not found at $dest_dir")
+            failed+=(".$env_name ($project_rel): project dir not found at $dest_dir")
             continue
         fi
 
@@ -124,25 +126,25 @@ main() {
             local choice
             choice=$(zenity --list \
                 --radiolist \
-                --title="Conflict: $project_name/.$env_name" \
-                --text="<tt>.$env_name</tt> already exists in <tt>$project_name</tt>.\nWhat would you like to do?" \
+                --title="Conflict: $project_rel/.$env_name" \
+                --text="<tt>.$env_name</tt> already exists in <tt>$project_rel</tt>.\nWhat would you like to do?" \
                 --column="Select" --column="Action" \
                 TRUE "Overwrite it" \
                 FALSE "Back it up first, then restore" \
                 FALSE "Skip this file" \
-            ) || { skipped+=(".$env_name ($project_name): cancelled"); continue; }
+            ) || { skipped+=(".$env_name ($project_rel): cancelled"); continue; }
 
             case "$choice" in
                 "Back it up first, then restore")
                     local bak="$dest.bak_$(date +%Y%m%d_%H%M%S)"
                     local bak_err
                     if ! bak_err=$(mv "$dest" "$bak" 2>&1); then
-                        failed+=(".$env_name ($project_name): could not back up — $bak_err")
+                        failed+=(".$env_name ($project_rel): could not back up — $bak_err")
                         continue
                     fi
                     ;;
                 "Skip this file")
-                    skipped+=(".$env_name ($project_name): skipped by user")
+                    skipped+=(".$env_name ($project_rel): skipped by user")
                     continue
                     ;;
             esac
@@ -152,7 +154,7 @@ main() {
         if cp_err=$(cp "$file_path" "$dest" 2>&1); then
             restored+=("$(basename "$file_path") → $dest")
         else
-            failed+=(".$env_name ($project_name): $cp_err")
+            failed+=(".$env_name ($project_rel): $cp_err")
         fi
     done <<< "$selected"
 

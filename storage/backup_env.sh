@@ -36,6 +36,12 @@ main() {
         exit 1
     fi
 
+    if [[ ! -d "$backup_dir" ]]; then
+        zenity --error --title="Backup Env" \
+            --text="Backup directory not accessible:\n<tt>$backup_dir</tt>\n\nCheck that the drive is mounted."
+        exit 1
+    fi
+
     local target="$backup_dir/env_files"
 
     if ! mkdir -p "$target" 2>/dev/null; then
@@ -50,12 +56,12 @@ main() {
     local found=0
 
     while IFS= read -r repo; do
-        local project_name
-        project_name=$(basename "$repo")
+        local rel_path
+        rel_path="${repo#$GITHUB_DIR/}"
         while IFS= read -r file; do
             local filename
             filename=$(basename "$file")
-            checklist_args+=(TRUE "$project_name" "$filename" "$file")
+            checklist_args+=(TRUE "$rel_path" "$filename" "$file")
             found=$((found + 1))
         done < <(find_ignored_env_files "$repo")
     done < <(find_git_repos)
@@ -96,18 +102,20 @@ main() {
         [[ -z "$file_path" ]] && continue
         local repo
         repo=$(dirname "$file_path")
-        local project_name
-        project_name=$(basename "$repo")
+        local rel_path
+        rel_path="${repo#$GITHUB_DIR/}"
+        local proj_key
+        proj_key="${rel_path//\//__}"
         local filename
         filename=$(basename "$file_path")
         local env_name="${filename#.}"
-        local dest="$target/${project_name}.${env_name}_${timestamp}"
+        local dest="$target/${proj_key}__${env_name}_${timestamp}"
 
         local err_msg
         if err_msg=$(cp "$file_path" "$dest" 2>&1); then
-            backed_up+=("$filename ($project_name) → $dest")
+            backed_up+=("$filename ($rel_path) → $dest")
         else
-            failed+=("$filename ($project_name): $err_msg")
+            failed+=("$filename ($rel_path): $err_msg")
         fi
     done <<< "$selected"
 

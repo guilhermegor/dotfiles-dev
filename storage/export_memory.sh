@@ -3,7 +3,7 @@
 # Reads CLAUDE_BACKUP_DIR from ~/.claude/.env.
 
 read_backup_dir() {
-    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2-
+    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]'
 }
 
 main() {

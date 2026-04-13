@@ -5,12 +5,15 @@
 GITHUB_DIR="$HOME/github"
 
 read_backup_dir() {
-    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2-
+    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null \
+        | cut -d= -f2- \
+        | tr -d '[:space:]'
 }
 
 find_git_repos() {
-    find "$GITHUB_DIR" -maxdepth 2 -name ".git" -type d 2>/dev/null | \
-        while IFS= read -r gitdir; do dirname "$gitdir"; done
+    while IFS= read -r gitdir; do
+        dirname "$gitdir"
+    done < <(find "$GITHUB_DIR" -maxdepth 2 -name ".git" -type d 2>/dev/null)
 }
 
 find_ignored_env_files() {
@@ -100,10 +103,11 @@ main() {
         local env_name="${filename#.}"
         local dest="$target/${project_name}.${env_name}_${timestamp}"
 
-        if cp "$file_path" "$dest" 2>/tmp/backup_env_err; then
+        local err_msg
+        if err_msg=$(cp "$file_path" "$dest" 2>&1); then
             backed_up+=("$filename ($project_name) → $dest")
         else
-            failed+=("$filename ($project_name): $(cat /tmp/backup_env_err)")
+            failed+=("$filename ($project_name): $err_msg")
         fi
     done <<< "$selected"
 

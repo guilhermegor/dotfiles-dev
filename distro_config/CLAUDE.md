@@ -21,6 +21,42 @@ Distribution-level setup: package installation, toolchains, environment, and GNO
 - Distro detection via `/etc/os-release` (`$ID`); branch on `apt-get`, `dnf`, `pacman`, `zypper`.
 - Use `command -v <tool>` to guard installs; never assume a package is absent.
 
+## App Installation Preference Order
+
+When adding a new application, choose the installation method using this priority:
+
+1. **Flatpak** — prefer for GUI apps; sandboxed, distro-agnostic, available on all supported distros.
+2. **Homebrew** — use when the app has an official Homebrew formula and no Flatpak; works everywhere but adds PATH complexity.
+3. **Snap** — acceptable fallback when Flatpak is unavailable; note that snap confinement can cause issues on some systems.
+4. **PWA (Chrome `--app=<url>`)** — use for Google/web-first apps with no native Linux package (e.g. Google Calendar, Google Tasks). Requires Chrome; creates a `.desktop` entry under `~/.local/share/applications/`.
+5. **AppImage** — last resort for portable binaries with no managed package; download to `$DOWNLOADS_DIR`, `chmod +x`, and symlink into `/usr/local/bin/`.
+
+Each install function must guard against re-installation with `command_exists` or an equivalent check before attempting any download or package operation.
+
+## GNOME App Placement (`ubuntu_workspace.sh`)
+
+**When adding a new `install_*` function, always ask: should this app be placed in a GNOME folder or pinned to the dock?**
+
+- If it belongs in a **folder**: add its `.desktop` filename to the appropriate `*_app_names` array inside `organize_app_folders()` in `ubuntu_workspace.sh`. Existing folders and their purpose:
+
+  | dconf key | Display name | Typical contents |
+  |-----------|--------------|-----------------|
+  | `Sistema` | Sistema | System tools, settings, file manager |
+  | `Seguranca` | Segurança | Security, antivirus, backup |
+  | `Utilitarios` | Utilitários | General utilities (screenshots, image editors…) |
+  | `Sharing` | Sharing | File-sharing and remote-desktop apps |
+  | `IRPF` | IRPF | Brazilian tax program |
+  | `DEV` | DEV | IDEs, terminals, DB clients, Docker |
+  | `Ereader` | Ereader | E-book readers |
+  | `Office` | Office | LibreOffice suite |
+  | `OrgPessoal` | Organização Pessoal | Calendars, tasks, email, productivity |
+  | `AmbienteVirtual` | Ambiente Virtual | VMs and virtualisation |
+
+- If it belongs on the **dock**: add its `.desktop` filename to the `favorite-apps` gsettings key in the relevant configure function.
+- If neither (background service, CLI-only tool): no placement change needed — document this explicitly in the install function comment.
+
+The `.desktop` filename for a PWA created by `install_programs.sh` is always the value passed to `desktop_file` (e.g. `google-tasks.desktop`). For Flatpak apps it is the app ID with `.desktop` suffix (e.g. `com.slack.Slack.desktop`).
+
 ## GNOME Custom Keybindings (`set_custom_shortcuts.sh`)
 
 Bindings are managed through three layers:

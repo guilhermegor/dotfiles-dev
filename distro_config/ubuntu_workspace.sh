@@ -411,6 +411,9 @@ organize_app_folders() {
         # GNOME Network Displays (Tela via Rede)
         'org.gnome.NetworkDisplays.desktop' 'gnome-network-displays.desktop'
         'org.gnome.Connections.desktop' 'gnome-connections.desktop' 'gnome-remote-desktop.desktop'
+
+        # Launcher
+        'rofi.desktop' 'rofi-theme-selector.desktop'
     )
     
     # Search for system apps
@@ -917,6 +920,7 @@ EOF
     local org_pessoal_app_names=(
         'google-calendar.desktop'
         'notion-calendar.desktop'
+        'google-tasks.desktop'
         'thunderbird.desktop' 'thunderbird_thunderbird.desktop'
         'org.mozilla.Thunderbird.desktop' 'mozilla-thunderbird.desktop'
     )

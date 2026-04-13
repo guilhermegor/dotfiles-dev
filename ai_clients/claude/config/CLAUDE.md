@@ -127,6 +127,41 @@ def slugify(text: str) -> str: ...
 5. Validate external data at ingestion, before any transformation.
 6. Use guard clauses / early returns to handle edge cases first; keep the happy path unindented.
 
+## Numeric Precision
+
+- **Never use `float` for values where precision matters** (money, measurements,
+  aggregations, comparisons). IEEE 754 binary floats cannot represent most decimal
+  fractions exactly — errors accumulate silently.
+- **Use the language-native decimal library instead:**
+  - Python → `from decimal import Decimal`
+  - JavaScript/TypeScript → [`decimal.js`](https://github.com/MikeMcl/decimal.js)
+    or [`big.js`](https://github.com/MikeMcl/big.js)
+  - Java/Kotlin → `java.math.BigDecimal`
+  - Go → `github.com/shopspring/decimal`
+  - Rust → `rust_decimal` crate
+- Initialise `Decimal` from **strings**, not floats: `Decimal("0.1")` not
+  `Decimal(0.1)` — constructing from a float inherits the float's imprecision.
+- **Prefer truncation (`ROUND_DOWN`) over rounding up or down** when discarding
+  excess digits. Truncation is deterministic and never inflates a value —
+  rounding introduces a directional bias that compounds across bulk operations
+  (e.g. summing thousands of prices). Only use `ROUND_HALF_UP` / `ROUND_HALF_EVEN`
+  when the domain explicitly demands it (e.g. tax, regulatory reporting).
+- **Always ask the developer for the required precision of each `Decimal` field**
+  before writing the code. Propose a sensible default based on the domain first,
+  then wait for explicit confirmation:
+  - Money / prices → suggest 2 decimal places (`0.01`)
+  - Exchange rates / unit prices → suggest 4 decimal places (`0.0001`)
+  - Percentages / ratios → suggest 4 decimal places (`0.0001`)
+  - Quantities / weights → suggest 3 decimal places (`0.001`)
+  - Scientific measurements → suggest 10 decimal places (`0.0000000001`)
+
+  Example prompt to the developer:
+  > "I'll use `Decimal` with **2 decimal places, truncation** for `price`.
+  > Does that match your requirements, or do you need a different precision
+  > or rounding mode?"
+
+  Never assume; never hardcode a precision without this confirmation step.
+
 ## What Claude Must Never Do
 
 - Use bare `catch` / `except` without re-raising or logging.
@@ -134,3 +169,5 @@ def slugify(text: str) -> str: ...
 - Use `print` / `console.log` for operational logging — use a proper logger.
 - Suggest storing secrets in source code or environment variables committed to git.
 - Write synchronous code where the language/framework supports async natively.
+- Use `float` for monetary values, precise measurements, or any calculation
+  where cumulative rounding errors are unacceptable — use `Decimal` instead.

@@ -99,8 +99,8 @@ List each source file alongside its full destination path. Example:
 
 ```
 Copied:
-  .env       → /media/guilhermegor/BKP_GOR/env_files/stpstone.env_20260411_080312
-  .env.prd   → /media/guilhermegor/BKP_GOR/env_files/stpstone.env.prd_20260411_080312
+  .env       → /media/<user>/<BKP_DIR>/env_files/stpstone.env_20260411_080312
+  .env.prd   → /media/<user>/<BKP_DIR>/env_files/stpstone.env.prd_20260411_080312
 ```
 
 ---

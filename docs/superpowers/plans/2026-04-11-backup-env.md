@@ -295,8 +295,8 @@ Print a summary of every file that was successfully copied:
 
 ```
 Backed up:
-  .env      → /media/guilhermegor/BKP_GOR/env_files/myproject.env_20260411_080312
-  .env.prd  → /media/guilhermegor/BKP_GOR/env_files/myproject.env.prd_20260411_080312
+  .env      → /media/<user>/<BKP_DIR>/env_files/myproject.env_20260411_080312
+  .env.prd  → /media/<user>/<BKP_DIR>/env_files/myproject.env.prd_20260411_080312
 ```
 
 If any files failed to copy, list them separately:

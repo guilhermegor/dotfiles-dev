@@ -3,9 +3,7 @@
 # Reads CLAUDE_BACKUP_DIR from ~/.claude/.env.
 
 read_backup_dir() {
-    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null \
-        | cut -d= -f2- \
-        | tr -d '[:space:]'
+    grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2-
 }
 
 main() {
@@ -26,6 +24,12 @@ main() {
 
     local snapshot="$backup_dir/$(date +%Y-%m-%d_%H%M%S)"
 
+    if ! mkdir -p "$snapshot/commands" "$snapshot/settings"; then
+        zenity --error --title="Export Memory" \
+            --text="Cannot create snapshot directory:\n<tt>$snapshot</tt>\n\nCheck permissions."
+        exit 1
+    fi
+
     zenity --progress --pulsate --no-cancel --auto-close \
         --title="Export Memory" \
         --text="Exporting Claude Code memory to:\n<tt>$snapshot</tt>" 2>/dev/null &
@@ -33,10 +37,9 @@ main() {
 
     notify-send --urgency=low "Export Memory" "Starting export..." 2>/dev/null || true
 
-    mkdir -p "$snapshot/commands" "$snapshot/settings"
-
-    if ls "$HOME/.claude/commands/"*.md &>/dev/null 2>&1; then
-        rsync -a "$HOME/.claude/commands/"*.md "$snapshot/commands/"
+    local -a cmd_files=( "$HOME/.claude/commands/"*.md )
+    if [[ -e "${cmd_files[0]}" ]]; then
+        rsync -a "${cmd_files[@]}" "$snapshot/commands/"
     fi
 
     [[ -f "$HOME/.claude/settings.json" ]] && \
@@ -50,9 +53,8 @@ main() {
     for project_dir in "$HOME/.claude/projects"/*/; do
         [[ -d "$project_dir" ]] || continue
 
-        local dir_name
-        dir_name=$(basename "$project_dir")
-        local project_name="${dir_name##*-}"
+        local project_name
+        project_name=$(basename "$project_dir")
 
         if [[ ! -d "$project_dir/memory" ]] && [[ ! -f "$project_dir/CLAUDE.md" ]]; then
             continue

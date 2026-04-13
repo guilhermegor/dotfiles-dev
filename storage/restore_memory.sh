@@ -119,6 +119,11 @@ main() {
         [[ -d "$proj_dir" ]] || continue
         local proj_name
         proj_name=$(basename "$proj_dir")
+        # Guard against glob metacharacters in snapshot-sourced names
+        if [[ ! "$proj_name" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+            skipped_projects+=("$proj_name (invalid name)")
+            continue
+        fi
         local match
         match=$(find "$HOME/.claude/projects" -maxdepth 1 -type d \
             -name "*${proj_name}" 2>/dev/null | head -1)

@@ -132,7 +132,9 @@ preamble. Everything after follows call order — no exceptions.
   If shared by multiple methods, place it immediately before the earliest caller.
 - Each validation method raises a descriptive exception with the variable name and
   the violated constraint in the message.
-- Document every `Raises` case in the method's docstring.
+- Document every `Raises` case **that is raised directly inside** the method's
+  body. Callers of `_validate_*` methods must not re-document those same
+  exceptions — they are owned by the validator's own docstring.
 
 ```python
 def _validate_url(self, url: str) -> None:
@@ -169,7 +171,56 @@ except Exception as err:
     raise ValueError(f"Operation failed: {err}") from err
 ```
 
-Document every raised exception in the `Raises` section of the docstring.
+Document in the `Raises` section **only** the exceptions that are raised
+directly inside the function/method body — with an explicit `raise` statement
+in that scope. Do **not** document exceptions that merely bubble up from called
+helpers or other functions; those are owned by, and documented in, their own
+docstrings.
+
+```python
+# Correct: ValueError is raised inline here — document it
+def divide(a: float, b: float) -> float:
+    """Divide a by b.
+
+    Parameters
+    ----------
+    a : float
+        Numerator
+    b : float
+        Denominator
+
+    Returns
+    -------
+    float
+        Result of a / b
+
+    Raises
+    ------
+    ValueError
+        If 'b' is zero
+    """
+    if b == 0:
+        raise ValueError("'b' must not be zero")
+    return a / b
+
+
+# Correct: process() calls divide() but raises nothing itself —
+# its Raises section is omitted entirely
+def process(values: list[float]) -> float:
+    """Compute ratio of first two elements.
+
+    Parameters
+    ----------
+    values : list[float]
+        Input list with at least two elements
+
+    Returns
+    -------
+    float
+        Ratio of the first two elements
+    """
+    return divide(values[0], values[1])
+```
 
 ## Sanity checks
 

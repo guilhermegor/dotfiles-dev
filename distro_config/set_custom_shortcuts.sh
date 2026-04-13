@@ -279,7 +279,7 @@ set_all_keybindings() {
     create_restore_env_script
     create_restore_memory_script
 
-    # Increase the array size to accommodate the new keybindings (now 11 items)
+    # Increase the array size to accommodate the new keybindings (now 15 items)
     set_keybindings_array
     
     # Set individual keybindings

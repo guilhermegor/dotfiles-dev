@@ -10,8 +10,6 @@ Return only the code — no explanations, no commentary.
 
 **Guiding principles:**
 
-- **Composition over inheritance** — use `Protocol` and dependency injection, not
-  deep class hierarchies.
 - **Single Responsibility** — each module, class, and function does one thing.
 - **Explicit over implicit** — no hidden state, no magic; make dependencies and
   data flow visible.

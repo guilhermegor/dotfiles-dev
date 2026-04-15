@@ -81,7 +81,8 @@ set_keybindings_array() {
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom11/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom12/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom13/', \
-    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom14/']"
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom14/', \
+    '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom15/']"
 }
 
 # function to set individual keybindings
@@ -377,12 +378,62 @@ EOF
     print_status $GREEN "show-shortcuts.sh created successfully!"
 }
 
+# function to add claudestatus shell aliases to ~/.bashrc
+create_claudestatus_aliases() {
+    local marker="# claudestatus shortcuts"
+    if grep -q "$marker" ~/.bashrc 2>/dev/null; then
+        print_status $GREEN "claudestatus aliases already present in ~/.bashrc"
+        return 0
+    fi
+
+    print_status $BLUE "Adding claudestatus aliases to ~/.bashrc..."
+    {
+        printf '\n'
+        printf '# claudestatus shortcuts\n'
+        printf 'alias cs='"'"'claudestatus'"'"'           # usage dashboard\n'
+        printf 'alias cs-quick='"'"'claudestatus --quick'"'"'  # quick recommendation\n'
+        printf 'alias cs-add='"'"'claudestatus add'"'"'   # add account: cs-add <alias>\n'
+    } >> ~/.bashrc
+    print_status $GREEN "claudestatus aliases added to ~/.bashrc"
+    print_status $YELLOW "  cs            → show usage dashboard"
+    print_status $YELLOW "  cs-quick      → quick account recommendation"
+    print_status $YELLOW "  cs-add <name> → add account (e.g. work, personal_1, personal_2)"
+}
+
+# function to create the claudestatus dashboard launcher script
+create_claudestatus_dashboard_script() {
+    local script_path="$HOME/.local/bin/claudestatus-dashboard.sh"
+    print_status $BLUE "Creating claudestatus-dashboard.sh at $script_path..."
+    mkdir -p "$HOME/.local/bin"
+
+    cat > "$script_path" << 'EOF'
+#!/bin/bash
+
+# Open the claudestatus usage dashboard in a terminal window.
+# Uses bash -i so ~/.bashrc is sourced (npm global bin in PATH).
+# Falls back through gnome-terminal → xterm → notify-send.
+cmd='claudestatus; echo; read -rp "Press Enter to close..."'
+
+if command -v gnome-terminal &>/dev/null; then
+    gnome-terminal -- bash -ic "$cmd"
+elif command -v xterm &>/dev/null; then
+    xterm -e bash -ic "$cmd"
+else
+    notify-send "claudestatus" \
+        "No terminal emulator found. Run 'claudestatus' manually in a terminal."
+fi
+EOF
+
+    chmod +x "$script_path"
+    print_status $GREEN "claudestatus-dashboard.sh created successfully!"
+}
+
 # Modified main function to set up all keybindings including Insync kill
 set_all_keybindings() {
     print_status $GREEN "Configuring GNOME custom keybindings..."
     
     # Define the keybindings we'll be using
-    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c" "<Super>b" "<Super>j" "<Super><Shift>e" "<Super><Shift>m" "<Super><Alt>e" "<Super><Alt>m")
+    local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c" "<Super>b" "<Super>j" "<Super><Shift>e" "<Super><Shift>m" "<Super><Alt>e" "<Super><Alt>m" "<Super><Shift>u")
     
     # Ask user if they want to verify conflicts
     read -p "Do you want to verify for shortcut conflicts before proceeding? [Y/n] " -n 1 -r
@@ -391,6 +442,10 @@ set_all_keybindings() {
         verify_keybindings "${bindings[@]}"
     fi
     
+    # Set up claudestatus shell aliases and dashboard launcher
+    create_claudestatus_aliases
+    create_claudestatus_dashboard_script
+
     # Create the enhanced copy-path script and set up Nautilus integration
     create_copy_path_script
     
@@ -421,6 +476,7 @@ set_all_keybindings() {
     set_individual_keybinding 12 "Export Claude Memory" "$HOME/.local/bin/export-memory.sh" "<Super><Shift>m"
     set_individual_keybinding 13 "Restore Env Files" "$HOME/.local/bin/restore-env.sh" "<Super><Alt>e"
     set_individual_keybinding 14 "Restore Claude Memory" "$HOME/.local/bin/restore-memory.sh" "<Super><Alt>m"
+    set_individual_keybinding 15 "Claude Usage Dashboard" "$HOME/.local/bin/claudestatus-dashboard.sh" "<Super><Shift>u"
 
     print_status $GREEN "All keybindings have been configured successfully!"
     print_status $YELLOW "You can now use:"
@@ -435,6 +491,12 @@ set_all_keybindings() {
     print_status $YELLOW "  - Super+Shift+M to export Claude Code memory to backup"
     print_status $YELLOW "  - Super+Alt+E to restore .env files from backup"
     print_status $YELLOW "  - Super+Alt+M to restore Claude Code memory from backup"
+    print_status $YELLOW "  - Super+Shift+U to open the Claude usage dashboard (claudestatus)"
+    print_status $YELLOW "Shell aliases added to ~/.bashrc (reload with: source ~/.bashrc):"
+    print_status $YELLOW "  - cs            → claudestatus (usage dashboard)"
+    print_status $YELLOW "  - cs-quick      → claudestatus --quick"
+    print_status $YELLOW "  - cs-add <name> → claudestatus add <name>"
+    print_status $YELLOW "    e.g.: cs-add work | cs-add personal_1 | cs-add personal_2"
 }
 
 # execute the main function

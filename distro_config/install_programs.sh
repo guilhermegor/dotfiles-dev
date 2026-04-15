@@ -3806,6 +3806,32 @@ install_espanso() {
     return 0
 }
 
+install_claudestatus() {
+    print_status "section" "CLAUDESTATUS — CLAUDE USAGE DASHBOARD"
+
+    if command_exists claudestatus; then
+        print_status "info" "claudestatus already installed"
+        return 0
+    fi
+
+    if ! command_exists npm; then
+        print_status "error" "npm not found — install Node.js first"
+        return 1
+    fi
+
+    print_status "info" "Installing @howells/claudestatus globally via npm..."
+    npm install -g @howells/claudestatus &>> "$LOG_FILE"
+
+    if command_exists claudestatus; then
+        print_status "success" "claudestatus installed successfully"
+        print_status "config" "Add accounts: claudestatus add <alias>"
+        print_status "config" "View dashboard: claudestatus"
+    else
+        print_status "error" "claudestatus installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
@@ -3873,6 +3899,7 @@ run_full_installation() {
     install_vitals  # Added Vitals installation
     install_dim_calendar_events
     install_espanso
+    install_claudestatus
     cleanup_system
     
     print_status "section" "INSTALLATION COMPLETE!"
@@ -3941,6 +3968,7 @@ run_custom_installation() {
         "install_dim_calendar_events:Calendar Events Enhancement"
         "uninstall_dim_calendar_events:Uninstall Calendar Events Extension"
         "install_espanso:Espanso (Text Expander)"
+        "install_claudestatus:claudestatus (Claude Usage Dashboard)"
         "cleanup_system:System Cleanup"
     )
     

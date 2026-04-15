@@ -2,6 +2,34 @@
 # Promotes installed plugins from project scope to user scope.
 # Ensures plugins load globally across all projects.
 
+demote_plugin_from_user_scope() {
+    local plugin_key="$1"
+    local installed_file="$CLAUDE_DIR/plugins/installed_plugins.json"
+
+    if [ ! -f "$installed_file" ]; then
+        return 0
+    fi
+
+    local user_count
+    user_count=$(jq -r --arg key "$plugin_key" \
+        '.plugins[$key] // [] | map(select(.scope == "user")) | length' \
+        "$installed_file" 2>/dev/null || echo "0")
+
+    if [ "$user_count" -eq 0 ]; then
+        return 0
+    fi
+
+    jq --arg key "$plugin_key" \
+        'if (.plugins[$key] | map(select(.scope != "user")) | length) == 0
+         then del(.plugins[$key])
+         else .plugins[$key] = (.plugins[$key] | map(select(.scope != "user")))
+         end' \
+        "$installed_file" > "${installed_file}.tmp" \
+        && mv "${installed_file}.tmp" "$installed_file"
+
+    print_status "success" "Removed from user scope: $plugin_key"
+}
+
 promote_plugin_to_user_scope() {
     local plugin_key="$1"      # e.g. superpowers@claude-plugins-official
     local plugin_name="$2"     # e.g. superpowers
@@ -31,8 +59,6 @@ promote_plugin_to_user_scope() {
         print_status "info"    "  /plugin install code-review"
         print_status "info"    "  /plugin install code-simplifier"
         print_status "info"    "  /plugin install feature-dev"
-        print_status "info"    "  /plugin install frontend-design"
-        print_status "info"    "  /plugin install math-olympiad"
         print_status "info"    "  /plugin install learning-output-style"
         print_status "info"    "  /plugin install pr-review-toolkit"
         print_status "info"    "  /plugin install supabase-postgres-best-practices"

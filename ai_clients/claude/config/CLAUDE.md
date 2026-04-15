@@ -6,6 +6,13 @@
 
 ## Core Philosophy
 
+- **Simplicity first:** make every change as small and targeted as possible —
+  touch the minimum code needed to achieve the goal. Complexity is a debt paid
+  by every future reader.
+- **Separation of concerns:** each module, class, or function owns exactly one
+  responsibility. I/O, business logic, and presentation must not be tangled.
+- **Don't repeat yourself (DRY):** every piece of knowledge has a single,
+  authoritative representation. Duplication is a bug waiting to diverge.
 - **Composition over inheritance:** Inject collaborators; avoid deep class hierarchies.
 - **Explicit over implicit:** no hidden side effects, no magic conventions.
 - **Fail fast:** raise meaningful, descriptive errors early.
@@ -173,3 +180,50 @@ def slugify(text: str) -> str: ...
 - Write synchronous code where the language/framework supports async natively.
 - Use `float` for monetary values, precise measurements, or any calculation
   where cumulative rounding errors are unacceptable — use `Decimal` instead.
+
+## Self-Improvement Loop
+
+### Session start
+
+At the start of every session, read `~/.claude/tasks/lessons.md` (if it
+exists) and surface any entries whose **Scope** matches the current working
+directory or is `global`. Apply those rules immediately — do not wait to be
+reminded.
+
+### After a user correction
+
+Whenever the user corrects a mistake (wrong approach, wrong assumption, style
+violation, misunderstood requirement, etc.), immediately append an entry to
+`~/.claude/tasks/lessons.md` using the template below. Create the file and
+its parent directory if they do not exist.
+
+**Entry template:**
+
+```markdown
+## YYYY-MM-DD — <short description of the mistake>
+
+- **Project:** <absolute path of current working directory, or "global" if
+  the user says it applies across all projects>
+- **Mistake:** <one sentence — what I did wrong>
+- **Correction:** <what the user said or did to fix it>
+- **Rule:** <an imperative rule that prevents this mistake — "Never…" or
+  "Always…">
+- **Why:** <one sentence explaining the underlying reason>
+```
+
+**Scope decision:**
+- Default scope is the current project (use its absolute path).
+- Escalate to `global` only when the user explicitly says the lesson applies
+  everywhere (e.g. "don't do that in any project").
+
+### Iteration discipline
+
+- After writing a lesson, re-read the last five entries for the current
+  project and check whether any of them have now been violated again. If so,
+  add a `**Recurrence:** <date> — still happening` line to the original entry
+  and tighten the rule wording.
+- If the same mistake recurs three or more times, promote it to a top-level
+  rule in the project's `CLAUDE.md` (or the global one if scoped globally) and
+  mark the lessons.md entry `**Promoted:** YYYY-MM-DD`.
+- Never delete or archive lessons — accumulate them so pattern trends are
+  visible over time.

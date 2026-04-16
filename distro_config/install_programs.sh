@@ -1365,7 +1365,7 @@ install_core_dependencies() {
     print_status "info" "Installing curl and SSL libraries..."
     case "$PACKAGE_MANAGER" in
         apt)
-            $INSTALL_CMD curl wget libcurl4-openssl-dev libssl-dev
+            $INSTALL_CMD curl wget libcurl4-openssl-dev libssl-dev libnotify-bin
             ;;
         dnf|yum)
             $INSTALL_CMD curl wget libcurl-devel openssl-devel

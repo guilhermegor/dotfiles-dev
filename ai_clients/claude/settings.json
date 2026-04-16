@@ -44,6 +44,19 @@
     "senior-prompt-engineer@claude-plugins-official": true,
     "clean-code@claude-plugins-official": true
   },
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "DISPLAY=\"${DISPLAY:-:0}\" notify-send --app-name='Claude Code' --icon=dialog-information 'Claude Code' 'Waiting for your action...' 2>/dev/null || true",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
   "extraKnownMarketplaces": {
     "claude-hud": {
       "source": {

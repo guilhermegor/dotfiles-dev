@@ -405,14 +405,23 @@ create_claudestatus_dashboard_script() {
     local script_path="$HOME/.local/bin/claudestatus-dashboard.sh"
     print_status $BLUE "Creating claudestatus-dashboard.sh at $script_path..."
     mkdir -p "$HOME/.local/bin"
-
+    
     cat > "$script_path" << 'EOF'
 #!/bin/bash
-
-# Open the claudestatus usage dashboard in a terminal window.
+# Open the claudestatus usage dashboard + current auth status in a terminal window.
 # Uses bash -i so ~/.bashrc is sourced (npm global bin in PATH).
 # Falls back through gnome-terminal → xterm → notify-send.
-cmd='claudestatus; echo; read -rp "Press Enter to close..."'
+
+cmd='
+echo "=== Claude Authentication Status ==="
+claude auth status --text
+echo
+echo "=== Claudestatus Dashboard ==="
+claudestatus
+echo
+echo "=================================="
+read -rp "Press Enter to close..."
+'
 
 if command -v gnome-terminal &>/dev/null; then
     gnome-terminal -- bash -ic "$cmd"

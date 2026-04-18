@@ -109,13 +109,12 @@ main() {
         local filename
         filename=$(basename "$file_path")
         local env_name="${filename#.}"
-        local dest="$target/${proj_key}__${env_name}_${timestamp}"
+        local dest="$target/${proj_key}__${env_name}_${timestamp}.gz"
 
-        local err_msg
-        if err_msg=$(cp "$file_path" "$dest" 2>&1); then
+        if gzip -c "$file_path" > "$dest" 2>/dev/null; then
             backed_up+=("$filename ($rel_path) → $dest")
         else
-            failed+=("$filename ($rel_path): $err_msg")
+            failed+=("$filename ($rel_path): compression failed")
         fi
     done <<< "$selected"
 

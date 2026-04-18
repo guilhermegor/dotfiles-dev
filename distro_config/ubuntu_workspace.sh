@@ -71,18 +71,18 @@ set_dock_position_bottom() {
     print_status "success" "Dock position set to BOTTOM"
 }
 
-set_workspaces_primary_only() {
-    print_status "info" "Configuring workspaces for primary display only..."
-    gsettings set org.gnome.mutter workspaces-only-on-primary true
-    
+set_workspaces_all_displays() {
+    print_status "info" "Configuring workspaces for all displays..."
+    gsettings set org.gnome.mutter workspaces-only-on-primary false
+
     # Check if the schema exists before trying to set it
     if gsettings list-schemas | grep -q "org.gnome.shell.overrides"; then
-        gsettings set org.gnome.shell.overrides workspaces-only-on-primary true
+        gsettings set org.gnome.shell.overrides workspaces-only-on-primary false
     else
         print_status "warning" "org.gnome.shell.overrides schema not available - skipping"
     fi
-    
-    print_status "success" "Workspaces configured for primary display only"
+
+    print_status "success" "Workspaces configured for all displays"
 }
 
 set_workspace_app_isolation() {
@@ -290,7 +290,7 @@ set_ubuntu_ui_interface() {
 }
 
 configure_workspaces() {
-    set_workspaces_primary_only
+    set_workspaces_all_displays
     set_workspace_app_isolation
 }
 

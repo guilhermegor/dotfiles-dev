@@ -183,6 +183,8 @@
   // =============================================
   "terminal.integrated.defaultProfile.windows": "Git Bash",
   "terminal.integrated.fontSize": 14,
+  "terminal.integrated.defaultColumns": 115,
+  "terminal.integrated.defaultRows": 56,
   "workbench.panel.defaultLocation": "right",
   "workbench.panel.opensMaximized": "preserve"
 }

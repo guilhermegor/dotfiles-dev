@@ -120,6 +120,7 @@ def slugify(text: str) -> str: ...
 - Atomic commits: one logical change per commit.
 - Never commit secrets, credentials, or local config files.
 - `.gitignore` before first commit.
+- **Never stage or commit automatically after creating spec/plan docs** (e.g. after a superpowers skill invocation). Pre-commit hooks are slow; let the user run the final commit when the full feature is ready.
 
 ## Documentation
 

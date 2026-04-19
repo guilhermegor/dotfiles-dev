@@ -1225,6 +1225,72 @@ install_claude_code() {
 }
 
 # ============================================================================
+# QWEN CODE INSTALLATION
+# ============================================================================
+
+install_qwen() {
+    print_status "section" "QWEN CODE INSTALLATION"
+
+    local qwen_version=""
+    if command_exists qwen; then
+        qwen_version=$(timeout 10 qwen --version 2>/dev/null | head -n1 || echo "")
+    fi
+
+    if [ -n "$qwen_version" ]; then
+        print_status "info" "Qwen Code is already installed ($qwen_version)"
+
+        echo -e "\n${YELLOW}Do you want to reinstall/update Qwen Code? (y/n):${NC}"
+        read -r update_qwen
+        if [[ ! "$update_qwen" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing Qwen Code installation"
+            return 0
+        fi
+    fi
+
+    echo -e "\n${YELLOW}Install Qwen Code? (y/n):${NC}"
+    echo -e "${CYAN}This will run the official Qwen Code installer script${NC}"
+    read -r install_qwen_confirm
+
+    if [[ ! "$install_qwen_confirm" =~ ^[Yy]$ ]]; then
+        print_status "info" "Skipping Qwen Code installation"
+        return 0
+    fi
+
+    if ! command_exists curl; then
+        print_status "error" "curl is not available. Please install curl first."
+        return 1
+    fi
+
+    print_status "info" "Downloading and running Qwen Code installer..."
+    print_status "warning" "This may take a moment..."
+
+    if bash -c "$(curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen.sh)" -s --source qwenchat 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Qwen Code installed successfully"
+
+        export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+
+        print_status "info" "Verifying Qwen Code installation..."
+
+        if command_exists qwen; then
+            local actual_qwen_version=$(timeout 10 qwen --version 2>/dev/null | head -n1 || echo "Not available")
+            print_status "success" "Qwen Code is available: $actual_qwen_version"
+        else
+            print_status "warning" "qwen command not found in PATH. You may need to reload your shell."
+        fi
+
+        echo ""
+        print_status "info" "Qwen Code usage:"
+        print_status "config" "  Check version: qwen --version"
+        print_status "config" "  Run in project: cd /path/to/project && qwen"
+        print_status "config" "  Update: re-run the installer script"
+
+    else
+        print_status "error" "Failed to install Qwen Code"
+        return 1
+    fi
+}
+
+# ============================================================================
 # MENU AND MAIN EXECUTION
 # ============================================================================
 
@@ -1245,8 +1311,9 @@ show_menu() {
     echo -e "  ${GREEN}9)${NC} Install NVM (Node Version Manager)"
     echo -e "  ${GREEN}10)${NC} Install GitHub Copilot CLI (requires Node.js)"
     echo -e "  ${GREEN}11)${NC} Install Claude Code (requires Node.js)"
-    echo -e "  ${GREEN}12)${NC} Install all toolchains and tools"
-    echo -e "  ${GREEN}13)${NC} Exit"
+    echo -e "  ${GREEN}12)${NC} Install Qwen Code"
+    echo -e "  ${GREEN}13)${NC} Install all toolchains and tools"
+    echo -e "  ${GREEN}14)${NC} Exit"
     echo -e "\n${CYAN}Choice: ${NC}"
 }
 
@@ -1329,6 +1396,10 @@ main() {
                 break
                 ;;
             12)
+                install_qwen
+                break
+                ;;
+            13)
                 install_nodejs
                 echo ""
                 install_typescript
@@ -1342,14 +1413,16 @@ main() {
                 install_github_copilot_cli
                 echo ""
                 install_claude_code
+                echo ""
+                install_qwen
                 break
                 ;;
-            13)
+            14)
                 print_status "info" "Installation cancelled"
                 exit 0
                 ;;
             *)
-                print_status "error" "Invalid option. Please select 1-13."
+                print_status "error" "Invalid option. Please select 1-14."
                 ;;
         esac
     done
@@ -1409,6 +1482,11 @@ main() {
     # Check Claude Code
     if command_exists claude; then
         print_status "config" "  Claude Code: $(timeout 5 claude --version 2>/dev/null | head -n1 || echo 'Not available')"
+    fi
+
+    # Check Qwen Code
+    if command_exists qwen; then
+        print_status "config" "  Qwen Code: $(timeout 5 qwen --version 2>/dev/null | head -n1 || echo 'Not available')"
     fi
     
     echo ""

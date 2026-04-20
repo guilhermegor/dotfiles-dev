@@ -52,6 +52,11 @@
             "type": "command",
             "command": "DISPLAY=\"${DISPLAY:-:0}\" notify-send --app-name='Claude Code' --icon=dialog-information 'Claude Code' 'Waiting for your action...' 2>/dev/null || true",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "pw-play /usr/share/sounds/freedesktop/stereo/message.oga 2>/dev/null || true",
+            "async": true
           }
         ]
       }

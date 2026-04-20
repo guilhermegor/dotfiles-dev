@@ -2246,6 +2246,85 @@ install_chrome() {
     cd - > /dev/null
 }
 
+install_opera() {
+    print_status "section" "OPERA BROWSER"
+
+    if flatpak list 2>/dev/null | grep -q com.opera.Opera; then
+        print_status "info" "Opera already installed"
+        return 0
+    fi
+
+    setup_flatpak
+    flatpak install -y flathub com.opera.Opera
+    print_status "success" "Opera installed"
+}
+
+install_vivaldi() {
+    print_status "section" "VIVALDI BROWSER"
+
+    if flatpak list 2>/dev/null | grep -q com.vivaldi.Vivaldi; then
+        print_status "info" "Vivaldi already installed"
+        return 0
+    fi
+
+    setup_flatpak
+    flatpak install -y flathub com.vivaldi.Vivaldi
+    print_status "success" "Vivaldi installed"
+}
+
+install_edge() {
+    print_status "section" "MICROSOFT EDGE"
+
+    if flatpak list 2>/dev/null | grep -q com.microsoft.Edge; then
+        print_status "info" "Microsoft Edge already installed"
+        return 0
+    fi
+
+    setup_flatpak
+    flatpak install -y flathub com.microsoft.Edge
+    print_status "success" "Microsoft Edge installed"
+}
+
+install_brave() {
+    print_status "section" "BRAVE BROWSER"
+
+    if command_exists brave-browser || command_exists brave; then
+        print_status "info" "Brave already installed"
+        return 0
+    fi
+
+    case "$PACKAGE_MANAGER" in
+        apt)
+            sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+                https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+            echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] \
+https://brave-browser-apt-release.s3.brave.com/ stable main" \
+                | sudo tee /etc/apt/sources.list.d/brave-browser.list
+            sudo apt-get update -y
+            $INSTALL_CMD brave-browser
+            ;;
+        dnf|yum)
+            sudo dnf config-manager --add-repo \
+                https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
+            $INSTALL_CMD brave-browser
+            ;;
+        pacman)
+            if command_exists yay; then
+                yay -S --noconfirm brave-bin
+            else
+                print_status "warning" "Install brave-bin from AUR manually or install yay first"
+            fi
+            ;;
+        zypper)
+            sudo rpm --import https://brave-browser-rpm-release.s3.brave.com/brave-core.asc
+            sudo zypper addrepo https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
+            $INSTALL_CMD brave-browser
+            ;;
+    esac
+
+    print_status "success" "Brave installed"
+}
+
 install_slack() {
     print_status "section" "SLACK"
     
@@ -2485,6 +2564,7 @@ install_utilities() {
         "kdeconnect:kdeconnect:kdeconnect:kdeconnect"
         "solaar:solaar:solaar:solaar"
         "flameshot:flameshot:flameshot:flameshot"
+        "lynx:lynx:lynx:lynx"
     )
     
     for util_info in "${utilities[@]}"; do
@@ -2548,6 +2628,7 @@ install_utilities() {
     print_status "info" "Solaar: Logitech device manager - launch with 'solaar' command"
     print_status "info" "Piper: Gaming device configuration tool"
     print_status "info" "Flameshot: Screenshot tool - launch with 'flameshot' command"
+    print_status "info" "Lynx: Terminal-based web browser - launch with 'lynx' command"
 }
 
 install_flameshot() {
@@ -3874,6 +3955,10 @@ run_full_installation() {
     install_pgadmin
     install_dbeaver
     install_chrome
+    install_opera
+    install_vivaldi
+    install_edge
+    install_brave
     install_slack
     install_snap_apps
     install_flatpak_apps
@@ -3942,6 +4027,10 @@ run_custom_installation() {
         "install_pgadmin:pgAdmin4"
         "install_dbeaver:DBeaver"
         "install_chrome:Google Chrome"
+        "install_opera:Opera Browser"
+        "install_vivaldi:Vivaldi Browser"
+        "install_edge:Microsoft Edge"
+        "install_brave:Brave Browser"
         "install_slack:Slack"
         "install_snap_apps:Snap Applications"
         "install_flatpak_apps:Flatpak Applications"

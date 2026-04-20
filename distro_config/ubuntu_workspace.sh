@@ -1021,10 +1021,62 @@ EOF
         print_status "warning" "No Ambiente Virtual apps found"
     fi
     
+    # ==================== BROWSERS FOLDER ====================
+    print_status "info" "Creating Browsers folder..."
+    local browsers_apps=()
+
+    local browser_app_names=(
+        'firefox_firefox.desktop' 'firefox.desktop'
+        'google-chrome.desktop' 'chrome.desktop'
+        'com.opera.Opera.desktop'
+        'com.vivaldi.Vivaldi.desktop' 'vivaldi-stable.desktop'
+        'com.microsoft.Edge.desktop' 'microsoft-edge.desktop'
+        'com.brave.Browser.desktop' 'brave-browser.desktop'
+    )
+
+    for app in "${browser_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            if [[ ! " ${browsers_apps[@]} " =~ " '$result' " ]]; then
+                browsers_apps+=("'$result'")
+            fi
+        fi
+    done
+
+    shopt -s nullglob
+    for desktop_file in /var/lib/flatpak/exports/share/applications/com.opera.Opera.desktop \
+                        /var/lib/flatpak/exports/share/applications/com.vivaldi.Vivaldi.desktop \
+                        /var/lib/flatpak/exports/share/applications/com.microsoft.Edge.desktop \
+                        /var/lib/flatpak/exports/share/applications/com.brave.Browser.desktop \
+                        "$HOME/.local/share/applications"/com.opera.Opera.desktop \
+                        "$HOME/.local/share/applications"/com.vivaldi.Vivaldi.desktop \
+                        "$HOME/.local/share/applications"/com.microsoft.Edge.desktop \
+                        "$HOME/.local/share/applications"/com.brave.Browser.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            if [[ ! " ${browsers_apps[@]} " =~ " '$basename' " ]]; then
+                browsers_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+
+    browsers_apps=($(echo "${browsers_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+    if [ ${#browsers_apps[@]} -gt 0 ]; then
+        local browsers_apps_str=$(IFS=,; echo "${browsers_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Browsers/ name 'Browsers'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Browsers/ apps "[${browsers_apps_str}]"
+        folder_ids+=("'Browsers'")
+        print_status "success" "Browsers folder created with ${#browsers_apps[@]} apps"
+        print_status "config" "  Apps: ${browsers_apps_str}"
+    else
+        print_status "warning" "No browser apps found"
+    fi
+
     # ==================== UPDATE FOLDER LIST ====================
     local ordered_folder_ids=()
 
-    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'OrgPessoal'" "'AmbienteVirtual'"; do
+    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'OrgPessoal'" "'AmbienteVirtual'" "'Browsers'"; do
         for created_folder in "${folder_ids[@]}"; do
             if [ "$created_folder" = "$folder" ]; then
                 ordered_folder_ids+=("$folder")

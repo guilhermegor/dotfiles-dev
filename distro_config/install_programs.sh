@@ -3972,6 +3972,29 @@ install_claudestatus() {
     fi
 }
 
+install_rtk() {
+    print_status "section" "RTK (RUST TOKEN KILLER)"
+
+    if command_exists rtk; then
+        print_status "info" "rtk already installed"
+        return 0
+    fi
+
+    if ! command_exists brew; then
+        print_status "error" "Homebrew not found — install Homebrew first"
+        return 1
+    fi
+
+    print_status "info" "Installing rtk via Homebrew..."
+    if brew install rtk &>> "$LOG_FILE"; then
+        print_status "success" "rtk installed successfully"
+        print_status "config" "Usage: rtk <token>"
+    else
+        print_status "error" "rtk installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
@@ -4045,6 +4068,7 @@ run_full_installation() {
     install_dim_calendar_events
     install_espanso
     install_claudestatus
+    install_rtk
     cleanup_system
     
     print_status "section" "INSTALLATION COMPLETE!"
@@ -4119,6 +4143,7 @@ run_custom_installation() {
         "uninstall_dim_calendar_events:Uninstall Calendar Events Extension"
         "install_espanso:Espanso (Text Expander)"
         "install_claudestatus:claudestatus (Claude Usage Dashboard)"
+        "install_rtk:RTK (Rust Token Killer)"
         "cleanup_system:System Cleanup"
     )
     

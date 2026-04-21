@@ -2610,6 +2610,51 @@ install_fastfetch() {
     fi
 }
 
+install_4k_video_downloader() {
+    if command_exists 4kvideodownloaderplus; then
+        print_status "info" "4K Video Downloader Plus already installed"
+        return 0
+    fi
+
+    if [ "$PACKAGE_MANAGER" != "apt" ]; then
+        print_status "warning" "4K Video Downloader Plus: manual install required for non-apt distros"
+        print_status "config" "  Download from: https://www.4kdownload.com/downloads"
+        return 1
+    fi
+
+    print_status "info" "Installing 4K Video Downloader Plus..."
+
+    local fallback_url="https://dl.4kdownload.com/app/4kvideodownloaderplus_26.1.0-1_amd64.deb"
+    local deb_url
+
+    deb_url=$(curl -fsSL --max-time 10 "https://www.4kdownload.com/downloads" 2>/dev/null \
+        | grep -oP 'https://dl\.4kdownload\.com/app/4kvideodownloaderplus_[\d.]+-1_amd64\.deb' \
+        | head -1)
+
+    if [ -z "$deb_url" ]; then
+        print_status "warning" "Could not scrape latest version, using fallback: $fallback_url"
+        deb_url="$fallback_url"
+    else
+        print_status "info" "Latest version URL: $deb_url"
+    fi
+
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    if wget -O "$tmp_dir/4kvideodownloaderplus.deb" "$deb_url" 2>>"$LOG_FILE" || \
+       curl -L -o "$tmp_dir/4kvideodownloaderplus.deb" "$deb_url" 2>>"$LOG_FILE"; then
+        if sudo apt-get install -y "$tmp_dir/4kvideodownloaderplus.deb"; then
+            print_status "success" "4K Video Downloader Plus installed"
+        else
+            print_status "error" "4K Video Downloader Plus installation failed"
+        fi
+    else
+        print_status "error" "Failed to download 4K Video Downloader Plus from: $deb_url"
+    fi
+
+    rm -rf "$tmp_dir"
+}
+
 install_utilities() {
     print_status "section" "SYSTEM UTILITIES"
 
@@ -2638,7 +2683,9 @@ install_utilities() {
             install_package "$display" "$debian" "$fedora" "$arch" || print_status "warning" "$display installation failed"
         fi
     done
-    
+
+    install_4k_video_downloader
+
     # Piper for gaming peripherals
     print_status "info" "Installing Piper (gaming device configuration)..."
     case "$PACKAGE_MANAGER" in

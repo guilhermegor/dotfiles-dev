@@ -131,7 +131,6 @@ Commit and push? (yes/no)
 
 Wait for user confirmation. If the user answers **no**, stop with
 `Outcome: stopped by user`. If **yes**, proceed to Step 7.
-```
 
 ### Step 7 — Commit and push
 

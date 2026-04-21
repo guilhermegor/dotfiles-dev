@@ -31,6 +31,7 @@ run_marketplaces() {
     register_marketplace "claude-plugins-official" "anthropics/claude-plugins-official"
     register_marketplace "claude-skills"           "anthropics/skills"
     register_marketplace "claude-hud"              "jarrodwatts/claude-hud"
+    register_marketplace "context-mode"            "mksglu/context-mode"
 }
 
 run_plugins() {
@@ -65,6 +66,8 @@ run_plugins() {
     promote_plugin_to_user_scope "supabase-postgres-best-practices@claude-plugins-official" "supabase-postgres-best-practices" "claude-plugins-official"
     promote_plugin_to_user_scope "senior-prompt-engineer@claude-plugins-official"           "senior-prompt-engineer"           "claude-plugins-official"
     promote_plugin_to_user_scope "clean-code@claude-plugins-official"                       "clean-code"                       "claude-plugins-official"
+    # Context mode — standalone GitHub repo, bootstrapped automatically
+    bootstrap_plugin "context-mode@context-mode" "context-mode" "context-mode" "mksglu/context-mode"
 }
 
 STEPS=(

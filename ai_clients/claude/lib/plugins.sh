@@ -2,6 +2,64 @@
 # Promotes installed plugins from project scope to user scope.
 # Ensures plugins load globally across all projects.
 
+# Installs a plugin from a standalone GitHub repo (marketplace = single repo),
+# then promotes it to user scope. Safe to re-run: skips clone when cache exists.
+bootstrap_plugin() {
+    local plugin_key="$1"      # e.g. context-mode@context-mode
+    local plugin_name="$2"     # e.g. context-mode
+    local marketplace_id="$3"  # e.g. context-mode
+    local github_repo="$4"     # e.g. mksglu/context-mode
+
+    local cache_dir="$CLAUDE_DIR/plugins/cache/$marketplace_id/$plugin_name"
+    local installed_file="$CLAUDE_DIR/plugins/installed_plugins.json"
+
+    if ls -d "$cache_dir"/*/ 2>/dev/null | grep -q .; then
+        promote_plugin_to_user_scope "$plugin_key" "$plugin_name" "$marketplace_id"
+        return 0
+    fi
+
+    print_status "info" "Bootstrapping $plugin_key from github.com/$github_repo ..."
+
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    if ! git clone --depth=1 --quiet \
+            "https://github.com/$github_repo.git" "$tmp_dir" 2>/dev/null; then
+        print_status "error" "Clone failed for github.com/$github_repo — skipping $plugin_key"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    local version git_sha
+    git_sha=$(git -C "$tmp_dir" rev-parse HEAD 2>/dev/null || true)
+    version=$(jq -r '.version // empty' "$tmp_dir/package.json" 2>/dev/null || true)
+    if [ -z "$version" ]; then
+        version=$(git -C "$tmp_dir" describe --tags --abbrev=0 2>/dev/null || echo "1.0.0")
+    fi
+
+    mkdir -p "$cache_dir/$version"
+    cp -r "$tmp_dir/." "$cache_dir/$version/"
+    rm -rf "$tmp_dir"
+
+    [ -f "$installed_file" ] || echo '{"plugins":{}}' > "$installed_file"
+
+    local now entry
+    now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+    entry=$(jq -n \
+        --arg path "$cache_dir/$version" \
+        --arg ver  "$version" \
+        --arg sha  "$git_sha" \
+        --arg now  "$now" \
+        '{scope:"user",installPath:$path,version:$ver,installedAt:$now,lastUpdated:$now,gitCommitSha:$sha}')
+
+    jq --arg key "$plugin_key" --argjson entry "$entry" \
+        '.plugins[$key] = ((.plugins[$key] // []) + [$entry])' \
+        "$installed_file" > "${installed_file}.tmp" \
+        && mv "${installed_file}.tmp" "$installed_file"
+
+    print_status "success" "Installed: $plugin_key (v$version)"
+}
+
 demote_plugin_from_user_scope() {
     local plugin_key="$1"
     local installed_file="$CLAUDE_DIR/plugins/installed_plugins.json"

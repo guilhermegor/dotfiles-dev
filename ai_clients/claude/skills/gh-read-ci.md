@@ -2,7 +2,6 @@
 name: s:gh-read-ci
 description: Use when a:gh-fix-ci needs to parse raw GitHub Actions log output — extracts failing steps, error messages, file:line references, and produces fingerprints for seen_errors tracking
 effort: high
-argument-hint: [run-id] [--plan|--fix]
 allowed-tools: Bash(gh run*)
 ---
 
@@ -11,14 +10,13 @@ Follow these steps exactly.
 
 ## 0. Activate context-mode
 
-Invoke context-mode to enrich processing of the CI log content before reading
-any log lines.
+If context-mode is available, invoke it to enrich processing of the CI log
+content. If it is not installed, proceed without it.
 
 ## 1. Receive input
 
 The caller provides:
 - `run-id`: the GitHub Actions run ID
-- Mode flag: `--plan` or `--fix`
 
 ## 2. Fetch failed logs
 
@@ -45,6 +43,10 @@ For each error, produce a short fingerprint.
 Format: `<tool-or-step>:<file>:<line>` when location is available, or
 `<tool-or-step>:<error-slug>` when not.
 
+An `error-slug` is a 2–4 word kebab-case summary of the error message,
+normalised to lowercase with no punctuation (e.g. `no-such-file`,
+`permission-denied`, `exit-code-1`).
+
 Examples:
 - `mypy:src/foo.py:23`
 - `pytest:tests/test_bar.py:88`
@@ -55,7 +57,7 @@ Examples:
 
 Output this block — the agent reads it directly:
 
-```
+```text
 ## CI Error Report
 
 Run: <run-id>
@@ -76,3 +78,6 @@ Failed steps: <N>
 ```
 
 Do not surface the raw log output to the user.
+
+If no errors can be extracted from the log, return `Failed steps: 0` and a
+`Fingerprints` section containing a single entry: `parse-failed:no-extractable-errors`.

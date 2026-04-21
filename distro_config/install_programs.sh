@@ -2011,6 +2011,65 @@ install_github_cli() {
     print_status "success" "GitHub CLI installed"
 }
 
+install_act() {
+    print_status "section" "ACT (RUN GITHUB ACTIONS LOCALLY)"
+
+    if command_exists act; then
+        print_status "info" "act already installed"
+        return 0
+    fi
+
+    if command_exists brew; then
+        print_status "info" "Installing act via Homebrew..."
+        if brew install act &>> "$LOG_FILE"; then
+            print_status "success" "act installed via Homebrew"
+            return 0
+        fi
+        print_status "warning" "Homebrew install failed, falling back to GitHub release..."
+    fi
+
+    local arch
+    local download_arch
+    local tmp_dir
+    local tarball_url
+
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  download_arch="x86_64" ;;
+        aarch64) download_arch="arm64" ;;
+        armv7l)  download_arch="armv7" ;;
+        *)
+            print_status "warning" "Unsupported architecture for act: $arch"
+            return 1
+            ;;
+    esac
+
+    tmp_dir=$(mktemp -d)
+    tarball_url="https://github.com/nektos/act/releases/latest/download/act_Linux_${download_arch}.tar.gz"
+
+    print_status "info" "Downloading act from GitHub releases..."
+    if wget -O "$tmp_dir/act.tar.gz" "$tarball_url" 2>>"$LOG_FILE" || \
+       curl -L -o "$tmp_dir/act.tar.gz" "$tarball_url" 2>>"$LOG_FILE"; then
+        tar -xzf "$tmp_dir/act.tar.gz" -C "$tmp_dir"
+        sudo mv "$tmp_dir/act" /usr/local/bin/act
+        sudo chmod +x /usr/local/bin/act
+    else
+        print_status "error" "Failed to download act from GitHub releases"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    rm -rf "$tmp_dir"
+
+    if command_exists act; then
+        act --version >> "$LOG_FILE"
+        print_status "success" "act installed: $(act --version 2>/dev/null)"
+    else
+        print_status "error" "act installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
 install_pyenv() {
     print_status "section" "PYENV (PYTHON VERSION MANAGER)"
     
@@ -3950,6 +4009,7 @@ run_full_installation() {
     install_vscode
     install_cursor
     install_github_cli
+    install_act
     install_pyenv
     install_postgresql
     install_pgadmin
@@ -4022,6 +4082,7 @@ run_custom_installation() {
         "install_vscode:VS Code"
         "install_cursor:Cursor IDE"
         "install_github_cli:GitHub CLI"
+        "install_act:act (Run GitHub Actions Locally)"
         "install_pyenv:Python (pyenv)"
         "install_postgresql:PostgreSQL"
         "install_pgadmin:pgAdmin4"

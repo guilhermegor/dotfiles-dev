@@ -228,3 +228,27 @@ its parent directory if they do not exist.
   mark the lessons.md entry `**Promoted:** YYYY-MM-DD`.
 - Never delete or archive lessons — accumulate them so pattern trends are
   visible over time.
+
+## Compaction
+
+When the context window is compacted, apply this priority order:
+
+**Always keep**
+- The current task description and its acceptance criteria
+- File paths that have been read, created, or modified in this session
+- Test results (pass/fail counts, assertion errors, failing test names)
+- The current plan or step list and which steps are done vs. pending
+- Any explicit user instructions or corrections given during the session
+- Final state of any code written or edited (not intermediate drafts)
+
+**Summarise (keep the conclusion, drop the detail)**
+- Exploration trails: keep the finding, drop the path taken to reach it
+- Tool call chains that produced a single result — keep only the result
+- Repeated grep/glob searches — keep the final match, drop earlier misses
+
+**Drop entirely**
+- Error messages that have already been resolved
+- Superseded approaches, rejected designs, or abandoned file reads
+- Intermediate reasoning steps that led to a decision already recorded
+- Duplicate information (e.g. the same file path mentioned three times)
+- Any raw tool output that was only used to derive a now-recorded fact

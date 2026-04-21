@@ -1,4 +1,7 @@
 {
+  "env": {
+    "DISABLE_PROMPT_CACHING": "false"
+  },
   "model": "sonnet",
   "smallFastModel": "haiku",
   "voiceEnabled": true,

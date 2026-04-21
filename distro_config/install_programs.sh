@@ -2640,21 +2640,23 @@ install_4k_video_downloader() {
 
     local tmp_dir
     tmp_dir=$(mktemp -d)
-    trap 'rm -rf "$tmp_dir"' RETURN
 
     if wget -O "$tmp_dir/4kvideodownloaderplus.deb" "$deb_url" 2>>"$LOG_FILE" || \
        curl -L -o "$tmp_dir/4kvideodownloaderplus.deb" "$deb_url" 2>>"$LOG_FILE"; then
         if sudo apt-get install -y "$tmp_dir/4kvideodownloaderplus.deb"; then
+            rm -rf "$tmp_dir"
             if dpkg -l 4kvideodownloaderplus 2>/dev/null | grep -q '^ii'; then
                 print_status "success" "4K Video Downloader Plus is ready"
             else
                 print_status "warning" "4K Video Downloader Plus installed but could not be verified"
             fi
         else
+            rm -rf "$tmp_dir"
             print_status "error" "4K Video Downloader Plus installation failed"
             return 1
         fi
     else
+        rm -rf "$tmp_dir"
         print_status "error" "Failed to download 4K Video Downloader Plus from: $deb_url"
         return 1
     fi

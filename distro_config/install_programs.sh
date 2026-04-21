@@ -3975,24 +3975,35 @@ install_claudestatus() {
 install_rtk() {
     print_status "section" "RTK (RUST TOKEN KILLER)"
 
-    if command_exists rtk; then
-        print_status "info" "rtk already installed"
-        return 0
-    fi
+    if ! command_exists rtk; then
+        if ! command_exists brew; then
+            print_status "error" "Homebrew not found — install Homebrew first"
+            return 1
+        fi
 
-    if ! command_exists brew; then
-        print_status "error" "Homebrew not found — install Homebrew first"
-        return 1
-    fi
-
-    print_status "info" "Installing rtk via Homebrew..."
-    if brew install rtk &>> "$LOG_FILE"; then
-        print_status "success" "rtk installed successfully"
-        print_status "config" "Usage: rtk <token>"
+        print_status "info" "Installing rtk via Homebrew..."
+        if brew install rtk &>> "$LOG_FILE"; then
+            print_status "success" "rtk installed successfully"
+        else
+            print_status "error" "rtk installation failed — check $LOG_FILE"
+            return 1
+        fi
     else
-        print_status "error" "rtk installation failed — check $LOG_FILE"
-        return 1
+        print_status "info" "rtk already installed"
     fi
+
+    if ! grep -q "rtk hook claude" "$HOME/.claude/settings.json" 2>/dev/null; then
+        print_status "info" "Initializing RTK for Claude Code..."
+        if rtk init -g --auto-patch &>> "$LOG_FILE"; then
+            print_status "success" "RTK initialized — PreToolUse hook added to settings.json"
+        else
+            print_status "warning" "RTK init failed — run manually: rtk init -g --auto-patch"
+        fi
+    else
+        print_status "info" "RTK hook already configured"
+    fi
+
+    print_status "config" "Usage: rtk <command> (e.g. rtk git status, rtk tree)"
 }
 
 # ============================================================================

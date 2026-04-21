@@ -1,3 +1,5 @@
+@RTK.md
+
 # Global Programming Preferences
 
 > **Priority rule:** These are personal defaults. Whenever a project-level CLAUDE.md (or any

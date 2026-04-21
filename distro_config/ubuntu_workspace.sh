@@ -546,7 +546,6 @@ organize_app_folders() {
         'org.gnome.Calculator.desktop' 'gnome-calculator.desktop' 'gcalctool.desktop'
         'org.gnome.Nautilus.desktop' 'nautilus.desktop' 'org.gnome.Files.desktop'
         'org.freedesktop.Piper.desktop' 'piper.desktop'
-        'vlc.desktop' 'org.videolan.VLC.desktop'
         'org.gnome.Logs.desktop' 'gnome-logs.desktop' 'gnome-system-log.desktop'
         'org.gnome.Characters.desktop' 'gucharmap.desktop' 'gnome-characters.desktop'
         'org.gnome.font-viewer.desktop' 'gnome-font-viewer.desktop' 'org.gnome.FontManager.desktop'
@@ -621,7 +620,63 @@ organize_app_folders() {
     else
         print_status "warning" "No Utilitários apps found"
     fi
-    
+
+    # ==================== MEDIA FOLDER ====================
+    print_status "info" "Creating Media folder..."
+    local media_apps=()
+
+    local media_app_names=(
+        'vlc.desktop' 'org.videolan.VLC.desktop'
+        '4kvideodownloaderplus.desktop'
+        'rhythmbox.desktop' 'org.gnome.Rhythmbox3.desktop'
+        'cheese.desktop' 'org.gnome.Cheese.desktop'
+        'org.gnome.Music.desktop'
+        'totem.desktop' 'org.gnome.Totem.desktop'
+        'org.gnome.SoundRecorder.desktop' 'gnome-sound-recorder.desktop'
+        'celluloid.desktop' 'io.github.celluloid_mpv.Celluloid.desktop'
+        'mpv.desktop' 'io.mpv.Mpv.desktop'
+        'handbrake.desktop' 'fr.handbrake.ghb.desktop'
+        'kdenlive.desktop' 'org.kde.kdenlive.desktop'
+        'pitivi.desktop' 'org.pitivi.Pitivi.desktop'
+    )
+
+    for app in "${media_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            media_apps+=("'$result'")
+        fi
+    done
+
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*vlc*.desktop \
+                        /usr/share/applications/*4kdownload*.desktop \
+                        /usr/share/applications/*4kvideo*.desktop \
+                        /var/lib/snapd/desktop/applications/*vlc*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*vlc*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*4kdownload*.desktop \
+                        "$HOME/.local/share/applications"/*vlc*.desktop \
+                        "$HOME/.local/share/applications"/*4kdownload*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename=$(basename "$desktop_file")
+            if [[ ! " ${media_apps[@]} " =~ " '$basename' " ]]; then
+                media_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+
+    media_apps=($(echo "${media_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+    if [ ${#media_apps[@]} -gt 0 ]; then
+        local media_apps_str=$(IFS=,; echo "${media_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Media/ name 'Media'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Media/ apps "[${media_apps_str}]"
+        folder_ids+=("'Media'")
+        print_status "success" "Media folder created with ${#media_apps[@]} apps"
+        print_status "config" "  Apps: ${media_apps_str}"
+    else
+        print_status "warning" "No Media apps found"
+    fi
+
     # ==================== SHARING FOLDER ====================
     print_status "info" "Creating Sharing folder..."
     local sharing_apps=()
@@ -1076,7 +1131,7 @@ EOF
     # ==================== UPDATE FOLDER LIST ====================
     local ordered_folder_ids=()
 
-    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'OrgPessoal'" "'AmbienteVirtual'" "'Browsers'"; do
+    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'Media'" "'OrgPessoal'" "'AmbienteVirtual'" "'Browsers'"; do
         for created_folder in "${folder_ids[@]}"; do
             if [ "$created_folder" = "$folder" ]; then
                 ordered_folder_ids+=("$folder")

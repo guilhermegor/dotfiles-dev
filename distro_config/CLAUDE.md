@@ -25,11 +25,12 @@ Distribution-level setup: package installation, toolchains, environment, and GNO
 
 When adding a new application, choose the installation method using this priority:
 
-1. **Flatpak** — prefer for GUI apps; sandboxed, distro-agnostic, available on all supported distros.
-2. **Homebrew** — use when the app has an official Homebrew formula and no Flatpak; works everywhere but adds PATH complexity.
-3. **Snap** — acceptable fallback when Flatpak is unavailable; note that snap confinement can cause issues on some systems.
-4. **PWA (Chrome `--app=<url>`)** — use for Google/web-first apps with no native Linux package (e.g. Google Calendar, Google Tasks). Requires Chrome; creates a `.desktop` entry under `~/.local/share/applications/`.
-5. **AppImage** — last resort for portable binaries with no managed package; download to `$DOWNLOADS_DIR`, `chmod +x`, and symlink into `/usr/local/bin/`.
+1. **Official `.deb` from vendor** — prefer when the software vendor provides an official `.deb` (e.g. download page or GitHub releases). Follow the `install_fastfetch` pattern: `wget`/`curl` to a `mktemp` dir, `apt-get install -y <file>.deb`, then clean up. Always guard with `command_exists` before downloading.
+2. **Flatpak** — use when no official `.deb` exists; sandboxed, distro-agnostic, available on all supported distros.
+3. **Homebrew** — use when the app has an official Homebrew formula and no `.deb` or Flatpak; works everywhere but adds PATH complexity.
+4. **Snap** — acceptable fallback when `.deb` and Flatpak are unavailable; note that snap confinement can cause issues on some systems.
+5. **PWA (Chrome `--app=<url>`)** — use for Google/web-first apps with no native Linux package (e.g. Google Calendar, Google Tasks). Requires Chrome; creates a `.desktop` entry under `~/.local/share/applications/`.
+6. **AppImage** — last resort for portable binaries with no managed package; download to `$DOWNLOADS_DIR`, `chmod +x`, and symlink into `/usr/local/bin/`.
 
 Each install function must guard against re-installation with `command_exists` or an equivalent check before attempting any download or package operation.
 
@@ -44,6 +45,7 @@ Each install function must guard against re-installation with `command_exists` o
   | `Sistema` | Sistema | System tools, settings, file manager |
   | `Seguranca` | Segurança | Security, antivirus, backup |
   | `Utilitarios` | Utilitários | General utilities (screenshots, image editors…) |
+  | `Media` | Media | Video players, audio players, media tools |
   | `Sharing` | Sharing | File-sharing and remote-desktop apps |
   | `IRPF` | IRPF | Brazilian tax program |
   | `DEV` | DEV | IDEs, terminals, DB clients, Docker |

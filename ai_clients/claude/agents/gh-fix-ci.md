@@ -58,6 +58,9 @@ Select the run whose `headSha` matches the PR's `headRefOid`. If no matching
 run exists yet (new push just landed), wait 10 seconds and retry once. If
 still no match, report and stop.
 
+If the matching run exists but is already in progress (`status == "in_progress"`),
+proceed directly to Step 2.
+
 ### Step 2 — Watch run
 
 ```bash
@@ -78,9 +81,8 @@ If `conclusion == "success"`: print the final summary with
 
 ### Step 4 — Extract errors
 
-Load `s:gh-read-ci` via the Skill tool, passing the run ID and mode flag as
-context. Collect the structured CI Error Report and fingerprint list it
-returns.
+Load `s:gh-read-ci` via the Skill tool, passing the run ID. Collect the
+structured CI Error Report and fingerprint list it returns.
 
 ### Step 5 — Check hard stop conditions
 
@@ -94,7 +96,10 @@ returns.
 
 Print the final summary with `Outcome: recurring error` and stop.
 
-Append all new fingerprints from this iteration to `seen_errors` in memory.
+Append fingerprints to `seen_errors` in memory using **one entry per unique
+fingerprint per iteration** (deduplicate within the current iteration before
+appending). The recurring-error count is the number of distinct iterations in
+which a fingerprint appeared, not the raw list length.
 
 ### Step 6 — Apply fixes
 
@@ -109,6 +114,24 @@ Wait for the user's answer before editing.
 
 **`--fix` mode** — apply all fixes directly and report each one:
 > "Fixed `<fingerprint>` → `<file:line>`: <one-line description>"
+
+### --- Checkpoint: fixes applied ---
+
+**Pause and present what was changed to the user.**
+
+```
+## Checkpoint: Fixes Applied (iteration <iteration>)
+
+### Changes made
+- <fingerprint> → <file:line>: <one-line description>
+...
+
+Commit and push? (yes/no)
+```
+
+Wait for user confirmation. If the user answers **no**, stop with
+`Outcome: stopped by user`. If **yes**, proceed to Step 7.
+```
 
 ### Step 7 — Commit and push
 
@@ -169,10 +192,19 @@ Outcome:    green | stopped by user | max iterations | recurring error
 
 ## Memory
 
-After each completed session, save:
+### Live state (updated each iteration)
+
+Each iteration, update in memory:
+- `pr_number`, `mode` — set once at startup, never change
+- `iteration` — increment at the start of each cycle
+- `seen_errors` — append deduplicated fingerprints each cycle
+
+### Session snapshot (written when the loop ends)
+
+After the loop terminates for any reason, save:
 - PR number and title
-- Final outcome (green / stopped / max iterations / recurring error)
-- Any fingerprints that recurred across iterations
+- Final outcome (green / stopped by user / max iterations / recurring error)
+- Any fingerprints that appeared in `seen_errors` 2 or more times
 
 ---
 

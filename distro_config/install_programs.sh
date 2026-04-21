@@ -4185,6 +4185,7 @@ run_custom_installation() {
         "install_snap_apps:Snap Applications"
         "install_flatpak_apps:Flatpak Applications"
         "install_utilities:System Utilities"
+        "install_4k_video_downloader:4K Video Downloader Plus"
         "install_flameshot:Flameshot Screenshot Tool"
         "install_rofi:Rofi Launcher"
         "install_warp_terminal:Warp Terminal"

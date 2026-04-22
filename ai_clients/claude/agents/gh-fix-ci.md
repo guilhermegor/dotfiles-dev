@@ -9,7 +9,7 @@ color: red
 memory: true
 effort: high
 argument-hint: [<pr-number-or-url>] [--plan|--fix] [--help]
-allowed-tools: Bash(gh *) Bash(git *) Bash(sqlite3 *) Agent Skill
+allowed-tools: Bash(rtk gh *) Bash(rtk git *) Bash(sqlite3 *) Agent Skill
 ---
 
 Fix GitHub Actions CI failures on a pull request end-to-end: resolve the PR,
@@ -66,7 +66,7 @@ Parse from `$ARGUMENTS`:
 2. **PR identifier** — a PR number (e.g. `42`), a full PR URL, or empty.
    If empty, auto-detect:
    ```bash
-   gh pr view --json number,title,headRefName,headRefOid
+   rtk gh pr view --json number,title,headRefName,headRefOid
    ```
    If that fails (no open PR for current branch), report the error and stop.
 
@@ -128,13 +128,13 @@ command -v sqlite3 || {
 
 ```bash
 project_slug=$(
-  git remote get-url origin 2>/dev/null \
+  rtk git remote get-url origin 2>/dev/null \
     | sed 's|.*[:/]\([^/]*/[^/]*\)\.git$|\1|;s|\.git$||' \
     | tr '/' '-' \
     | tr -cd 'a-zA-Z0-9-'
 )
 if [ -z "$project_slug" ]; then
-  project_slug=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
+  project_slug=$(basename "$(rtk git rev-parse --show-toplevel 2>/dev/null || pwd)")
 fi
 ```
 
@@ -253,8 +253,8 @@ cycle.
 Get the PR's head SHA and the most recent workflow run:
 
 ```bash
-gh pr view <pr_number> --json headRefName,headRefOid,title
-gh run list --branch <headRefName> --limit 5 \
+rtk gh pr view <pr_number> --json headRefName,headRefOid,title
+rtk gh run list --branch <headRefName> --limit 5 \
   --json databaseId,status,conclusion,headSha
 ```
 
@@ -268,7 +268,7 @@ proceed directly to Step 2.
 ### Step 2 — Watch run
 
 ```bash
-gh run watch <run-id>
+rtk gh run watch <run-id>
 ```
 
 Report progress to the user before blocking:
@@ -277,7 +277,7 @@ Report progress to the user before blocking:
 ### Step 3 — Check result
 
 ```bash
-gh run view <run-id> --json conclusion
+rtk gh run view <run-id> --json conclusion
 ```
 
 If `conclusion == "success"`:
@@ -581,7 +581,7 @@ Stage only the files modified during this iteration — never `git add -A`.
 After committing, push the branch to `origin` so CI picks up the new commit.
 
 ```bash
-git add <file1> <file2> ...
+rtk git add <file1> <file2> ...
 ```
 
 Compose the commit message. Verify line lengths before committing:
@@ -595,14 +595,14 @@ echo -n "  - <fingerprint> → <file:line>" | wc -c
 
 Commit only when all lines pass:
 ```bash
-git commit -m "$(cat <<'EOF'
+rtk git commit -m "$(cat <<'EOF'
 fix(ci): resolve CI failures — iteration <N>
 
   - <fingerprint-1> → <file:line>
   - <fingerprint-2> → <file:line>
 EOF
 )"
-git push origin HEAD
+rtk git push origin HEAD
 ```
 
 ### Step 8 — Ask to continue
@@ -662,14 +662,14 @@ No additional memory snapshot is needed.
 ## Do Not
 
 - Do not stage files with `git add -A` or `git add .` — stage by name only.
-- Do not skip `gh run watch` — never assume a run has completed.
+- Do not skip `rtk gh run watch` — never assume a run has completed.
 - Do not proceed past hard stop conditions.
 - Do not commit with `--no-verify` unless the user explicitly requests it.
 - Do not push without committing first.
 - Do not start a new iteration if `iteration >= 5`.
 - Do not read or write `seen_errors` in memory — recurring errors live in
   the `ci_errors` SQLite table.
-- Do not call `gh run view` directly in Steps 4 or 6 — sub-agents handle it.
+- Do not call `rtk gh run view` directly in Steps 4 or 6 — sub-agents handle it.
 - Do not dispatch sub-agents without substituting all `<placeholder>` values.
 - Do not skip SQLite status updates when a fix is applied, skipped, or failed.
 - Do not abbreviate `implementation_model` to `impl_model` in prompts or SQL.

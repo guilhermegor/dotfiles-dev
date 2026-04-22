@@ -1,5 +1,24 @@
 @RTK.md
 
+## CLI Commands — Always Use RTK Proxy
+
+For any command RTK supports (`git`, `gh`, `find`, `grep`, `ls`, `curl`,
+`docker`, `pytest`, `cargo`, etc.), write the `rtk` prefix explicitly in
+agents, skills, and commands — never the bare binary. See RTK.md for the
+full list.
+
+Why: the `PreToolUse` hook rewrites at execution time, but the approval
+prompt shows the pre-hook command, so "don't ask again" creates a wrong
+allowlist entry (`Bash(git *)` instead of `Bash(rtk git *)`).
+
+Commands RTK does not wrap run bare as normal (`sqlite3`, `jq`, `make`,
+`python3`, `node`, etc.).
+
+Exceptions where bare binary is always correct:
+- `command -v <tool>` availability checks
+- Install instructions (`sudo apt install ...`)
+- Prohibition examples in "Do Not" sections
+
 # Global Programming Preferences
 
 > **Priority rule:** These are personal defaults. Whenever a project-level CLAUDE.md (or any

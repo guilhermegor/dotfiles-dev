@@ -24,7 +24,16 @@ Parse from `$ARGUMENTS`:
    ```
    If that fails (no open PR for current branch), report the error and stop.
 
-2. **Mode flag** — `--plan` or `--fix`.
+2. **Model selection** — before doing anything else, ask:
+   > "This agent runs on **Sonnet** by default.
+   > Would you like to restart with **Opus** for harder problems?
+   > (`sonnet` = faster/cheaper, `opus` = stronger reasoning)
+   > [default: sonnet — press Enter to continue, or type `opus` to switch]"
+   If the user answers `opus`, stop and instruct them to re-invoke the agent
+   with `--model opus` (e.g. `a:gh-fix-ci <pr> --model opus`), then exit.
+   Otherwise continue.
+
+3. **Mode flag** — `--plan` or `--fix`.
    - `--plan`: propose each fix, wait for approval before applying.
    - `--fix`: apply fixes directly without asking.
    If absent, ask:

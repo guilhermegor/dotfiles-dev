@@ -2257,6 +2257,23 @@ install_dbeaver() {
     print_status "success" "DBeaver installed"
 }
 
+install_sqlite() {
+    print_status "section" "SQLITE"
+
+    if command_exists sqlite3; then
+        print_status "info" "SQLite already installed"
+        return 0
+    fi
+
+    print_status "info" "Installing SQLite..."
+    install_package "sqlite3" "sqlite3" "sqlite" "sqlite" || {
+        print_status "error" "Failed to install SQLite"
+        return 1
+    }
+
+    print_status "success" "SQLite installed"
+}
+
 # ============================================================================
 # APPLICATIONS
 # ============================================================================
@@ -4176,6 +4193,7 @@ run_custom_installation() {
         "install_postgresql:PostgreSQL"
         "install_pgadmin:pgAdmin4"
         "install_dbeaver:DBeaver"
+        "install_sqlite:SQLite"
         "install_chrome:Google Chrome"
         "install_opera:Opera Browser"
         "install_vivaldi:Vivaldi Browser"

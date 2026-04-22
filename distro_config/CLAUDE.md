@@ -21,6 +21,16 @@ Distribution-level setup: package installation, toolchains, environment, and GNO
 - Distro detection via `/etc/os-release` (`$ID`); branch on `apt-get`, `dnf`, `pacman`, `zypper`.
 - Use `command -v <tool>` to guard installs; never assume a package is absent.
 
+## Checklist for Every New Install Function
+
+When asked to install any program, complete **all three steps** before reporting the task as done:
+
+1. **Write `install_<name>()`** in `install_programs.sh` — guard with `command_exists`, use `install_package` for multi-distro names.
+2. **Add to the menu** — append `"install_<name>:Display Name"` to the `components` array at the bottom of `install_programs.sh`, in the logical position relative to similar tools.
+3. **GNOME placement** — if the app has a GUI/frontend, ask the user which folder it belongs in (see table below) and add its `.desktop` entry to `ubuntu_workspace.sh`. If it is CLI-only or a background service, document that explicitly in the function comment.
+
+Never declare the task complete if any of these three steps is missing.
+
 ## App Installation Preference Order
 
 When adding a new application, choose the installation method using this priority:

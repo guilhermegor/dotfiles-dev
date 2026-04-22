@@ -1,6 +1,8 @@
 ---
 name: s:gh-read-ci
-description: Use when a:gh-fix-ci needs to parse raw GitHub Actions log output — extracts failing steps, error messages, file:line references, and produces fingerprints for seen_errors tracking
+description: Use when a:gh-fix-ci needs to parse raw GitHub Actions log
+  output — activates context-mode, extracts failing steps, error messages,
+  and file:line references, and returns structured fingerprints
 effort: high
 allowed-tools: Bash(gh run*)
 ---

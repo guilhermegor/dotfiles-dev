@@ -54,6 +54,74 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
+# Install an npm package globally for every nvm-managed Node version.
+# Each nvm version keeps its own global node_modules tree, so a plain
+# "npm install -g" only covers the currently active version.
+npm_global_install_all_nvm_versions() {
+    local package="$1"
+    local nvm_dir="${NVM_DIR:-$HOME/.nvm}"
+
+    if [ ! -s "$nvm_dir/nvm.sh" ]; then
+        print_status "warning" "nvm not found at $nvm_dir; skipping multi-version install"
+        return 1
+    fi
+
+    export NVM_DIR="$nvm_dir"
+    # shellcheck source=/dev/null
+    . "$NVM_DIR/nvm.sh"
+
+    local versions
+    versions=$(nvm ls --no-colors 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu)
+
+    if [ -z "$versions" ]; then
+        print_status "warning" "No nvm-managed Node versions found"
+        return 1
+    fi
+
+    print_status "info" "Found nvm-managed Node versions:"
+    while IFS= read -r ver; do
+        print_status "config" "  $ver"
+    done <<< "$versions"
+    echo ""
+
+    local -a failed_versions=()
+    while IFS= read -r ver; do
+        print_status "info" "[$ver] npm install -g $package ..."
+        if nvm exec "${ver#v}" npm install -g "$package" 2>&1 | tee -a "$LOG_FILE"; then
+            print_status "success" "  $ver: installed"
+        else
+            print_status "error" "  $ver: failed"
+            failed_versions+=("$ver")
+        fi
+    done <<< "$versions"
+
+    if [ "${#failed_versions[@]}" -gt 0 ]; then
+        print_status "warning" "Failed for Node versions: ${failed_versions[*]}"
+        return 1
+    fi
+
+    print_status "success" "$package installed across all nvm Node versions"
+}
+
+# Thin wrapper around "npm install -g": when nvm is present, offers to
+# install across all managed Node versions instead of only the active one.
+npm_install_global() {
+    local package_spec="$1"
+
+    if [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
+        echo -e "\n${YELLOW}Install ${package_spec} across ALL nvm-managed Node versions? (y/n):${NC}"
+        echo -e "${CYAN}Ensures the package is available regardless of which Node version is active${NC}"
+        local install_all_nvm
+        read -r install_all_nvm
+        if [[ "$install_all_nvm" =~ ^[Yy]$ ]]; then
+            npm_global_install_all_nvm_versions "$package_spec"
+            return $?
+        fi
+    fi
+
+    npm install -g "$package_spec" 2>&1 | tee -a "$LOG_FILE"
+}
+
 get_asdf_version() {
     asdf --version 2>/dev/null | head -n1 | sed 's/asdf version //' || echo "unknown"
 }
@@ -543,17 +611,17 @@ install_npx() {
     echo -e "${CYAN}Note: Latest versions of npx are included in npm. Installing separately is optional.${NC}"
     read -r npx_version_input
     
-    local install_cmd="npm install -g npx"
+    local package_spec="npx"
     if [ -n "$npx_version_input" ] && [ "$npx_version_input" != "latest" ]; then
-        install_cmd="npm install -g npx@$npx_version_input"
+        package_spec="npx@$npx_version_input"
         print_status "info" "Installing NPX $npx_version_input..."
     else
         print_status "info" "Installing latest NPX version..."
     fi
-    
+
     print_status "warning" "This may take a moment..."
-    
-    if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+
+    if npm_install_global "$package_spec"; then
         # Get the installed version
         npx_version=$(npx --version 2>/dev/null || echo "")
         
@@ -657,17 +725,17 @@ install_typescript() {
     echo -e "${CYAN}Examples: latest, 5.3.0, 5.2.0, 4.9.0${NC}"
     read -r ts_version
     
-    local install_cmd="npm install -g typescript"
+    local package_spec="typescript"
     if [ -n "$ts_version" ] && [ "$ts_version" != "latest" ]; then
-        install_cmd="npm install -g typescript@$ts_version"
+        package_spec="typescript@$ts_version"
         print_status "info" "Installing TypeScript $ts_version..."
     else
         print_status "info" "Installing latest TypeScript version..."
     fi
-    
+
     print_status "warning" "This may take a moment..."
-    
-    if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+
+    if npm_install_global "$package_spec"; then
         # Get the installed version
         tsc_version=$(npm list -g typescript 2>/dev/null | grep typescript@ | head -1 | sed 's/.*typescript@//' | cut -d' ' -f1)
         
@@ -762,17 +830,17 @@ install_nestjs() {
     echo -e "${CYAN}Examples: latest, 10.4.0, 10.3.2${NC}"
     read -r nestjs_version_input
     
-    local install_cmd="npm install -g @nestjs/cli"
+    local package_spec="@nestjs/cli"
     if [ -n "$nestjs_version_input" ] && [ "$nestjs_version_input" != "latest" ]; then
-        install_cmd="npm install -g @nestjs/cli@$nestjs_version_input"
+        package_spec="@nestjs/cli@$nestjs_version_input"
         print_status "info" "Installing NestJS CLI $nestjs_version_input..."
     else
         print_status "info" "Installing latest NestJS CLI version..."
     fi
-    
+
     print_status "warning" "This may take a moment..."
-    
-    if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+
+    if npm_install_global "$package_spec"; then
         # Get the installed version
         nestjs_version=$(npm list -g @nestjs/cli 2>/dev/null | grep @nestjs/cli@ | head -1 | sed 's/.*@nestjs\/cli@//' | cut -d' ' -f1)
         
@@ -1058,6 +1126,7 @@ install_github_copilot_cli() {
     echo -e "${CYAN}Enter 1 or 2 (default: 1):${NC}"
     read -r version_choice
     
+    local install_ok=true
     if [ "$install_method" = "brew" ]; then
         if [ "$version_choice" = "2" ]; then
             package_name="copilot-cli@prerelease"
@@ -1066,7 +1135,8 @@ install_github_copilot_cli() {
             package_name="copilot-cli"
             print_status "info" "Installing GitHub Copilot CLI stable version via Homebrew..."
         fi
-        install_cmd="brew install $package_name"
+        print_status "warning" "This may take a moment..."
+        brew install "$package_name" 2>&1 | tee -a "$LOG_FILE" || install_ok=false
     else
         if [ "$version_choice" = "2" ]; then
             package_name="@github/copilot@prerelease"
@@ -1075,12 +1145,11 @@ install_github_copilot_cli() {
             package_name="@github/copilot"
             print_status "info" "Installing GitHub Copilot CLI stable version via npm..."
         fi
-        install_cmd="npm install -g $package_name"
+        print_status "warning" "This may take a moment..."
+        npm_install_global "$package_name" || install_ok=false
     fi
-    
-    print_status "warning" "This may take a moment..."
-    
-    if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+
+    if $install_ok; then
         # Get the installed version
         copilot_version=$(timeout 5 copilot --version 2>/dev/null | head -n1 | sed 's/.*v//' || echo "")
         
@@ -1178,50 +1247,49 @@ install_claude_code() {
         return 0
     fi
 
-    print_status "info" "Installing Claude Code globally..."
     print_status "warning" "This may take a moment..."
 
-    if npm install -g @anthropic-ai/claude-code 2>&1 | tee -a "$LOG_FILE"; then
-        print_status "success" "Claude Code package installed successfully"
-
-        # Verify installation
-        print_status "info" "Verifying Claude Code installation..."
-
-        if command_exists claude; then
-            local actual_claude_version=$(timeout 10 claude --version 2>/dev/null | head -n1 || echo "Not available")
-            print_status "success" "Claude Code command is available: $actual_claude_version"
-        else
-            print_status "warning" "Claude command not found in PATH"
-            local npm_prefix=$(npm config get prefix 2>/dev/null || echo "")
-            if [ -n "$npm_prefix" ]; then
-                print_status "info" "npm global prefix detected: $npm_prefix"
-                print_status "config" "If needed, add to PATH: export PATH=\"$npm_prefix/bin:\$PATH\""
-            fi
-        fi
-
-        # Optional login
-        echo -e "\n${YELLOW}Do you want to run Claude login now? (y/n):${NC}"
-        read -r run_claude_login
-        if [[ "$run_claude_login" =~ ^[Yy]$ ]]; then
-            print_status "info" "Starting Claude login..."
-            claude login 2>&1 | tee -a "$LOG_FILE" || print_status "warning" "Claude login was not completed in this run"
-        else
-            print_status "info" "You can login later with: claude login"
-            print_status "info" "Or set API key manually: export ANTHROPIC_API_KEY=\"your_key_here\""
-        fi
-
-        # Usage tips
-        echo ""
-        print_status "info" "Claude Code usage:"
-        print_status "config" "  Check version: claude --version"
-        print_status "config" "  Login: claude login"
-        print_status "config" "  Update: npm update -g @anthropic-ai/claude-code"
-        print_status "config" "  Run in project: cd /path/to/project && claude"
-
-    else
+    npm_install_global "@anthropic-ai/claude-code" || {
         print_status "error" "Failed to install Claude Code"
         return 1
+    }
+
+    print_status "success" "Claude Code package installed successfully"
+
+    # Verify installation
+    print_status "info" "Verifying Claude Code installation..."
+
+    if command_exists claude; then
+        local actual_claude_version=$(timeout 10 claude --version 2>/dev/null | head -n1 || echo "Not available")
+        print_status "success" "Claude Code command is available: $actual_claude_version"
+    else
+        print_status "warning" "Claude command not found in PATH"
+        local npm_prefix=$(npm config get prefix 2>/dev/null || echo "")
+        if [ -n "$npm_prefix" ]; then
+            print_status "info" "npm global prefix detected: $npm_prefix"
+            print_status "config" "If needed, add to PATH: export PATH=\"$npm_prefix/bin:\$PATH\""
+        fi
     fi
+
+    # Optional login
+    echo -e "\n${YELLOW}Do you want to run Claude login now? (y/n):${NC}"
+    read -r run_claude_login
+    if [[ "$run_claude_login" =~ ^[Yy]$ ]]; then
+        print_status "info" "Starting Claude login..."
+        claude login 2>&1 | tee -a "$LOG_FILE" || print_status "warning" "Claude login was not completed in this run"
+    else
+        print_status "info" "You can login later with: claude login"
+        print_status "info" "Or set API key manually: export ANTHROPIC_API_KEY=\"your_key_here\""
+    fi
+
+    # Usage tips
+    echo ""
+    print_status "info" "Claude Code usage:"
+    print_status "config" "  Check version: claude --version"
+    print_status "config" "  Login: claude login"
+    print_status "config" "  Update (current version): npm update -g @anthropic-ai/claude-code"
+    print_status "config" "  Update all nvm versions: re-run this installer and choose 'all'"
+    print_status "config" "  Run in project: cd /path/to/project && claude"
 }
 
 # ============================================================================

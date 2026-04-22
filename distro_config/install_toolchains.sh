@@ -1377,6 +1377,85 @@ install_qwen() {
 # MENU AND MAIN EXECUTION
 # ============================================================================
 
+# ============================================================================
+# SYNC MANAGED NPM GLOBALS TO ALL NVM VERSIONS
+# ============================================================================
+
+sync_globals_to_all_nvm_versions() {
+    print_status "section" "SYNC NPM GLOBALS TO ALL NVM VERSIONS"
+
+    local nvm_dir="${NVM_DIR:-$HOME/.nvm}"
+    if [ ! -s "$nvm_dir/nvm.sh" ]; then
+        print_status "error" "nvm not found; cannot sync across versions"
+        return 1
+    fi
+
+    export NVM_DIR="$nvm_dir"
+    # shellcheck source=/dev/null
+    . "$NVM_DIR/nvm.sh"
+
+    local versions
+    versions=$(nvm ls --no-colors 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu)
+
+    if [ -z "$versions" ]; then
+        print_status "warning" "No nvm-managed Node versions found"
+        return 1
+    fi
+
+    print_status "info" "nvm-managed Node versions that will be targeted:"
+    while IFS= read -r ver; do
+        print_status "config" "  $ver"
+    done <<< "$versions"
+    echo ""
+
+    # Packages managed by this script
+    local -a managed_packages=(
+        "npx"
+        "typescript"
+        "@nestjs/cli"
+        "@github/copilot"
+        "@anthropic-ai/claude-code"
+    )
+
+    print_status "info" "Checking installed managed packages in active Node version..."
+    local -a to_sync=()
+    for pkg in "${managed_packages[@]}"; do
+        if npm list -g "$pkg" --depth=0 2>/dev/null | grep -q "$pkg"; then
+            print_status "success" "  $pkg — installed, will sync"
+            to_sync+=("$pkg")
+        else
+            print_status "info" "  $pkg — not installed, skipping"
+        fi
+    done
+    echo ""
+
+    if [ "${#to_sync[@]}" -eq 0 ]; then
+        print_status "warning" "No managed packages found in active Node version"
+        return 0
+    fi
+
+    echo -e "${YELLOW}Sync the packages above to all nvm versions listed? (y/n):${NC}"
+    read -r confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        print_status "info" "Sync cancelled"
+        return 0
+    fi
+
+    local -a failed_packages=()
+    for pkg in "${to_sync[@]}"; do
+        print_status "section" "Syncing $pkg"
+        npm_global_install_all_nvm_versions "$pkg" || failed_packages+=("$pkg")
+    done
+
+    echo ""
+    if [ "${#failed_packages[@]}" -gt 0 ]; then
+        print_status "warning" "Failed to sync: ${failed_packages[*]}"
+        return 1
+    fi
+
+    print_status "success" "All managed packages synced across nvm versions"
+}
+
 show_menu() {
     echo -e "\n${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║${NC}               ${MAGENTA}Toolchains Installation via asdf${NC}                ${CYAN}║${NC}"
@@ -1396,7 +1475,8 @@ show_menu() {
     echo -e "  ${GREEN}11)${NC} Install Claude Code (requires Node.js)"
     echo -e "  ${GREEN}12)${NC} Install Qwen Code"
     echo -e "  ${GREEN}13)${NC} Install all toolchains and tools"
-    echo -e "  ${GREEN}14)${NC} Exit"
+    echo -e "  ${GREEN}14)${NC} Sync managed npm globals to all nvm versions"
+    echo -e "  ${GREEN}15)${NC} Exit"
     echo -e "\n${CYAN}Choice: ${NC}"
 }
 
@@ -1501,11 +1581,15 @@ main() {
                 break
                 ;;
             14)
+                sync_globals_to_all_nvm_versions
+                break
+                ;;
+            15)
                 print_status "info" "Installation cancelled"
                 exit 0
                 ;;
             *)
-                print_status "error" "Invalid option. Please select 1-14."
+                print_status "error" "Invalid option. Please select 1-15."
                 ;;
         esac
     done

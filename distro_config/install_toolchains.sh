@@ -103,19 +103,34 @@ npm_global_install_all_nvm_versions() {
     print_status "success" "$package installed across all nvm Node versions"
 }
 
-# Thin wrapper around "npm install -g": when nvm is present, offers to
-# install across all managed Node versions instead of only the active one.
+# Thin wrapper around "npm install -g": when nvm is present, lists all
+# managed Node versions and offers to install across all of them.
 npm_install_global() {
     local package_spec="$1"
+    local nvm_dir="${NVM_DIR:-$HOME/.nvm}"
 
-    if [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
-        echo -e "\n${YELLOW}Install ${package_spec} across ALL nvm-managed Node versions? (y/n):${NC}"
-        echo -e "${CYAN}Ensures the package is available regardless of which Node version is active${NC}"
-        local install_all_nvm
-        read -r install_all_nvm
-        if [[ "$install_all_nvm" =~ ^[Yy]$ ]]; then
-            npm_global_install_all_nvm_versions "$package_spec"
-            return $?
+    if [ -s "$nvm_dir/nvm.sh" ]; then
+        export NVM_DIR="$nvm_dir"
+        # shellcheck source=/dev/null
+        . "$NVM_DIR/nvm.sh"
+
+        local versions
+        versions=$(nvm ls --no-colors 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu)
+
+        if [ -n "$versions" ]; then
+            echo -e "\n${CYAN}nvm-managed Node versions detected:${NC}"
+            while IFS= read -r ver; do
+                print_status "config" "  $ver"
+            done <<< "$versions"
+
+            echo -e "\n${YELLOW}Install ${package_spec} across ALL versions above? (y/n):${NC}"
+            echo -e "${CYAN}Ensures the package is available regardless of active Node version${NC}"
+            local install_all_nvm
+            read -r install_all_nvm
+            if [[ "$install_all_nvm" =~ ^[Yy]$ ]]; then
+                npm_global_install_all_nvm_versions "$package_spec"
+                return $?
+            fi
         fi
     fi
 

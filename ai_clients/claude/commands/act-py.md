@@ -1,5 +1,5 @@
 ---
-name: c:act
+name: c:act-py
 description: Run a targeted GitHub Actions workflow locally with act, detect failures, and fix them iteratively (YAML first, then source code)
 argument-hint: "<workflow.yml> [--plan|--fix]"
 allowed-tools: Bash(act*), Read, Glob, Grep, Edit, Skill

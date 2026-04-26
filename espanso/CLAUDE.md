@@ -23,6 +23,7 @@ espanso/<package-name>/
 | `ipv4_catcher` | `:ipv4` | Insert local IPv4 |
 | `kill_port` | `:killport` | fuser / kill command snippet |
 | `shortcuts` | `:shortcuts` | List all package triggers |
+| `gpg_apt_generate` | `:gpgaptgen` | Generate Ed25519 GPG key and display APT_GPG_* secrets |
 | `ssh_generate` | `:sshgen` | SSH keygen command |
 | `ssh_list` | `:sshlist` | List SSH keys |
 

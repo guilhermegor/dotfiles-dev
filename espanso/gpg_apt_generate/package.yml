@@ -1,0 +1,10 @@
+name: gpg_apt_generate
+description: Generate a passphrase-free Ed25519 GPG key and display APT_GPG_* secret values
+
+matches:
+  - trigger: ":gpgaptgen"
+    replace: false
+    vars: []
+    action:
+      type: shell
+      cmd: "bash -lc \"~/.config/espanso/packages/gpg_apt_generate/gpg_apt_generate.sh\""

@@ -1373,6 +1373,112 @@ install_qwen() {
     fi
 }
 
+install_blueprintx() {
+    print_status "section" "BLUEPRINTX (PROJECT SCAFFOLDING)"
+
+    if command_exists blueprintx; then
+        print_status "info" "blueprintx already installed"
+        return 0
+    fi
+
+    if ! command_exists git; then
+        print_status "error" "git is required but not found — install git first"
+        return 1
+    fi
+
+    echo -e "\n${YELLOW}Choose installation method:${NC}"
+    echo -e "  ${GREEN}1)${NC} apt  (Debian/Ubuntu — adds signed repository)"
+    if command_exists brew; then
+        echo -e "  ${GREEN}2)${NC} Homebrew"
+    fi
+    echo -e "  ${GREEN}3)${NC} Git clone (any platform)"
+    echo -e "  ${GREEN}4)${NC} Snap  (coming soon — not yet available)"
+    echo -e "\n${CYAN}Choice:${NC} "
+    read -r bpx_method
+
+    case "$bpx_method" in
+        1)
+            if ! command_exists apt-get; then
+                print_status "error" "apt-get not available on this system"
+                return 1
+            fi
+            print_status "info" "Adding BlueprintX GPG key..."
+            curl -fsSL https://guilhermegor.github.io/blueprintx/apt/gpg.key \
+                | sudo gpg --dearmor -o /usr/share/keyrings/blueprintx.gpg 2>&1 | tee -a "$LOG_FILE"
+
+            print_status "info" "Adding BlueprintX apt repository..."
+            echo "deb [arch=all signed-by=/usr/share/keyrings/blueprintx.gpg] https://guilhermegor.github.io/blueprintx/apt stable main" \
+                | sudo tee /etc/apt/sources.list.d/blueprintx.list 2>&1 | tee -a "$LOG_FILE"
+
+            sudo apt update 2>&1 | tee -a "$LOG_FILE"
+
+            print_status "info" "Installing blueprintx via apt..."
+            if sudo apt-get install -y blueprintx 2>&1 | tee -a "$LOG_FILE"; then
+                print_status "success" "blueprintx installed via apt"
+            else
+                print_status "error" "apt installation failed — check $LOG_FILE"
+                return 1
+            fi
+            ;;
+        2)
+            if ! command_exists brew; then
+                print_status "error" "Homebrew not found — install Homebrew first"
+                return 1
+            fi
+            print_status "info" "Tapping guilhermegor/blueprintx..."
+            if brew tap guilhermegor/blueprintx https://github.com/guilhermegor/blueprintx 2>&1 | tee -a "$LOG_FILE" && \
+               brew install blueprintx 2>&1 | tee -a "$LOG_FILE"; then
+                print_status "success" "blueprintx installed via Homebrew"
+            else
+                print_status "error" "Homebrew installation failed — check $LOG_FILE"
+                return 1
+            fi
+            ;;
+        3)
+            local install_dir="$HOME/.local/share/blueprintx"
+            local bin_dir="$HOME/.local/bin"
+
+            print_status "info" "Cloning blueprintx to $install_dir..."
+            if git clone https://github.com/guilhermegor/blueprintx.git "$install_dir" 2>&1 | tee -a "$LOG_FILE"; then
+                mkdir -p "$bin_dir"
+                printf '#!/usr/bin/env bash\nexec bash "%s/bin/blueprintx.sh" "$@"\n' "$install_dir" \
+                    > "$bin_dir/blueprintx"
+                chmod +x "$bin_dir/blueprintx"
+
+                if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
+                    print_status "warning" "$bin_dir is not in PATH — add it to your shell profile"
+                    print_status "config" "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+                fi
+                print_status "success" "blueprintx installed from source"
+            else
+                print_status "error" "git clone failed — check $LOG_FILE"
+                return 1
+            fi
+            ;;
+        4)
+            print_status "warning" "Snap package for blueprintx is not yet published — check back later"
+            print_status "info" "Once available: sudo snap install blueprintx"
+            return 0
+            ;;
+        *)
+            print_status "warning" "Invalid choice — aborting"
+            return 1
+            ;;
+    esac
+
+    if command_exists blueprintx; then
+        print_status "success" "blueprintx installation verified"
+    else
+        print_status "warning" "blueprintx not found in PATH yet — reload your shell"
+    fi
+
+    echo ""
+    print_status "info" "blueprintx commands:"
+    print_status "config" "  blueprintx new        — interactive project scaffolding"
+    print_status "config" "  blueprintx preview    — show available skeleton structures"
+    print_status "config" "  blueprintx dry-run    — preview generated structure only"
+}
+
 # ============================================================================
 # MENU AND MAIN EXECUTION
 # ============================================================================
@@ -1474,9 +1580,10 @@ show_menu() {
     echo -e "  ${GREEN}10)${NC} Install GitHub Copilot CLI (requires Node.js)"
     echo -e "  ${GREEN}11)${NC} Install Claude Code (requires Node.js)"
     echo -e "  ${GREEN}12)${NC} Install Qwen Code"
-    echo -e "  ${GREEN}13)${NC} Install all toolchains and tools"
-    echo -e "  ${GREEN}14)${NC} Sync managed npm globals to all nvm versions"
-    echo -e "  ${GREEN}15)${NC} Exit"
+    echo -e "  ${GREEN}13)${NC} Install BlueprintX (project scaffolding)"
+    echo -e "  ${GREEN}14)${NC} Install all toolchains and tools"
+    echo -e "  ${GREEN}15)${NC} Sync managed npm globals to all nvm versions"
+    echo -e "  ${GREEN}16)${NC} Exit"
     echo -e "\n${CYAN}Choice: ${NC}"
 }
 
@@ -1563,6 +1670,10 @@ main() {
                 break
                 ;;
             13)
+                install_blueprintx
+                break
+                ;;
+            14)
                 install_nodejs
                 echo ""
                 install_typescript
@@ -1578,18 +1689,20 @@ main() {
                 install_claude_code
                 echo ""
                 install_qwen
-                break
-                ;;
-            14)
-                sync_globals_to_all_nvm_versions
+                echo ""
+                install_blueprintx
                 break
                 ;;
             15)
+                sync_globals_to_all_nvm_versions
+                break
+                ;;
+            16)
                 print_status "info" "Installation cancelled"
                 exit 0
                 ;;
             *)
-                print_status "error" "Invalid option. Please select 1-15."
+                print_status "error" "Invalid option. Please select 1-16."
                 ;;
         esac
     done

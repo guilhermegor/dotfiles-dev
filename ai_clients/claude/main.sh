@@ -22,6 +22,7 @@ source "$SCRIPT_DIR/lib/claude_md.sh"
 source "$SCRIPT_DIR/lib/rules.sh"
 source "$SCRIPT_DIR/lib/mcp_servers.sh"
 source "$SCRIPT_DIR/lib/env.sh"
+source "$SCRIPT_DIR/lib/claude_mem.sh"
 
 # ── Step registry ─────────────────────────────────────────────────────────────
 # Each entry: "key|label|function_or_block"
@@ -32,6 +33,7 @@ run_marketplaces() {
     register_marketplace "claude-skills"           "anthropics/skills"
     register_marketplace "claude-hud"              "jarrodwatts/claude-hud"
     register_marketplace "context-mode"            "mksglu/context-mode"
+    register_marketplace "claude-mem"              "thedotmack/claude-mem"
 }
 
 run_plugins() {
@@ -68,6 +70,8 @@ run_plugins() {
     promote_plugin_to_user_scope "clean-code@claude-plugins-official"                       "clean-code"                       "claude-plugins-official"
     # Context mode — standalone GitHub repo, bootstrapped automatically
     bootstrap_plugin "context-mode@context-mode" "context-mode" "context-mode" "mksglu/context-mode"
+    # claude-mem — standalone GitHub repo, bootstrapped automatically
+    bootstrap_plugin "claude-mem@claude-mem" "claude-mem" "claude-mem" "thedotmack/claude-mem"
 }
 
 STEPS=(
@@ -81,6 +85,7 @@ STEPS=(
     "marketplaces|Register plugin marketplaces"
     "plugins|Promote plugins to user scope"
     "mcp_servers|Install MCP servers"
+    "claude_mem|Configure claude-mem mode"
 )
 
 dispatch_step() {
@@ -96,6 +101,7 @@ dispatch_step() {
         marketplaces)   print_status "section" "REGISTERING MARKETPLACES"    && run_marketplaces ;;
         plugins)        print_status "section" "PROMOTING PLUGINS TO USER SCOPE" && run_plugins ;;
         mcp_servers)    install_mcp_servers ;;
+        claude_mem)     configure_claude_mem ;;
         *) print_status "error" "Unknown step: $key"; return 1 ;;
     esac
 }

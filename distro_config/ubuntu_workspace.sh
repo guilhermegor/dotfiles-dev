@@ -1128,10 +1128,38 @@ EOF
         print_status "warning" "No browser apps found"
     fi
 
+    # ==================== NEWSLETTER FOLDER ====================
+    print_status "info" "Creating Newsletter folder..."
+    local newsletter_apps=()
+
+    local newsletter_app_names=(
+        'io.gitlab.news_flash.NewsFlash.desktop'
+        'valor-digital.desktop'
+    )
+
+    for app in "${newsletter_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            newsletter_apps+=("'$result'")
+        fi
+    done
+
+    newsletter_apps=($(echo "${newsletter_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+    if [ ${#newsletter_apps[@]} -gt 0 ]; then
+        local newsletter_apps_str=$(IFS=,; echo "${newsletter_apps[*]}")
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ name 'Newsletter'
+        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ apps "[${newsletter_apps_str}]"
+        folder_ids+=("'Newsletter'")
+        print_status "success" "Newsletter folder created with ${#newsletter_apps[@]} apps"
+        print_status "config" "  Apps: ${newsletter_apps_str}"
+    else
+        print_status "warning" "No Newsletter apps found"
+    fi
+
     # ==================== UPDATE FOLDER LIST ====================
     local ordered_folder_ids=()
 
-    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'Media'" "'OrgPessoal'" "'AmbienteVirtual'" "'Browsers'"; do
+    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'Media'" "'OrgPessoal'" "'AmbienteVirtual'" "'Browsers'" "'Newsletter'"; do
         for created_folder in "${folder_ids[@]}"; do
             if [ "$created_folder" = "$folder" ]; then
                 ordered_folder_ids+=("$folder")

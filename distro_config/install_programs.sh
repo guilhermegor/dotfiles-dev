@@ -3540,6 +3540,97 @@ install_thunderbird() {
 }
 
 # ============================================================================
+# NEWSFLASH RSS READER
+# ============================================================================
+
+install_newsflash() {
+    print_status "section" "NEWSFLASH RSS READER"
+
+    if flatpak list 2>/dev/null | grep -q "io.gitlab.news_flash.NewsFlash"; then
+        print_status "info" "NewsFlash already installed"
+        return 0
+    fi
+
+    setup_flatpak
+
+    print_status "info" "Installing NewsFlash via Flatpak..."
+    flatpak install -y flathub io.gitlab.news_flash.NewsFlash
+    print_status "success" "NewsFlash installed"
+    print_status "config" "Launch: flatpak run io.gitlab.news_flash.NewsFlash"
+}
+
+# ============================================================================
+# VALOR DIGITAL (VALOR ECONÔMICO — CHROME PWA)
+# ============================================================================
+
+install_valor_digital() {
+    print_status "section" "VALOR DIGITAL (VALOR ECONÔMICO)"
+
+    local desktop_dir="$HOME/.local/share/applications"
+    local desktop_file="$desktop_dir/valor-digital.desktop"
+
+    local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local icon_src="$script_root/assets/valor_app.png"
+    local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    local icon_path="$icon_theme_dir/valor-digital.png"
+    local icon_value="valor-digital"
+
+    if [ -f "$desktop_file" ]; then
+        print_status "info" "Valor Digital desktop entry already exists, updating"
+    fi
+
+    if ! command_exists google-chrome; then
+        print_status "error" "Google Chrome not found. Valor Digital PWA requires Chrome."
+        print_status "info" "Install Chrome first and re-run this step."
+        return 1
+    fi
+
+    print_status "info" "Creating Valor Digital desktop entry..."
+    mkdir -p "$desktop_dir"
+
+    if [ -f "$icon_src" ]; then
+        print_status "info" "Installing Valor Digital icon..."
+        mkdir -p "$icon_theme_dir"
+        cp "$icon_src" "$icon_path"
+        if command_exists gtk-update-icon-cache; then
+            gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+        fi
+        if command_exists update-desktop-database; then
+            update-desktop-database "$desktop_dir" 2>/dev/null || true
+        fi
+        if [ "${XDG_SESSION_TYPE:-}" = "x11" ] && command_exists gdbus; then
+            gdbus call --session --dest org.gnome.Shell \
+                --object-path /org/gnome/Shell \
+                --method org.gnome.Shell.Eval \
+                "global.reexec_self()" >/dev/null 2>&1 || true
+        else
+            print_status "info" "If the icon doesn't update, press Alt+F2 then 'r' (X11) or log out/in (Wayland)."
+        fi
+    else
+        print_status "warning" "Valor Digital icon not found at $icon_src. Using default icon."
+        icon_value="text-html"
+    fi
+
+    cat > "$desktop_file" << EOF
+[Desktop Entry]
+Name=Valor Digital
+Exec=google-chrome --app=https://valor.globo.com/impresso/
+Terminal=false
+Type=Application
+Icon=${icon_value}
+Categories=News;
+EOF
+    chmod +x "$desktop_file"
+
+    if command_exists update-desktop-database; then
+        update-desktop-database "$desktop_dir" 2>/dev/null || true
+    fi
+
+    print_status "success" "Valor Digital desktop entry created"
+    print_status "info" "Valor Digital: Chrome PWA for valor.globo.com/impresso"
+}
+
+# ============================================================================
 # RUSTDESK REMOTE DESKTOP
 # ============================================================================
 
@@ -4142,6 +4233,8 @@ run_full_installation() {
     install_notion_calendar
     install_google_tasks
     install_thunderbird
+    install_newsflash
+    install_valor_digital
     install_insync
     install_clamav
     install_neovim
@@ -4218,6 +4311,8 @@ run_custom_installation() {
         "install_notion_calendar:Notion Calendar (PWA)"
         "install_google_tasks:Google Tasks (PWA)"
         "install_thunderbird:Thunderbird Email Client"
+        "install_newsflash:NewsFlash RSS Reader"
+        "install_valor_digital:Valor Digital (Valor Econômico)"
         "install_insync:Insync (Google Drive)"
         "install_clamav:ClamAV Antivirus"
         "install_neovim:Neovim Text Editor"

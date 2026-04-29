@@ -136,6 +136,7 @@ install_extensions() {
         "omthemes.omthemes"
         "bierner.markdown-mermaid"
         "firsttris.vscode-jest-runner"
+        "usernamehw.errorlens"
     )
     
     local installed_count=0

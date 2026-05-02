@@ -39,7 +39,6 @@ run_marketplaces() {
 run_plugins() {
     # Explicit removals — demote before promoting to enforce desired state
     demote_plugin_from_user_scope "frontend-design@claude-plugins-official"
-    demote_plugin_from_user_scope "math-olympiad@claude-plugins-official"
 
     promote_plugin_to_user_scope "superpowers@claude-plugins-official"        "superpowers"        "claude-plugins-official"
     promote_plugin_to_user_scope "claude-hud@claude-hud"                      "claude-hud"         "claude-hud"

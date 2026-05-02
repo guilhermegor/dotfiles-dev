@@ -12,13 +12,17 @@ allowed-tools: WebFetch
 Ask questions **one at a time**. Never ask multiple questions in one message.
 
 You already have the brand name, design purpose, and inspiration depth from
-`$ARGUMENTS`. Do not ask for them again.
+`$ARGUMENTS`. Do not ask for them again. If any of the three is missing from
+`$ARGUMENTS`, ask only for the missing item(s) before proceeding.
 
 ## Universal questions (always, in this order)
 
 1. **Inspirations** — "Which brands, sites, or visuals feel closest to what
    you want? Give me names, URLs, or describe them."
    - Depth A: note names/descriptions as surface signals only — do not fetch.
+     If the user gave only a name with no description, ask one follow-up:
+     "What specifically about [name] feels right — the colors, the density,
+     the tone?"
    - Depth B: fetch each URL using WebFetch. For each, extract: dominant
      palette (3–5 hex values), font family names from headings or CSS,
      shape language (sharp / soft / pill), density (airy / balanced / dense),
@@ -39,8 +43,9 @@ You already have the brand name, design purpose, and inspiration depth from
    sentence is enough."
 
 6. **Look & feel** — "Give me 3–5 adjectives or mood words that describe how
-   this should feel." Then probe: "Should it feel authoritative or
-   approachable? Playful or serious? Minimal or rich?"
+   this should feel."
+   After receiving the adjectives, ask as a **separate question**: "Should it
+   feel authoritative or approachable? Playful or serious? Minimal or rich?"
 
 ## Purpose-specific questions
 
@@ -69,8 +74,27 @@ are the surface-specific constraints?
   "Static images only or motion/video too?"
 - `presentation` → "Tool — PowerPoint, Keynote, Google Slides?",
   "Internal use or client-facing?"
+- `site` / `web-app` → "Is this primarily a marketing / landing page or a
+  product web app?", "What is the primary CTA — sign-up, contact, purchase?",
+  "Is dark mode required?"
+- `blog` → "Is this editorial / content-focused or more of a personal site?",
+  "Will there be code snippets or technical content?", "What reading width
+  feels right — narrow and focused or wide and magazine-like?"
+- `app-tv` → "Target platform — Apple TV, Android TV, Samsung Tizen, other?",
+  "Is this a streaming / video app or a data/utility app?", "Should the UI
+  work with D-pad only, or also pointer/touch?"
+- `app-watch` → "Target platform — watchOS, Wear OS, or both?",
+  "Is this a glanceable complication or a full app with navigation?",
+  "Does the app need ambient / always-on display support?"
+- `push-notification` → "Are notifications transactional (receipts, alerts)
+  or marketing (promos, re-engagement)?", "Which platforms — iOS, Android,
+  web push?", "Should rich notifications show images or action buttons?"
 - Custom purpose → reason about rendering environment, interaction model,
   grid constraints, and accessibility requirements for that surface.
+
+When all four are answerable — what it looks like, who it is for, what it
+needs to do, and what the surface-specific constraints are — **stop asking
+and produce the output below**.
 
 ## Output
 
@@ -94,8 +118,8 @@ the conversation using this template:
 - Inspirations:
   - <name/url>: <notes on what to take from it>
 - Extracted signals (depth B only — omit section for A and C):
-  - Palette: <hex values>
-  - Fonts: <family names seen>
+  - Palette: <3–5 hex values extracted from page CSS or screenshots>
+  - Fonts: <family names found in headings or CSS — not user-stated>
   - Shape: <sharp / soft / pill>
   - Density: <airy / balanced / dense>
   - Tone: <formal / casual / premium / playful>

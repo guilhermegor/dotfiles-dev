@@ -2852,11 +2852,12 @@ install_balena_etcher() {
     fi
 
     local arch
-    arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
+    arch=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
 
     print_status "info" "Fetching latest Balena Etcher release..."
+    # Repo is balena-io/etcher (not balenaEtcher)
     local release_json
-    release_json=$(curl -s "https://api.github.com/repos/balena-io/balenaEtcher/releases/latest")
+    release_json=$(curl -s "https://api.github.com/repos/balena-io/etcher/releases/latest")
 
     local deb_url
     deb_url=$(echo "$release_json" | grep "browser_download_url" | grep "${arch}\.deb" | head -n 1 | cut -d '"' -f 4)
@@ -2873,26 +2874,8 @@ install_balena_etcher() {
             print_status "warning" "Download failed. Visit https://etcher.balena.io"
         fi
         rm -rf "$tmp_dir"
-        return 0
-    fi
-
-    # Fallback: AppImage (no Flatpak — Etcher is not published on Flathub)
-    print_status "warning" "No .deb found; falling back to AppImage..."
-    local appimage_url
-    appimage_url=$(echo "$release_json" | grep "browser_download_url" | grep "x64\.AppImage" | head -n 1 | cut -d '"' -f 4)
-
-    if [ -n "$appimage_url" ] && [ "$appimage_url" != "null" ]; then
-        local appimage_path="$DOWNLOADS_DIR/balena-etcher.AppImage"
-        if wget -q -O "$appimage_path" "$appimage_url" 2>>"$LOG_FILE" || \
-           curl -sL -o "$appimage_path" "$appimage_url" 2>>"$LOG_FILE"; then
-            chmod +x "$appimage_path"
-            sudo ln -sf "$appimage_path" /usr/local/bin/balena-etcher
-            print_status "success" "Balena Etcher AppImage installed to $DOWNLOADS_DIR"
-        else
-            print_status "warning" "AppImage download failed. Visit https://etcher.balena.io"
-        fi
     else
-        print_status "warning" "Could not resolve download URL. Visit https://etcher.balena.io"
+        print_status "warning" "Could not resolve .deb URL. Visit https://etcher.balena.io"
     fi
 }
 
@@ -2900,9 +2883,8 @@ install_ventoy() {
     print_status "section" "VENTOY"
 
     local ventoy_dir="$HOME/.local/share/ventoy"
-    local ventoy_bin="$ventoy_dir/VentoyGUI.x86_64"
 
-    if [ -f "$ventoy_bin" ] || command_exists ventoy; then
+    if command_exists ventoy || [ -n "$(find "$ventoy_dir" -maxdepth 1 -name 'VentoyGUI.*' 2>/dev/null)" ]; then
         print_status "info" "Ventoy already installed"
         return 0
     fi
@@ -2923,16 +2905,26 @@ install_ventoy() {
     if wget -q -O "$tmp_dir/ventoy.tar.gz" "$tarball_url" 2>>"$LOG_FILE" || \
        curl -sL -o "$tmp_dir/ventoy.tar.gz" "$tarball_url" 2>>"$LOG_FILE"; then
         mkdir -p "$ventoy_dir"
-        tar -xzf "$tmp_dir/ventoy.tar.gz" -C "$ventoy_dir" --strip-components=1
-        chmod +x "$ventoy_bin"
-        sudo ln -sf "$ventoy_bin" /usr/local/bin/ventoy
+        # The tar has ./ventoy-X.X.X/ as top level; strip-components=2 skips ./ and the version dir
+        tar -xzf "$tmp_dir/ventoy.tar.gz" -C "$ventoy_dir" --strip-components=2
+
+        # Locate the GUI binary regardless of exact filename (VentoyGUI.x86_64, .aarch64, etc.)
+        local gui_bin
+        gui_bin=$(find "$ventoy_dir" -maxdepth 1 -name "VentoyGUI.*" | head -n 1)
+        if [ -z "$gui_bin" ]; then
+            print_status "warning" "Ventoy extracted but GUI binary not found. Check $ventoy_dir"
+            rm -rf "$tmp_dir"
+            return 1
+        fi
+        chmod +x "$gui_bin"
+        sudo ln -sf "$gui_bin" /usr/local/bin/ventoy
 
         mkdir -p "$HOME/.local/share/applications"
         cat > "$HOME/.local/share/applications/ventoy.desktop" <<DESKTOP
 [Desktop Entry]
 Name=Ventoy
 Comment=Create bootable USB drives with multiple ISOs
-Exec=$ventoy_bin
+Exec=$gui_bin
 Icon=drive-removable-media
 Terminal=false
 Type=Application

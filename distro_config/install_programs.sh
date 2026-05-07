@@ -2843,6 +2843,78 @@ install_virtual_machine_manager() {
     print_status "success" "Virtual Machine Manager installed"
 }
 
+install_balena_etcher() {
+    print_status "section" "BALENA ETCHER"
+
+    if command_exists balena-etcher || flatpak list 2>/dev/null | grep -q "io.balena.etcher"; then
+        print_status "info" "Balena Etcher already installed"
+        return 0
+    fi
+
+    case "$PACKAGE_MANAGER" in
+        apt)
+            print_status "info" "Fetching latest Balena Etcher release..."
+
+            local arch
+            arch=$(dpkg --print-architecture)
+            local deb_url
+
+            deb_url=$(curl -s https://api.github.com/repos/balena-io/balenaEtcher/releases/latest | \
+                grep "browser_download_url.*${arch}\.deb" | \
+                head -n 1 | \
+                cut -d '"' -f 4)
+
+            if [ -n "$deb_url" ] && [ "$deb_url" != "null" ]; then
+                local tmp_dir
+                tmp_dir=$(mktemp -d)
+                print_status "info" "Downloading Balena Etcher .deb..."
+                if wget -O "$tmp_dir/balena-etcher.deb" "$deb_url" 2>>"$LOG_FILE" || \
+                   curl -L -o "$tmp_dir/balena-etcher.deb" "$deb_url" 2>>"$LOG_FILE"; then
+                    sudo apt-get install -y "$tmp_dir/balena-etcher.deb"
+                    print_status "success" "Balena Etcher installed from official .deb"
+                else
+                    print_status "warning" "Download failed, falling back to Flatpak..."
+                    flatpak install -y flathub io.balena.etcher
+                    print_status "success" "Balena Etcher installed via Flatpak"
+                fi
+                rm -rf "$tmp_dir"
+            else
+                print_status "warning" "No .deb found in latest release, installing via Flatpak..."
+                flatpak install -y flathub io.balena.etcher
+                print_status "success" "Balena Etcher installed via Flatpak"
+            fi
+            ;;
+        dnf|yum|pacman|zypper)
+            if command_exists flatpak; then
+                print_status "info" "Installing Balena Etcher via Flatpak..."
+                flatpak install -y flathub io.balena.etcher
+                print_status "success" "Balena Etcher installed via Flatpak"
+            else
+                print_status "warning" "Flatpak not available. Please install Balena Etcher manually."
+                return 1
+            fi
+            ;;
+    esac
+}
+
+install_ventoy() {
+    print_status "section" "VENTOY"
+
+    if flatpak list 2>/dev/null | grep -q "io.github.ventoy.Ventoy"; then
+        print_status "info" "Ventoy already installed"
+        return 0
+    fi
+
+    if command_exists flatpak; then
+        print_status "info" "Installing Ventoy via Flatpak..."
+        flatpak install -y flathub io.github.ventoy.Ventoy
+        print_status "success" "Ventoy installed via Flatpak"
+    else
+        print_status "warning" "Flatpak not available. Please install Flatpak first (setup_flatpak)."
+        return 1
+    fi
+}
+
 configure_gsconnect() {
     print_status "section" "GSCONNECT CONFIGURATION"
     
@@ -4223,6 +4295,8 @@ run_full_installation() {
     install_rofi
     install_warp_terminal
     install_virtual_machine_manager
+    install_balena_etcher
+    install_ventoy
     configure_gsconnect
     install_miro
     install_linear
@@ -4301,6 +4375,8 @@ run_custom_installation() {
         "install_rofi:Rofi Launcher"
         "install_warp_terminal:Warp Terminal"
         "install_virtual_machine_manager:VM Manager"
+        "install_balena_etcher:Balena Etcher (USB Image Writer)"
+        "install_ventoy:Ventoy (Multiboot USB)"
         "configure_gsconnect:GSConnect"
         "install_miro:Miro Collaboration Tool"
         "install_linear:Linear (Project Management)"

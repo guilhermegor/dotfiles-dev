@@ -2846,73 +2846,103 @@ install_virtual_machine_manager() {
 install_balena_etcher() {
     print_status "section" "BALENA ETCHER"
 
-    if command_exists balena-etcher || flatpak list 2>/dev/null | grep -q "io.balena.etcher"; then
+    if command_exists balena-etcher; then
         print_status "info" "Balena Etcher already installed"
         return 0
     fi
 
-    case "$PACKAGE_MANAGER" in
-        apt)
-            print_status "info" "Fetching latest Balena Etcher release..."
+    local arch
+    arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
 
-            local arch
-            arch=$(dpkg --print-architecture)
-            local deb_url
+    print_status "info" "Fetching latest Balena Etcher release..."
+    local release_json
+    release_json=$(curl -s "https://api.github.com/repos/balena-io/balenaEtcher/releases/latest")
 
-            deb_url=$(curl -s https://api.github.com/repos/balena-io/balenaEtcher/releases/latest | \
-                grep "browser_download_url.*${arch}\.deb" | \
-                head -n 1 | \
-                cut -d '"' -f 4)
+    local deb_url
+    deb_url=$(echo "$release_json" | grep "browser_download_url" | grep "${arch}\.deb" | head -n 1 | cut -d '"' -f 4)
 
-            if [ -n "$deb_url" ] && [ "$deb_url" != "null" ]; then
-                local tmp_dir
-                tmp_dir=$(mktemp -d)
-                print_status "info" "Downloading Balena Etcher .deb..."
-                if wget -O "$tmp_dir/balena-etcher.deb" "$deb_url" 2>>"$LOG_FILE" || \
-                   curl -L -o "$tmp_dir/balena-etcher.deb" "$deb_url" 2>>"$LOG_FILE"; then
-                    sudo apt-get install -y "$tmp_dir/balena-etcher.deb"
-                    print_status "success" "Balena Etcher installed from official .deb"
-                else
-                    print_status "warning" "Download failed, falling back to Flatpak..."
-                    flatpak install -y flathub io.balena.etcher
-                    print_status "success" "Balena Etcher installed via Flatpak"
-                fi
-                rm -rf "$tmp_dir"
-            else
-                print_status "warning" "No .deb found in latest release, installing via Flatpak..."
-                flatpak install -y flathub io.balena.etcher
-                print_status "success" "Balena Etcher installed via Flatpak"
-            fi
-            ;;
-        dnf|yum|pacman|zypper)
-            if command_exists flatpak; then
-                print_status "info" "Installing Balena Etcher via Flatpak..."
-                flatpak install -y flathub io.balena.etcher
-                print_status "success" "Balena Etcher installed via Flatpak"
-            else
-                print_status "warning" "Flatpak not available. Please install Balena Etcher manually."
-                return 1
-            fi
-            ;;
-    esac
+    if [ -n "$deb_url" ] && [ "$deb_url" != "null" ]; then
+        local tmp_dir
+        tmp_dir=$(mktemp -d)
+        print_status "info" "Downloading Balena Etcher .deb..."
+        if wget -q -O "$tmp_dir/balena-etcher.deb" "$deb_url" 2>>"$LOG_FILE" || \
+           curl -sL -o "$tmp_dir/balena-etcher.deb" "$deb_url" 2>>"$LOG_FILE"; then
+            sudo apt-get install -y "$tmp_dir/balena-etcher.deb" 2>>"$LOG_FILE"
+            print_status "success" "Balena Etcher installed from official .deb"
+        else
+            print_status "warning" "Download failed. Visit https://etcher.balena.io"
+        fi
+        rm -rf "$tmp_dir"
+        return 0
+    fi
+
+    # Fallback: AppImage (no Flatpak — Etcher is not published on Flathub)
+    print_status "warning" "No .deb found; falling back to AppImage..."
+    local appimage_url
+    appimage_url=$(echo "$release_json" | grep "browser_download_url" | grep "x64\.AppImage" | head -n 1 | cut -d '"' -f 4)
+
+    if [ -n "$appimage_url" ] && [ "$appimage_url" != "null" ]; then
+        local appimage_path="$DOWNLOADS_DIR/balena-etcher.AppImage"
+        if wget -q -O "$appimage_path" "$appimage_url" 2>>"$LOG_FILE" || \
+           curl -sL -o "$appimage_path" "$appimage_url" 2>>"$LOG_FILE"; then
+            chmod +x "$appimage_path"
+            sudo ln -sf "$appimage_path" /usr/local/bin/balena-etcher
+            print_status "success" "Balena Etcher AppImage installed to $DOWNLOADS_DIR"
+        else
+            print_status "warning" "AppImage download failed. Visit https://etcher.balena.io"
+        fi
+    else
+        print_status "warning" "Could not resolve download URL. Visit https://etcher.balena.io"
+    fi
 }
 
 install_ventoy() {
     print_status "section" "VENTOY"
 
-    if flatpak list 2>/dev/null | grep -q "io.github.ventoy.Ventoy"; then
+    local ventoy_dir="$HOME/.local/share/ventoy"
+    local ventoy_bin="$ventoy_dir/VentoyGUI.x86_64"
+
+    if [ -f "$ventoy_bin" ] || command_exists ventoy; then
         print_status "info" "Ventoy already installed"
         return 0
     fi
 
-    if command_exists flatpak; then
-        print_status "info" "Installing Ventoy via Flatpak..."
-        flatpak install -y flathub io.github.ventoy.Ventoy
-        print_status "success" "Ventoy installed via Flatpak"
-    else
-        print_status "warning" "Flatpak not available. Please install Flatpak first (setup_flatpak)."
+    print_status "info" "Fetching latest Ventoy release..."
+    local tarball_url
+    tarball_url=$(curl -s "https://api.github.com/repos/ventoy/Ventoy/releases/latest" | \
+        grep "browser_download_url" | grep "linux\.tar\.gz" | head -n 1 | cut -d '"' -f 4)
+
+    if [ -z "$tarball_url" ] || [ "$tarball_url" = "null" ]; then
+        print_status "warning" "Could not resolve download URL. Visit https://ventoy.net"
         return 1
     fi
+
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    print_status "info" "Downloading Ventoy..."
+    if wget -q -O "$tmp_dir/ventoy.tar.gz" "$tarball_url" 2>>"$LOG_FILE" || \
+       curl -sL -o "$tmp_dir/ventoy.tar.gz" "$tarball_url" 2>>"$LOG_FILE"; then
+        mkdir -p "$ventoy_dir"
+        tar -xzf "$tmp_dir/ventoy.tar.gz" -C "$ventoy_dir" --strip-components=1
+        chmod +x "$ventoy_bin"
+        sudo ln -sf "$ventoy_bin" /usr/local/bin/ventoy
+
+        mkdir -p "$HOME/.local/share/applications"
+        cat > "$HOME/.local/share/applications/ventoy.desktop" <<DESKTOP
+[Desktop Entry]
+Name=Ventoy
+Comment=Create bootable USB drives with multiple ISOs
+Exec=$ventoy_bin
+Icon=drive-removable-media
+Terminal=false
+Type=Application
+Categories=System;Utility;
+DESKTOP
+        print_status "success" "Ventoy installed to $ventoy_dir"
+    else
+        print_status "warning" "Download failed. Visit https://ventoy.net"
+    fi
+    rm -rf "$tmp_dir"
 }
 
 configure_gsconnect() {

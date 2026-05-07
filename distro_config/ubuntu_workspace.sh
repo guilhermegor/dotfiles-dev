@@ -1031,8 +1031,8 @@ EOF
         'docker-desktop.desktop'
         'qemu.desktop' 'kvirt.desktop'
         'rustdesk.desktop' 'com.rustdesk.RustDesk.desktop' 'org.rustdesk.RustDesk.desktop'
-        'balena-etcher-electron.desktop' 'io.balena.etcher.desktop'
-        'io.github.ventoy.Ventoy.desktop'
+        'balena-etcher-electron.desktop' 'balena-etcher.desktop'
+        'ventoy.desktop'
     )
 
     for app in "${virtualization_app_names[@]}"; do

@@ -4222,10 +4222,193 @@ install_claudestatus() {
         print_status "success" "claudestatus installed successfully"
         print_status "config" "Add accounts: claudestatus add <alias>"
         print_status "config" "View dashboard: claudestatus"
+        _claudestatus_patch_display
     else
         print_status "error" "claudestatus installation failed — check $LOG_FILE"
         return 1
     fi
+}
+
+# Patches the claudestatus display.js to show Status, Session, and Weekly columns.
+# Called after every install so the enhanced dashboard survives npm reinstalls.
+_claudestatus_patch_display() {
+    local npm_root
+    npm_root="$(npm root -g 2>/dev/null)" || return 0
+    local display_js="${npm_root}/@howells/claudestatus/dist/display.js"
+    [[ -f "$display_js" ]] || return 0
+
+    print_status "info" "Patching claudestatus display with enhanced columns..."
+    cat > "$display_js" << 'DISPLAY_EOF'
+import chalk from "chalk";
+import Table from "cli-table3";
+
+function formatResetTime(isoString) {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    if (diffMs < 0) return "now";
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffMins < 60) {
+        return `${diffMins}m`;
+    } else if (diffHours < 24) {
+        const mins = diffMins % 60;
+        return mins > 0 ? `${diffHours}h ${mins}m` : `${diffHours}h`;
+    } else {
+        const hours = diffHours % 24;
+        return hours > 0 ? `${diffDays}d ${hours}h` : `${diffDays}d`;
+    }
+}
+
+function usageBar(percent, width = 8) {
+    const filled = Math.round((percent / 100) * width);
+    const empty = width - filled;
+    let color = chalk.green;
+    if (percent >= 90) color = chalk.red;
+    else if (percent >= 70) color = chalk.yellow;
+    return color("█".repeat(filled)) + chalk.gray("░".repeat(empty));
+}
+
+function formatUsageCell(limit) {
+    if (!limit) return chalk.gray("—");
+    const bar = usageBar(limit.utilization);
+    const pct = limit.utilization.toString().padStart(3) + "%";
+    const reset = chalk.gray(" ↻" + formatResetTime(limit.resets_at));
+    return `${bar} ${pct}${reset}`;
+}
+
+function formatStatusCell(account) {
+    if (account.error) return chalk.red("✗ Error");
+    if (account.plan === "unknown") return chalk.yellow("? Unknown");
+    return chalk.green("✓ Active");
+}
+
+function getAvailability(account) {
+    if (account.error) {
+        return { status: "error", waitLabel: account.error, waitMs: Number.POSITIVE_INFINITY, reason: "none" };
+    }
+    const weekly = account.usage.seven_day;
+    const session = account.usage.five_hour;
+    if (weekly && weekly.utilization >= 100) {
+        const waitMs = Math.max(0, new Date(weekly.resets_at).getTime() - Date.now());
+        return { status: waitMs <= 0 ? "available" : "wait", waitLabel: formatResetTime(weekly.resets_at), waitMs, reason: "weekly" };
+    }
+    if (session && session.utilization >= 100) {
+        const waitMs = Math.max(0, new Date(session.resets_at).getTime() - Date.now());
+        return { status: waitMs <= 0 ? "available" : "wait", waitLabel: formatResetTime(session.resets_at), waitMs, reason: "session" };
+    }
+    return { status: "available", waitLabel: "now", waitMs: 0, reason: "none" };
+}
+
+function formatNextUseLabel(availability) {
+    if (availability.status === "available" || availability.waitLabel === "now") return chalk.green("Use now");
+    if (availability.reason === "weekly") return chalk.yellow(`Wait until ${availability.waitLabel}`);
+    return chalk.yellow(`Wait ${availability.waitLabel}`);
+}
+
+function pickNextAccount(accounts) {
+    const available = accounts.filter((a) => !a.error);
+    if (available.length === 0) return null;
+    const scored = available.map((account) => ({
+        account,
+        availability: getAvailability(account),
+        score: (account.usage.five_hour?.utilization ?? 0) + (account.usage.seven_day?.utilization ?? 0),
+    }));
+    const usable = scored.filter((entry) => entry.availability.status === "available");
+    if (usable.length > 0) return usable.reduce((a, b) => (a.score <= b.score ? a : b));
+    return scored.reduce((a, b) => {
+        if (a.availability.waitMs === b.availability.waitMs) return a.score <= b.score ? a : b;
+        return a.availability.waitMs <= b.availability.waitMs ? a : b;
+    });
+}
+
+export function displayUsageTable(accounts) {
+    console.log();
+    console.log(chalk.bold("  Claude Usage Dashboard"));
+    console.log(chalk.gray("  Note: 'Days left' shows rate-limit window resets, not billing renewal dates."));
+    console.log();
+    const table = new Table({
+        head: [chalk.bold("Account"), chalk.bold("Plan"), chalk.bold("Status"), chalk.bold("Session (5h)"), chalk.bold("Weekly (7d)"), chalk.bold("Next Use")],
+        style: { head: [], border: [] },
+        colWidths: [14, 6, 12, 22, 22, 20],
+    });
+    for (const account of accounts) {
+        const availability = getAvailability(account);
+        if (account.error) {
+            table.push([chalk.yellow(account.name), chalk.gray("—"), chalk.red("✗ Error"), chalk.gray("—"), chalk.gray("—"), chalk.red(account.error.split(".")[0])]);
+            continue;
+        }
+        table.push([
+            account.name,
+            account.plan === "max" ? chalk.magenta("Max") : chalk.cyan("Pro"),
+            formatStatusCell(account),
+            formatUsageCell(account.usage.five_hour),
+            formatUsageCell(account.usage.seven_day),
+            formatNextUseLabel(availability),
+        ]);
+    }
+    console.log(table.toString());
+    console.log();
+    const next = pickNextAccount(accounts);
+    if (next) {
+        const nextUseLabel = next.availability.status === "available" ? "Use now" : `Wait ${next.availability.waitLabel}`;
+        console.log(chalk.cyan("  💡 Recommendation: ") + chalk.bold(next.account.name) + chalk.gray(` (${nextUseLabel})`));
+        console.log();
+    }
+}
+
+export function displayQuickRecommendation(accounts) {
+    const next = pickNextAccount(accounts);
+    if (!next) {
+        console.log(chalk.red("No accounts available. Run: claudestatus add <name>"));
+        return;
+    }
+    const nextUseLabel = next.availability.status === "available" ? "Use now" : `Wait ${next.availability.waitLabel}`;
+    console.log(`${next.account.name} (${nextUseLabel})`);
+}
+DISPLAY_EOF
+
+    # Patch api.js — add billing scraper functions
+    local api_js="${npm_root}/@howells/claudestatus/dist/api.js"
+    [[ -f "$api_js" ]] && _claudestatus_patch_api "$api_js"
+
+    # Patch cli.js — wire billing into the default command
+    local cli_js="${npm_root}/@howells/claudestatus/dist/cli.js"
+    [[ -f "$cli_js" ]] && _claudestatus_patch_cli "$cli_js"
+
+    print_status "success" "claudestatus patched (display + billing scraper)"
+}
+
+_claudestatus_patch_api() {
+    local api_js="$1"
+    # Append billing functions after fetchAllUsage if not already patched
+    grep -q "fetchBillingForAccount" "$api_js" && return 0
+    cat >> "$api_js" << 'API_EOF'
+const PT_MONTHS = { jan:0,fev:1,mar:2,abr:3,mai:4,jun:5,jul:6,ago:7,set:8,out:9,nov:10,dez:11 };
+const EN_MONTHS = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+function parseBillingDate(day,monthStr,year,locale){const t=locale==="pt"?PT_MONTHS:EN_MONTHS;const m=t[monthStr.slice(0,3).toLowerCase()];if(m===undefined)return null;return new Date(parseInt(year,10),m,parseInt(day,10));}
+function parseBillingText(text){let period="unknown";let autoRenew=null;let billingDate=null;if(/mensal|monthly/i.test(text))period="monthly";else if(/anual|annual|yearly/i.test(text))period="annual";const cancelPt=text.match(/será cancelada em (\d+) de (\w+)\.?\s*de (\d{4})/i);const cancelEn=text.match(/(?:will be cancelled|cancels)\s+on\s+(\w+)\s+(\d+),?\s+(\d{4})/i);const renewPt=text.match(/(?:será renovada(?: automaticamente)?|próxima cobrança)\s+em\s+(\d+) de (\w+)\.?\s*de (\d{4})/i);const renewEn=text.match(/(?:renews(?: automatically)?|next billing)\s+on\s+(\w+)\s+(\d+),?\s+(\d{4})/i);if(cancelPt){autoRenew=false;billingDate=parseBillingDate(cancelPt[1],cancelPt[2],cancelPt[3],"pt");}else if(cancelEn){autoRenew=false;billingDate=parseBillingDate(cancelEn[2],cancelEn[1],cancelEn[3],"en");}else if(renewPt){autoRenew=true;billingDate=parseBillingDate(renewPt[1],renewPt[2],renewPt[3],"pt");}else if(renewEn){autoRenew=true;billingDate=parseBillingDate(renewEn[2],renewEn[1],renewEn[3],"en");}return{period,autoRenew,billingDate};}
+export async function fetchBillingForAccount(name){const profileDir=getProfileDir(name);const storagePath=getStorageStatePath(name);if(!fs.existsSync(profileDir)&&!fs.existsSync(storagePath))return{period:"unknown",autoRenew:null,billingDate:null};const opts={headless:false,channel:"chrome",args:["--disable-blink-features=AutomationControlled","--disable-extensions","--window-size=800,600","--window-position=-32000,-32000"],ignoreDefaultArgs:["--enable-automation"],viewport:{width:800,height:600}};if(fs.existsSync(storagePath))opts.storageState=storagePath;const context=await chromium.launchPersistentContext(profileDir,opts);const page=context.pages()[0]||(await context.newPage());try{await page.goto(CLAUDE_URL,{waitUntil:"domcontentloaded",timeout:30000});await page.waitForTimeout(2000);await page.goto(`${CLAUDE_URL}/settings/billing`,{waitUntil:"domcontentloaded",timeout:30000});await page.waitForTimeout(4000);const content=await page.content();if(content.includes("Just a moment")||content.includes("challenge-platform")||content.includes("cf-turnstile")){await context.close();return{period:"unknown",autoRenew:null,billingDate:null,error:"Cloudflare block — run: claudestatus refresh "+name};}const text=await page.evaluate(()=>document.body.innerText);await context.storageState({path:storagePath});await context.close();return parseBillingText(text);}catch{await context.close();return{period:"unknown",autoRenew:null,billingDate:null};}}
+export async function fetchAllBilling(accountNames){const results=[];for(const name of accountNames){process.stdout.write(`  Billing ${name}...`);const billing=await fetchBillingForAccount(name);console.log(" done");results.push({name,...billing});}return results;}
+API_EOF
+}
+
+_claudestatus_patch_cli() {
+    local cli_js="$1"
+    grep -q "fetchAllBilling" "$cli_js" && return 0
+    sed -i \
+        's|import { addAccount, fetchAllUsage } from "./api.js";|import { addAccount, fetchAllUsage, fetchAllBilling } from "./api.js";|' \
+        "$cli_js"
+    sed -i \
+        's|import { displayUsageTable, displayQuickRecommendation } from "./display.js";|import { displayUsageTable, displayBillingTable, displayQuickRecommendation } from "./display.js";|' \
+        "$cli_js"
+    sed -i \
+        's|const usage = await fetchAllUsage(accounts.map((a) => a.name));|const names = accounts.map((a) => a.name); const usage = await fetchAllUsage(names);|' \
+        "$cli_js"
+    sed -i \
+        's|if (options.quick) {|if (options.quick) { displayQuickRecommendation(usage); return; } displayUsageTable(usage); console.log(chalk.gray("\\nFetching billing data (browser windows will flash briefly)...\\n")); const billing = await fetchAllBilling(names); displayBillingTable(billing); if (false) {|' \
+        "$cli_js"
 }
 
 install_rtk() {

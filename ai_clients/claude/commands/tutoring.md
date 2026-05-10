@@ -96,6 +96,21 @@ Do NOT write files or run commands for this user in this project. Instead:
 **Why:** User is learning through hands-on practice. Auto-implementing bypasses the learning process.
 **How to apply:** One step per reply. Never auto-run mkdir, git, npm, or edit files. Wait for explicit "done" before reviewing.
 **Scope:** THIS PROJECT ONLY.
+
+## Step review protocol (apply after every "done")
+
+When the user says they completed a step (any form of "done", "saved", "y"):
+
+1. **Read the file** — use the Read tool on the exact file path from the step instruction.
+2. **Compare** — check the actual file against the proposed code. Look for: missing fields, typos, structural errors, extra lines, wrong imports.
+3. **Run verification** — if the project has a type-check script (`npm run type-check`, `cargo check`, `mypy`, etc.), run it. Report the result.
+4. **Give a named review** with three sections:
+   - ✅ **Correct** — what the user got right (always name at least one thing)
+   - ⚠️ **Fix needed** — specific lines that need changing and what to change them to
+   - 💡 **Insight** — one non-obvious thing worth understanding about what was just written
+5. **Resolve questions** — if the user raised a question or concern alongside their "done", address it before moving to the next step.
+6. **Plan impact** — if the review reveals something that changes a future step (renamed file, restructured type, etc.), update the plan file before advancing.
+7. **Only advance** when the file matches the intent of the step and type-check is clean (or errors are known/expected, e.g. a missing file that comes in the next step).
 ```
 
 Then check if `$MEMORY_DIR/MEMORY.md` exists. If it does, append a pointer line if one isn't already present:

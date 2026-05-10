@@ -4,6 +4,7 @@
 set -euo pipefail
 
 CONFIRM="${1:-no}"
+SOLE_MAINTAINER="${2:-no}"
 
 if [ "$CONFIRM" != "yes" ]; then
     echo "Aborted."
@@ -35,26 +36,43 @@ BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's|
     || BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) \
     || BRANCH="main"
 
-if gh api --method PUT \
+if [ "$SOLE_MAINTAINER" = "yes" ]; then
+    GH_USER=$(gh api user --jq .login 2>/dev/null) || {
+        echo "Error: Could not detect GitHub username. Check: gh auth status"
+        exit 1
+    }
+    BYPASS_JSON=$(jq -cn --arg u "$GH_USER" '{"users":[$u],"teams":[],"apps":[]}')
+else
+    BYPASS_JSON='{"users":[],"teams":[],"apps":[]}'
+fi
+
+PAYLOAD=$(jq -n \
+    --argjson bypass "$BYPASS_JSON" \
+    '{
+        required_status_checks: {strict: true, contexts: []},
+        enforce_admins: true,
+        required_pull_request_reviews: {
+            dismiss_stale_reviews: true,
+            require_code_owner_reviews: false,
+            required_approving_review_count: 1,
+            bypass_pull_request_allowances: $bypass
+        },
+        restrictions: null,
+        allow_force_pushes: false,
+        allow_deletions: false,
+        required_linear_history: true
+    }')
+
+if echo "$PAYLOAD" | gh api --method PUT \
     -H "Accept: application/vnd.github+json" \
     "/repos/${OWNER}/${REPO}/branches/${BRANCH}/protection" \
-    --input - <<'EOF'
-{
-  "required_status_checks": { "strict": true, "contexts": [] },
-  "enforce_admins": true,
-  "required_pull_request_reviews": {
-    "dismiss_stale_reviews": true,
-    "require_code_owner_reviews": false,
-    "required_approving_review_count": 1
-  },
-  "restrictions": null,
-  "allow_force_pushes": false,
-  "allow_deletions": false,
-  "required_linear_history": true
-}
-EOF
+    --input -
 then
-    echo "Branch protection applied to '${BRANCH}' on ${OWNER}/${REPO}."
+    if [ "$SOLE_MAINTAINER" = "yes" ]; then
+        echo "Branch protection applied to '${BRANCH}' on ${OWNER}/${REPO} (bypass granted to ${GH_USER})."
+    else
+        echo "Branch protection applied to '${BRANCH}' on ${OWNER}/${REPO}."
+    fi
 else
     echo "Error: Failed to apply protection to '${BRANCH}' on ${OWNER}/${REPO}."
     echo "Check: gh auth status — ensure you have admin rights on the repository."

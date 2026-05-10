@@ -21,8 +21,17 @@ matches:
               • Deletions: blocked
               • Linear history required: yes
 
+            Are you the sole maintainer? [[sole_maintainer]]
+            (yes → your GitHub account is added as a PR-review bypass)
+
             Proceed? [[confirm]]
           fields:
+            sole_maintainer:
+              type: choice
+              values:
+                - "no"
+                - "yes"
+              default: "no"
             confirm:
               type: choice
               values:
@@ -32,4 +41,4 @@ matches:
       - name: output
         type: shell
         params:
-          cmd: "bash ~/.config/espanso/packages/gh_protect_branch/gh_protect_branch.sh '{{confirm}}' 2>&1"
+          cmd: "bash ~/.config/espanso/packages/gh_protect_branch/gh_protect_branch.sh '{{confirm}}' '{{sole_maintainer}}' 2>&1"

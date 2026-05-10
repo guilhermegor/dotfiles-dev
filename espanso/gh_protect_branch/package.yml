@@ -1,0 +1,35 @@
+name: gh_protect_branch
+description: Apply standard GitHub branch protection to the default branch
+parent: default
+
+matches:
+  - trigger: ":gh_protect_branch"
+    replace: "{{output}}"
+    vars:
+      - name: confirm
+        type: form
+        params:
+          layout: |
+            Apply branch protection to the default branch of
+            the current repository?
+
+            Rules enforced:
+              • Required PR reviews: 1 approving reviewer
+              • Dismiss stale reviews: yes
+              • Enforce admins: yes
+              • Force pushes: blocked
+              • Deletions: blocked
+              • Linear history required: yes
+
+            Proceed? [[confirm]]
+          fields:
+            confirm:
+              type: choice
+              values:
+                - "no"
+                - "yes"
+              default: "no"
+      - name: output
+        type: shell
+        params:
+          cmd: "bash ~/.config/espanso/packages/gh_protect_branch/gh_protect_branch.sh '{{confirm}}' 2>&1"

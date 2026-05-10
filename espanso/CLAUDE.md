@@ -14,18 +14,21 @@ espanso/<package-name>/
 
 ## Current packages
 
-| Package | Trigger | Purpose |
-|---------|---------|---------|
-| `datetime` | `:date`, `:time`, … | Insert current date/time |
-| `gitpull_safe` | `:gitpull` | Safe git pull snippet |
-| `git_reset` | `:gitreset` | Git reset snippet |
-| `hostname_catcher` | `:hostname` | Insert machine hostname |
-| `ipv4_catcher` | `:ipv4` | Insert local IPv4 |
-| `kill_port` | `:killport` | fuser / kill command snippet |
-| `shortcuts` | `:shortcuts` | List all package triggers |
-| `gpg_apt_generate` | `:gpgaptgen` | Generate Ed25519 GPG key and display APT_GPG_* secrets |
-| `ssh_generate` | `:sshgen` | SSH keygen command |
-| `ssh_list` | `:sshlist` | List SSH keys |
+**Keep this table in sync with `:shortcuts` output whenever a package is added, removed, or its triggers change.**
+
+| Package | Trigger(s) | Purpose |
+|---------|-----------|---------|
+| `datetime` | `:today`, `:time`, `:now` | Insert current date/time |
+| `gitpull_safe` | `:git_sync_main`, `:git_sync_main_create_branch`, `:git_reset_current_branch_to_main` | Safe git pull, optional branch creation, or reset to main |
+| `git_reset` | `:gitreset` | Reset git repo hard, clean, reopen VS Code |
+| `gpg_apt_generate` | `:gpgaptgen` | Generate passphrase-free Ed25519 GPG key and display APT_GPG_* secrets |
+| `hostname_catcher` | `:hostname_catcher` | Get hostname info (short name, FQDN, domain) |
+| `ipv4_catcher` | `:ipv4_catcher` | Get local and public IPv4 addresses |
+| `kill_port` | `:killport`, `:kp` | Kill processes running on specific ports |
+| `shortcuts` | `:shortcuts` | List all package triggers and descriptions |
+| `ssh_generate` | `:sshgen` | Interactive SSH key generator with GUI prompts |
+| `ssh_list` | `:sshlist` | List SSH public keys and copy selected to clipboard |
+| `gh_protect_branch` | `:gh_protect_branch` | Apply standard GitHub branch protection to default branch |
 
 ## `package.yml` conventions
 

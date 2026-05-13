@@ -119,6 +119,13 @@ main() {
     [[ -f "$selected_snapshot/settings/CLAUDE.md" ]] && \
         cp "$selected_snapshot/settings/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 
+    local lessons_count=0
+    if [[ -f "$selected_snapshot/tasks/lessons.md" ]]; then
+        mkdir -p "$HOME/.claude/tasks"
+        cp "$selected_snapshot/tasks/lessons.md" "$HOME/.claude/tasks/lessons.md"
+        lessons_count=$(grep -c '^## [0-9]' "$HOME/.claude/tasks/lessons.md" 2>/dev/null || echo 0)
+    fi
+
     for proj_dir in "$selected_snapshot/projects"/*/; do
         [[ -d "$proj_dir" ]] || continue
         local proj_name
@@ -156,7 +163,8 @@ main() {
     summary+="<b>Safety backup:</b> <tt>$(basename "$pre_restore")</tt>\n\n"
     summary+="Commands restored: $cmd_count\n"
     summary+="Projects restored: $proj_count\n"
-    summary+="Memory files: $mem_count"
+    summary+="Memory files: $mem_count\n"
+    summary+="Lessons restored: $lessons_count"
 
     if [[ ${#skipped_projects[@]} -gt 0 ]]; then
         summary+="\n\n<b>Skipped (no matching project):</b>"

@@ -47,6 +47,14 @@ main() {
     [[ -f "$HOME/.claude/CLAUDE.md" ]] && \
         cp "$HOME/.claude/CLAUDE.md" "$snapshot/settings/"
 
+    # Accumulated user-correction log — not in dotfiles-dev, unique to this machine.
+    local lessons_count=0
+    if [[ -f "$HOME/.claude/tasks/lessons.md" ]]; then
+        mkdir -p "$snapshot/tasks"
+        cp "$HOME/.claude/tasks/lessons.md" "$snapshot/tasks/"
+        lessons_count=$(grep -c '^## [0-9]' "$HOME/.claude/tasks/lessons.md" 2>/dev/null || echo 0)
+    fi
+
     local project_count=0
     local memory_count=0
 
@@ -84,9 +92,9 @@ main() {
     size=$(du -sh "$snapshot" 2>/dev/null | cut -f1)
 
     notify-send --urgency=normal "Export Memory complete" \
-        "$project_count project(s), $memory_count memory file(s)" 2>/dev/null || true
+        "$project_count project(s), $memory_count memory file(s), $lessons_count lesson(s)" 2>/dev/null || true
     zenity --info --title="Export Memory — done" \
-        --text="Export complete.\n\n<b>Snapshot:</b> <tt>$(basename "$snapshot")</tt>\n<b>Projects:</b> $project_count\n<b>Memory files:</b> $memory_count\n<b>Total size:</b> $size\n<b>Path:</b> <tt>$snapshot</tt>"
+        --text="Export complete.\n\n<b>Snapshot:</b> <tt>$(basename "$snapshot")</tt>\n<b>Projects:</b> $project_count\n<b>Memory files:</b> $memory_count\n<b>Lessons:</b> $lessons_count\n<b>Total size:</b> $size\n<b>Path:</b> <tt>$snapshot</tt>"
 }
 
 main

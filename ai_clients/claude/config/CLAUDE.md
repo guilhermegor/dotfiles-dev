@@ -97,20 +97,49 @@ the implicit coupling that arises when two classes share a module boundary.
 - Dependency injection over hard-coded instantiation.
 - Interfaces / Protocols / Contracts over concrete coupling.
 - Pipeline / chain-of-responsibility for data transformation.
-- **Plain functions over utility classes:** if a group of helpers has no shared state and no
-  lifecycle, write them as module-level functions, not as a class with `@staticmethod` or a
-  single-instance object. A class is only warranted when state, dependency injection, or
-  interface conformance is genuinely needed.
+- **Class vs function — the three triggers:** reach for a function by default.
+  A class is only warranted when **at least one** of these holds:
+  1. **State + lifecycle** — instance fields, `init/dispose`, scoped lifetime.
+  2. **Interface conformance** — concrete implementation of a domain port.
+  3. **Dependency injection** — collaborators wired at construction.
 
-```
-# Avoid — class adds nothing here
-class StringUtils:
-    @staticmethod
-    def slugify(text: str) -> str: ...
+  A class that satisfies none of the three is a module in disguise — collapse
+  it to a module of functions or a frozen object of functions.
 
-# Prefer — just a function in utils/text.<extension_language>
-def slugify(text: str) -> str: ...
-```
+  | Pattern | Shape |
+  |---|---|
+  | Pure transformation (`formatSecondsToMinutes`) | function |
+  | Pure reducer (`(state, action) => state`) | function |
+  | Stateless facade over a vendor API (`showMessage = { success, error }`) | frozen object of functions |
+  | Top-level use case with no dependencies | function |
+  | Worker / connection / session manager (owns a resource + lifecycle) | class |
+  | Adapter implementing a domain port | class |
+  | Service / use case needing injected collaborators | class |
+
+  **Anti-patterns (always collapse):**
+  - **Class as namespace** — every method `static`, no instance state → module of functions.
+  - **Anemic class** — only getters/setters, no behavior → `type` / `interface` / dataclass.
+  - **Singleton wrapping a stateless function** (`Slugifier.getInstance().slugify(x)`) → `slugify(x)`.
+
+  ```python
+  # Avoid — no state, no port, no DI → class adds nothing
+  class StringUtils:
+      @staticmethod
+      def slugify(text: str) -> str: ...
+
+  # Prefer — just a function in utils/text.py
+  def slugify(text: str) -> str: ...
+  ```
+
+  ```typescript
+  // Correct use of a class — implements a port and owns a Worker instance
+  class TimerWorkerManager implements ITimerWorker {
+    private worker: Worker;
+    constructor() { this.worker = new Worker(...); }
+    postMessage(input: TimerWorkerInput): void { this.worker.postMessage(input); }
+    terminate(): void { this.worker.terminate(); }
+  }
+  ```
 
 ### Avoid
 

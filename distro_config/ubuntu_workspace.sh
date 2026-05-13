@@ -628,6 +628,7 @@ organize_app_folders() {
     local media_app_names=(
         'vlc.desktop' 'org.videolan.VLC.desktop'
         '4kvideodownloaderplus.desktop'
+        'asunder.desktop'
         'rhythmbox.desktop' 'org.gnome.Rhythmbox3.desktop'
         'cheese.desktop' 'org.gnome.Cheese.desktop'
         'org.gnome.Music.desktop'

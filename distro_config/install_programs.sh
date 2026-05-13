@@ -3368,6 +3368,101 @@ install_pinta() {
     fi
 }
 
+install_asunder() {
+    print_status "section" "ASUNDER CD RIPPER"
+
+    if command_exists asunder || dpkg -l 2>/dev/null | grep -q "^ii  asunder "; then
+        print_status "info" "Asunder already installed"
+        return 0
+    fi
+
+    print_status "info" "Installing Asunder CD ripper..."
+
+    if install_package "asunder" "asunder" "asunder" "asunder"; then
+        print_status "success" "Asunder installed"
+    else
+        print_status "error" "Could not install Asunder. Please install manually."
+        return 1
+    fi
+
+    if command_exists asunder; then
+        print_status "success" "Asunder is ready to use"
+        print_status "info" "Asunder: CD ripper and encoder"
+    else
+        print_status "warning" "Asunder installation could not be verified"
+    fi
+}
+
+install_handbrake() {
+    print_status "section" "HANDBRAKE DVD RIPPER"
+
+    if command_exists handbrake-gtk || command_exists ghb || \
+       flatpak list 2>/dev/null | grep -q "fr.handbrake.ghb" || \
+       dpkg -l 2>/dev/null | grep -q "^ii  handbrake "; then
+        print_status "info" "HandBrake already installed"
+        return 0
+    fi
+
+    print_status "info" "Installing HandBrake..."
+
+    case "$PACKAGE_MANAGER" in
+        apt)
+            # Install DVD decryption support first
+            print_status "info" "Installing DVD decryption support (libdvd-pkg)..."
+            if sudo apt-get install -y libdvd-pkg 2>>"$LOG_FILE"; then
+                sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure libdvd-pkg 2>>"$LOG_FILE" || true
+                print_status "success" "DVD decryption support installed"
+            else
+                print_status "warning" "libdvd-pkg not available; encrypted DVDs may not play"
+            fi
+
+            # Prefer Flatpak for up-to-date HandBrake release
+            if command_exists flatpak; then
+                flatpak install -y flathub fr.handbrake.ghb 2>>"$LOG_FILE" && \
+                    print_status "success" "HandBrake installed via Flatpak" && return 0
+            fi
+
+            install_package "HandBrake" "handbrake" "handbrake" "handbrake" || {
+                print_status "error" "Could not install HandBrake. Please install manually."
+                return 1
+            }
+            ;;
+        dnf|yum)
+            if command_exists flatpak; then
+                flatpak install -y flathub fr.handbrake.ghb 2>>"$LOG_FILE" && \
+                    print_status "success" "HandBrake installed via Flatpak" && return 0
+            fi
+            install_package "HandBrake" "handbrake" "handbrake" "handbrake" || \
+                print_status "warning" "HandBrake not available; try: flatpak install flathub fr.handbrake.ghb"
+            ;;
+        pacman)
+            if command_exists flatpak; then
+                flatpak install -y flathub fr.handbrake.ghb 2>>"$LOG_FILE" && \
+                    print_status "success" "HandBrake installed via Flatpak" && return 0
+            fi
+            install_package "HandBrake" "handbrake" "handbrake" "handbrake" || \
+                print_status "warning" "HandBrake not available; try: flatpak install flathub fr.handbrake.ghb"
+            ;;
+        zypper)
+            if command_exists flatpak; then
+                flatpak install -y flathub fr.handbrake.ghb 2>>"$LOG_FILE" && \
+                    print_status "success" "HandBrake installed via Flatpak" && return 0
+            fi
+            install_package "HandBrake" "handbrake" "handbrake" "handbrake" || \
+                print_status "warning" "HandBrake not available; try: flatpak install flathub fr.handbrake.ghb"
+            ;;
+    esac
+
+    if command_exists handbrake-gtk || command_exists ghb || \
+       flatpak list 2>/dev/null | grep -q "fr.handbrake.ghb"; then
+        print_status "success" "HandBrake is ready to use"
+        print_status "info" "HandBrake: DVD and video transcoder"
+        print_status "config" "Supports MP4/MKV output, subtitle and audio track selection"
+    else
+        print_status "warning" "HandBrake installation could not be verified"
+    fi
+}
+
 # ============================================================================
 # GOOGLE CALENDAR (Chrome PWA)
 # ============================================================================
@@ -4576,6 +4671,8 @@ run_custom_installation() {
         "install_flatpak_apps:Flatpak Applications"
         "install_utilities:System Utilities"
         "install_4k_video_downloader:4K Video Downloader Plus"
+        "install_asunder:Asunder CD Ripper"
+        "install_handbrake:HandBrake DVD Ripper"
         "install_flameshot:Flameshot Screenshot Tool"
         "install_rofi:Rofi Launcher"
         "install_warp_terminal:Warp Terminal"

@@ -126,6 +126,24 @@ main() {
         lessons_count=$(grep -c '^## [0-9]' "$HOME/.claude/tasks/lessons.md" 2>/dev/null || echo 0)
     fi
 
+    local plans_count=0
+    if [[ -d "$selected_snapshot/plans" ]]; then
+        mkdir -p "$HOME/.claude/plans"
+        rsync -a "$selected_snapshot/plans/" "$HOME/.claude/plans/"
+        plans_count=$(find "$selected_snapshot/plans" -maxdepth 1 -name "*.md" 2>/dev/null | wc -l)
+    fi
+
+    # .env restore is conservative: only if local missing (machine-specific paths).
+    local env_status="not in snapshot"
+    if [[ -f "$selected_snapshot/settings/.env" ]]; then
+        if [[ -f "$HOME/.claude/.env" ]]; then
+            env_status="skipped (local exists)"
+        else
+            cp "$selected_snapshot/settings/.env" "$HOME/.claude/.env"
+            env_status="restored (local was missing)"
+        fi
+    fi
+
     for proj_dir in "$selected_snapshot/projects"/*/; do
         [[ -d "$proj_dir" ]] || continue
         local proj_name
@@ -164,7 +182,9 @@ main() {
     summary+="Commands restored: $cmd_count\n"
     summary+="Projects restored: $proj_count\n"
     summary+="Memory files: $mem_count\n"
-    summary+="Lessons restored: $lessons_count"
+    summary+="Lessons restored: $lessons_count\n"
+    summary+="Plans restored: $plans_count\n"
+    summary+="<tt>.env</tt> status: $env_status"
 
     if [[ ${#skipped_projects[@]} -gt 0 ]]; then
         summary+="\n\n<b>Skipped (no matching project):</b>"

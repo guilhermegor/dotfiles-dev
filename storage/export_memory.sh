@@ -55,6 +55,18 @@ main() {
         lessons_count=$(grep -c '^## [0-9]' "$HOME/.claude/tasks/lessons.md" 2>/dev/null || echo 0)
     fi
 
+    # Saved plans — unique to this machine, accumulated across sessions.
+    local plans_count=0
+    if [[ -d "$HOME/.claude/plans" ]]; then
+        rsync -a "$HOME/.claude/plans/" "$snapshot/plans/"
+        plans_count=$(find "$HOME/.claude/plans" -maxdepth 1 -name "*.md" 2>/dev/null | wc -l)
+    fi
+
+    # .env — machine-specific Claude config (CLAUDE_BACKUP_DIR etc.).
+    # Captured for recovery; restore is guarded against clobbering local config.
+    [[ -f "$HOME/.claude/.env" ]] && \
+        cp "$HOME/.claude/.env" "$snapshot/settings/"
+
     local project_count=0
     local memory_count=0
 
@@ -92,9 +104,9 @@ main() {
     size=$(du -sh "$snapshot" 2>/dev/null | cut -f1)
 
     notify-send --urgency=normal "Export Memory complete" \
-        "$project_count project(s), $memory_count memory file(s), $lessons_count lesson(s)" 2>/dev/null || true
+        "$project_count project(s), $memory_count memory file(s), $lessons_count lesson(s), $plans_count plan(s)" 2>/dev/null || true
     zenity --info --title="Export Memory — done" \
-        --text="Export complete.\n\n<b>Snapshot:</b> <tt>$(basename "$snapshot")</tt>\n<b>Projects:</b> $project_count\n<b>Memory files:</b> $memory_count\n<b>Lessons:</b> $lessons_count\n<b>Total size:</b> $size\n<b>Path:</b> <tt>$snapshot</tt>"
+        --text="Export complete.\n\n<b>Snapshot:</b> <tt>$(basename "$snapshot")</tt>\n<b>Projects:</b> $project_count\n<b>Memory files:</b> $memory_count\n<b>Lessons:</b> $lessons_count\n<b>Plans:</b> $plans_count\n<b>Total size:</b> $size\n<b>Path:</b> <tt>$snapshot</tt>"
 }
 
 main

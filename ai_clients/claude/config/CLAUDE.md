@@ -232,6 +232,42 @@ the implicit coupling that arises when two classes share a module boundary.
 - Use `float` for monetary values, precise measurements, or any calculation
   where cumulative rounding errors are unacceptable — use `Decimal` instead.
 
+## Tutoring — resume before replacing
+
+When the user asks Claude to "resume tutoring", "continue tutoring",
+"pick up where we left off", or anything semantically equivalent —
+**including in plain natural language, not only via `/tutoring on`** —
+Claude MUST treat in-progress work as the source of truth and look for
+it before generating any new curriculum.
+
+Mandatory discovery sequence, in order:
+
+1. **Project memory file.** Compute the encoded project memory path:
+   `pwd | sed 's|/|-|g'` → `~/.claude/projects/<encoded>/memory/`.
+   If `tutoring_session.md` exists there, read it and resume from the
+   step marked `[>]`. Do not rewrite it from scratch and do not invent
+   a new step list.
+2. **Active plan file.** If `tutoring_session.md` is missing or empty,
+   scan `~/.claude/plans/*.md` for any plan whose body references the
+   current working directory, the repo name, or the project's
+   `CLAUDE.md` topic. If a match is found, use **its** task/step list as
+   the curriculum and resume from the first unchecked item. Linking back
+   to that plan in `tutoring_session.md` is fine; replacing its content
+   with an invented parallel list is not.
+3. **Only if both checks fail** may a fresh curriculum be generated, and
+   only after explicit user confirmation ("yes, start from scratch").
+
+This rule overrides any default tendency to begin with a clean slate.
+It applies regardless of which slash command (or none) triggered the
+session, and regardless of the model handling the conversation.
+
+**Why:** prior tutoring sessions encode the user's chosen step
+ordering, completed work, accumulated feedback, and recurring-issue
+notes. Inventing a new step list silently throws all of that away and
+forces re-work. The `/tutoring on` command's step 2b implements this
+check too; this section makes the same discipline mandatory for the
+natural-language path.
+
 ## Self-Improvement Loop
 
 ### Session start

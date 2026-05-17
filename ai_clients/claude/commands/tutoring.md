@@ -158,7 +158,7 @@ When the user says they completed a step (any form of "done", "saved", "y"), run
    | File | Probe command |
    |---|---|
    | `Makefile` | `grep -E '^(lint\|type-check\|typecheck\|check\|verify\|validate\|ci)[[:space:]]*:' Makefile` |
-   | `package.json` | `grep -E '"(type-check\|typecheck\|lint\|check\|verify\|validate\|ci)"' package.json` |
+   | `package.json` | `grep -E '"(type-check\|typecheck\|lint\|lint:css\|lint:style\|check\|verify\|validate\|ci)"' package.json` |
    | `pyproject.toml` | `grep -E '^\[tool\.(taskipy\|poe\.tasks\|hatch\.envs)' pyproject.toml` — covers taskipy, poethepoet, hatch |
    | `Justfile` / `justfile` | `grep -E '^(lint\|type-check\|typecheck\|check\|verify\|validate\|ci):' Justfile justfile 2>/dev/null` |
    | `Taskfile.yml` / `Taskfile.yaml` | `grep -E '^\s+(lint\|type-check\|typecheck\|check\|verify\|ci):' Taskfile.yml Taskfile.yaml 2>/dev/null` |
@@ -193,6 +193,11 @@ When the user says they completed a step (any form of "done", "saved", "y"), run
    - `run.sh` / `scripts/lint.sh`: `bash run.sh lint` / `bash scripts/lint.sh` (inspect first to confirm it's safe to run)
    - Python standalone: `ruff check <file>` / `flake8 <file>`
    - Rust: `cargo clippy`
+
+   **CSS / style linters** (run if the project has CSS or other style-language assets — independent of JS linters above):
+   - npm: `npm run lint:css` / `npm run lint:style` / `npm run stylelint` (any of these script names if defined)
+   - Standalone: `npx stylelint "**/*.css"` (or `.scss`, `.less` as applicable) if a `.stylelintrc*` config is present at the repo root
+   - These catch CSS bugs (invalid values, duplicate properties, deprecated notations) that `tsc` and `eslint` never see. A passing `eslint` does NOT imply CSS is clean — always run the CSS linter separately when one is configured.
 
    If no checker or linter is found after all probes: state "No type-check or lint runner detected; review is manual only."
 3. **Compare** — diff the actual file against the step's suggested code. Flag: missing fields, extra lines, wrong imports, structural errors, naming deviations, style violations from project CLAUDE.md rules.

@@ -204,6 +204,7 @@ Give a named review with these sections. **Omit any section that is empty** — 
 
 - ✅ **Correct** — name at least one specific thing done right. "Looks good" is not enough; say what exactly is correct and why it matters.
 - ⚠️ **Must fix** — each item on its own line. Show: file path + line number, what is wrong, exact corrected code. No must-fix item should be vague.
+- 🟡 **Warnings** — non-blocking diagnostics from the same verification tools used in "Must fix" (linter warnings, deprecation notices, formatter complaints, soft type-checker hints). For each: file path + line, rule/identifier name, one sentence on what it means, and the trade-off if ignored. Warnings do not block by themselves but they MUST be surfaced — never silent.
 - 👍 **Good practice** — non-obvious things done well that are worth repeating (e.g. "used a guard clause here instead of nesting — keep doing this").
 - 🔁 **Recurring issue** — if any must-fix item matches a pattern already in `## Recurring issues`, call it out explicitly: "This is the Nth time I've seen `<issue name>`. The root cause is…" Escalate the explanation depth each time it recurs.
 - 💡 **Insight** — one non-obvious architectural or language-level point about what was just written. Tailor depth to the learner level from the profile.
@@ -220,7 +221,18 @@ Give a named review with these sections. **Omit any section that is empty** — 
 - In this second review, focus only on whether the previously flagged items are resolved — skip sections that were already clean.
 - Repeat until no "Must fix" items remain and verification is clean.
 
-**If there are no "Must fix" items (or all are now resolved):**
+**If there are no "Must fix" items but `Warnings` are present:**
+- Do NOT update the session file. Do NOT auto-advance.
+- For each warning, recap the trade-off and present three explicit options to the user:
+  - **Fix** — apply the structural change that removes the warning at its source.
+  - **Suppress** — add an inline suppression directive (linter/checker-specific) WITH a short comment explaining why the suppression is acceptable in this context.
+  - **Accept as project pattern** — leave the warning in place because the surrounding codebase already accepts it. Requires citing at least one other file in the project that has the same warning.
+- Ask the user: "How would you like to handle these warnings — fix, suppress, or accept? (per-warning answers are fine.)"
+- Wait for an explicit decision per warning. Apply the chosen action.
+- For every "accept as project pattern" decision, append a line to `## Feedback log` in the session file: `- Step N (<name>): warning <rule-name> accepted as project pattern (cf. <other-file>)`. This guarantees accepted warnings are never silent across sessions.
+- Only after every warning has an explicit user decision applied, proceed to the "fully clean" branch below.
+
+**If verification is fully clean (no "Must fix", no `Warnings`):**
 1. **Resolve questions** — address any question or concern the user raised alongside their "done".
 2. **Plan impact** — if the review reveals something that changes a future step (renamed file, restructured type, different interface), update those step descriptions in `tutoring_session.md` before advancing.
 3. **Update session file** (`tutoring_session.md`):

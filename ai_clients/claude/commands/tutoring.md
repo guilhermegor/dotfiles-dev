@@ -199,7 +199,15 @@ When the user says they completed a step (any form of "done", "saved", "y"), run
    - Standalone: `npx stylelint "**/*.css"` (or `.scss`, `.less` as applicable) if a `.stylelintrc*` config is present at the repo root
    - These catch CSS bugs (invalid values, duplicate properties, deprecated notations) that `tsc` and `eslint` never see. A passing `eslint` does NOT imply CSS is clean — always run the CSS linter separately when one is configured.
 
-   If no checker or linter is found after all probes: state "No type-check or lint runner detected; review is manual only."
+   **Test runners** (run after the linters above — they catch semantic correctness, not just syntax / style):
+   - npm / yarn / pnpm: `npm test` / `npm run test` / `npx jest` / `npx vitest run` (whichever a `test` script or a `jest.config.*` / `vitest.config.*` file points to)
+   - Make / Just / Task: `make test` / `just test` / `task test`
+   - taskipy / poethepoet / hatch / tox: `poetry run task test` / `poetry run poe test` / `hatch run test` / `tox -e test`
+   - Python standalone: `pytest` / `python -m pytest` (skip if no `tests/` folder and no `pytest.ini` / `pyproject.toml` config)
+   - Rust: `cargo test`
+   - Tests catch a class of bugs no linter can see: missing UI elements, wrong action/visual wiring, off-by-one logic, regressions. **If a test runner is configured, running it is part of every step review — not optional.**
+
+   If no checker, linter, or test runner is found after all probes: state "No type-check, lint, or test runner detected; review is manual only."
 3. **Compare** — diff the actual file against the step's suggested code. Flag: missing fields, extra lines, wrong imports, structural errors, naming deviations, style violations from project CLAUDE.md rules.
 4. **Load patterns** — read `## Recurring issues` in `tutoring_session.md` so you know which mistakes to watch for before writing the review.
 

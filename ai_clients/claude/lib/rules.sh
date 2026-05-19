@@ -32,6 +32,13 @@ install_python_rules() {
     copy_rule_file "python.md" "$rules_dir"
 }
 
+# ── JavaScript / TypeScript ───────────────────────────────────────────────────
+
+install_javascript_rules() {
+    local rules_dir="$1"
+    copy_rule_file "javascript.md" "$rules_dir"
+}
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 install_rules() {
@@ -41,6 +48,6 @@ install_rules() {
     mkdir -p "$rules_dir"
 
     install_python_rules "$rules_dir"
-    # install_typescript_rules "$rules_dir"  # future
+    install_javascript_rules "$rules_dir"
     # install_go_rules "$rules_dir"          # future
 }

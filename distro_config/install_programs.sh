@@ -2070,6 +2070,78 @@ install_act() {
     fi
 }
 
+# CLI-only secret scanner — no GUI, no GNOME folder, no dock entry.
+install_gitleaks() {
+    print_status "section" "GITLEAKS (SECRET SCANNER)"
+
+    if command_exists gitleaks; then
+        print_status "info" "gitleaks already installed"
+        return 0
+    fi
+
+    if command_exists brew; then
+        print_status "info" "Installing gitleaks via Homebrew..."
+        if brew install gitleaks &>> "$LOG_FILE"; then
+            print_status "success" "gitleaks installed via Homebrew"
+            return 0
+        fi
+        print_status "warning" "Homebrew install failed, falling back to GitHub release..."
+    fi
+
+    local arch
+    local download_arch
+    local tmp_dir
+    local latest_url
+    local latest_tag
+    local version
+    local tarball_url
+
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  download_arch="x64" ;;
+        aarch64) download_arch="arm64" ;;
+        armv7l)  download_arch="armv7" ;;
+        *)
+            print_status "warning" "Unsupported architecture for gitleaks: $arch"
+            return 1
+            ;;
+    esac
+
+    # Resolve the latest tag from the redirect of /releases/latest — avoids a jq dependency.
+    latest_url="https://github.com/gitleaks/gitleaks/releases/latest"
+    latest_tag=$(curl -sLI -o /dev/null -w '%{url_effective}' "$latest_url" 2>>"$LOG_FILE" | sed 's|.*/tag/||')
+    if [ -z "$latest_tag" ]; then
+        print_status "error" "Could not resolve latest gitleaks version"
+        return 1
+    fi
+    version="${latest_tag#v}"
+
+    tmp_dir=$(mktemp -d)
+    tarball_url="https://github.com/gitleaks/gitleaks/releases/download/${latest_tag}/gitleaks_${version}_linux_${download_arch}.tar.gz"
+
+    print_status "info" "Downloading gitleaks ${latest_tag} from GitHub releases..."
+    if wget -O "$tmp_dir/gitleaks.tar.gz" "$tarball_url" 2>>"$LOG_FILE" || \
+       curl -L -o "$tmp_dir/gitleaks.tar.gz" "$tarball_url" 2>>"$LOG_FILE"; then
+        tar -xzf "$tmp_dir/gitleaks.tar.gz" -C "$tmp_dir"
+        sudo mv "$tmp_dir/gitleaks" /usr/local/bin/gitleaks
+        sudo chmod +x /usr/local/bin/gitleaks
+    else
+        print_status "error" "Failed to download gitleaks from GitHub releases"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    rm -rf "$tmp_dir"
+
+    if command_exists gitleaks; then
+        gitleaks version >> "$LOG_FILE"
+        print_status "success" "gitleaks installed: $(gitleaks version 2>/dev/null)"
+    else
+        print_status "error" "gitleaks installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
 install_pyenv() {
     print_status "section" "PYENV (PYTHON VERSION MANAGER)"
     
@@ -4578,6 +4650,7 @@ run_full_installation() {
     install_cursor
     install_github_cli
     install_act
+    install_gitleaks
     install_pyenv
     install_postgresql
     install_pgadmin
@@ -4656,6 +4729,7 @@ run_custom_installation() {
         "install_cursor:Cursor IDE"
         "install_github_cli:GitHub CLI"
         "install_act:act (Run GitHub Actions Locally)"
+        "install_gitleaks:Gitleaks (Secret Scanner)"
         "install_pyenv:Python (pyenv)"
         "install_postgresql:PostgreSQL"
         "install_pgadmin:pgAdmin4"

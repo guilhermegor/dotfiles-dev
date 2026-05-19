@@ -199,6 +199,8 @@ When the user says they completed a step (any form of "done", "saved", "y"), run
    - Standalone: `npx stylelint "**/*.css"` (or `.scss`, `.less` as applicable) if a `.stylelintrc*` config is present at the repo root
    - These catch CSS bugs (invalid values, duplicate properties, deprecated notations) that `tsc` and `eslint` never see. A passing `eslint` does NOT imply CSS is clean — always run the CSS linter separately when one is configured.
 
+   **Note on pre-commit hooks.** If the project has `.husky/pre-commit` + a `lint-staged` configuration (in `package.json` or `lint-staged.config.*`), formatters/linters auto-run on staged files at commit time. You do NOT need to run them manually during the step review — they're a backstop, not a substitute for explicit verification. Still run the full `npm run lint` / `lint:css` / `test` from this protocol; they're broader (whole repo, not just staged paths) and catch regressions in files the current step didn't touch.
+
    **Test runners** (run after the linters above — they catch semantic correctness, not just syntax / style):
    - npm / yarn / pnpm: `npm test` / `npm run test` / `npx jest` / `npx vitest run` (whichever a `test` script or a `jest.config.*` / `vitest.config.*` file points to)
    - Make / Just / Task: `make test` / `just test` / `task test`
@@ -206,6 +208,16 @@ When the user says they completed a step (any form of "done", "saved", "y"), run
    - Python standalone: `pytest` / `python -m pytest` (skip if no `tests/` folder and no `pytest.ini` / `pyproject.toml` config)
    - Rust: `cargo test`
    - Tests catch a class of bugs no linter can see: missing UI elements, wrong action/visual wiring, off-by-one logic, regressions. **If a test runner is configured, running it is part of every step review — not optional.**
+
+   **End-to-end / visual regression** (run on UI-touching steps when a real browser test runner is configured):
+   - npm scripts use a layered namespace so fullstack projects can add sibling suites later:
+     - `npm run test:e2e:frontend` (or `:fe`) — Playwright / Cypress browser tests; the only e2e layer for static SPAs
+     - `npm run test:e2e:api` — future API integration tests (supertest, fetch-based), not present in frontend-only projects
+     - `npm run test:e2e:db` / `test:e2e:full` — future fullstack scenarios
+     - `npm run test:e2e` (if it exists) — umbrella that runs every available e2e layer
+   - Detect by `playwright.config.*` or `cypress.config.*` at the repo root, or a `tests/e2e/` directory.
+   - These tests boot a real browser, exercise the actual CSS cascade, and catch a class of bugs jsdom never sees: `display` typos, layout breaks, font rendering shifts, hover/focus states. Visual screenshot baselines (e.g. Playwright's `toHaveScreenshot`) committed to the repo flag pixel-level regressions.
+   - **Cost-aware:** e2e tests are slower than unit tests (browser startup, network idle waits). Run them for UI-touching steps; skip for pure-logic edits. If a visual baseline drifts intentionally, re-bake with `--update-snapshots` (or runner-equivalent) and commit the new baseline alongside the code change.
 
    If no checker, linter, or test runner is found after all probes: state "No type-check, lint, or test runner detected; review is manual only."
 3. **Compare** — diff the actual file against the step's suggested code. Flag: missing fields, extra lines, wrong imports, structural errors, naming deviations, style violations from project CLAUDE.md rules.

@@ -39,6 +39,13 @@ install_javascript_rules() {
     copy_rule_file "javascript.md" "$rules_dir"
 }
 
+# ── Bash / Shell ──────────────────────────────────────────────────────────────
+
+install_bash_rules() {
+    local rules_dir="$1"
+    copy_rule_file "bash.md" "$rules_dir"
+}
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 install_rules() {
@@ -49,5 +56,6 @@ install_rules() {
 
     install_python_rules "$rules_dir"
     install_javascript_rules "$rules_dir"
+    install_bash_rules "$rules_dir"
     # install_go_rules "$rules_dir"          # future
 }

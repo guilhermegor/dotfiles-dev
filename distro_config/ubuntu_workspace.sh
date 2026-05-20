@@ -1,38 +1,41 @@
 #!/bin/bash
+#
+# distro_config/ubuntu_workspace.sh
+#
+# GNOME workspace, dock, theme, keybindings, and app-folder organisation.
+#
+# App-folder organisation (`organize_app_folders` below) draws from TWO sources:
+#   1. Static `<folder>_app_names` arrays inside this script — covers pre-installed
+#      system apps (gnome-control-center, mission-center, etc.) that no installer
+#      script manages.
+#   2. INSTALL_REGISTRY — sourced from install_lib/ and install_coding_lib/ so any
+#      app declared with a `gnome_folder` field automatically gets placed.
+#      This eliminates the previous drift where install_<foo>() and the folder
+#      arrays had to be kept in sync by hand.
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m' # No Color
+# ----------------------------------------------------------------------------
+# Source shared utilities (print_status, color vars, command_exists, …) from
+# repo-root lib/common.sh.
+# ----------------------------------------------------------------------------
 
-print_status() {
-    local status="$1"
-    local message="$2"
-    
-    case "$status" in
-        "success")
-            echo -e "${GREEN}[Success]${NC} ${message}"
-            ;;
-        "error")
-            echo -e "${RED}[Error]${NC} ${message}" >&2
-            ;;
-        "warning")
-            echo -e "${YELLOW}[Warning]${NC} ${message}"
-            ;;
-        "info")
-            echo -e "${BLUE}[Info]${NC} ${message}"
-            ;;
-        "config")
-            echo -e "${CYAN}[Config]${NC} ${message}"
-            ;;
-        *)
-            echo -e "[ ] ${message}"
-            ;;
-    esac
-}
+_uw_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$_uw_script_dir/../lib/common.sh"
+
+# ----------------------------------------------------------------------------
+# Populate INSTALL_REGISTRY from install_lib + install_coding_lib.
+# Sourcing each *.sh only appends to INSTALL_REGISTRY (the install_*() function
+# bodies are defined but never invoked here), so no external dependencies run.
+# ----------------------------------------------------------------------------
+
+INSTALL_REGISTRY=()
+shopt -s nullglob
+for _uw_lib in "$_uw_script_dir/install_lib/"[!_]*.sh "$_uw_script_dir/install_coding_lib/"[!_]*.sh; do
+    # shellcheck source=/dev/null
+    source "$_uw_lib" 2>/dev/null || true
+done
+shopt -u nullglob
+unset _uw_script_dir _uw_lib
 
 configure_terminal() {
     print_status "info" "Configuring terminal profile..."
@@ -42,42 +45,42 @@ configure_terminal() {
     profile_id=${profile_id:1:-1} # remove single quotes
     
     # configure terminal appearance
-    gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ use-theme-colors false
-    gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ palette "['rgb(46,52,54)', 'rgb(204,0,0)', 'rgb(78,154,6)', 'rgb(196,160,0)', 'rgb(52,101,164)', 'rgb(117,80,123)', 'rgb(6,152,154)', 'rgb(211,215,207)', 'rgb(85,87,83)', 'rgb(239,41,41)', 'rgb(138,226,52)', 'rgb(252,233,79)', 'rgb(114,159,207)', 'rgb(173,127,168)', 'rgb(52,226,226)', 'rgb(238,238,236)']"
-    gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ background-color 'rgb(46,52,54)'
-    gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ foreground-color 'rgb(238,238,236)'
-    gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ bold-color-same-as-fg true
-    gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ bold-color 'rgb(238,238,236)'
+    run_or_echo gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ use-theme-colors false
+    run_or_echo gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ palette "['rgb(46,52,54)', 'rgb(204,0,0)', 'rgb(78,154,6)', 'rgb(196,160,0)', 'rgb(52,101,164)', 'rgb(117,80,123)', 'rgb(6,152,154)', 'rgb(211,215,207)', 'rgb(85,87,83)', 'rgb(239,41,41)', 'rgb(138,226,52)', 'rgb(252,233,79)', 'rgb(114,159,207)', 'rgb(173,127,168)', 'rgb(52,226,226)', 'rgb(238,238,236)']"
+    run_or_echo gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ background-color 'rgb(46,52,54)'
+    run_or_echo gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ foreground-color 'rgb(238,238,236)'
+    run_or_echo gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ bold-color-same-as-fg true
+    run_or_echo gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:${profile_id}/ bold-color 'rgb(238,238,236)'
     
     print_status "success" "Terminal configured with Tango Dark theme"
 }
 
 set_dark_mode() {
     print_status "info" "Configuring dark mode..."
-    gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-dark'
-    gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+    run_or_echo gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-dark'
+    run_or_echo gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
     print_status "success" "Dark mode configured"
 }
 
 set_dock_icon_size() {
     print_status "info" "Setting dock icon size to 48..."
-    gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 48
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 48
     print_status "success" "Dock icon size set to 48"
 }
 
 set_dock_position_bottom() {
     print_status "info" "Setting dock position to bottom..."
-    gsettings set org.gnome.shell.extensions.dash-to-dock dock-position 'BOTTOM'
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock dock-position 'BOTTOM'
     print_status "success" "Dock position set to BOTTOM"
 }
 
 set_workspaces_all_displays() {
     print_status "info" "Configuring workspaces for all displays..."
-    gsettings set org.gnome.mutter workspaces-only-on-primary false
+    run_or_echo gsettings set org.gnome.mutter workspaces-only-on-primary false
 
     # Check if the schema exists before trying to set it
     if gsettings list-schemas | grep -q "org.gnome.shell.overrides"; then
-        gsettings set org.gnome.shell.overrides workspaces-only-on-primary false
+        run_or_echo gsettings set org.gnome.shell.overrides workspaces-only-on-primary false
     else
         print_status "warning" "org.gnome.shell.overrides schema not available - skipping"
     fi
@@ -89,11 +92,11 @@ set_workspace_app_isolation() {
     print_status "info" "Configurando alternador de aplicativos para mostrar apenas apps do espaço de trabalho atual..."
     
     # This setting makes Alt+Tab show only applications from the current workspace
-    gsettings set org.gnome.shell.app-switcher current-workspace-only true
+    run_or_echo gsettings set org.gnome.shell.app-switcher current-workspace-only true
     
     # Alternative setting for some GNOME versions
     if gsettings list-schemas | grep -q "org.gnome.shell.window-switcher"; then
-        gsettings set org.gnome.shell.window-switcher current-workspace-only true
+        run_or_echo gsettings set org.gnome.shell.window-switcher current-workspace-only true
     fi
     
     local CURRENT_SETTING=$(gsettings get org.gnome.shell.app-switcher current-workspace-only)
@@ -104,13 +107,13 @@ configure_mouse() {
     print_status "info" "Configuring mouse settings..."
     
     # Set mouse speed (velocity) - middle value similar to the screenshot
-    gsettings set org.gnome.desktop.peripherals.mouse speed 0.0
+    run_or_echo gsettings set org.gnome.desktop.peripherals.mouse speed 0.0
     
     # Enable mouse acceleration (default profile)
-    gsettings set org.gnome.desktop.peripherals.mouse accel-profile 'default'
+    run_or_echo gsettings set org.gnome.desktop.peripherals.mouse accel-profile 'default'
     
     # Enable natural scrolling
-    gsettings set org.gnome.desktop.peripherals.mouse natural-scroll true
+    run_or_echo gsettings set org.gnome.desktop.peripherals.mouse natural-scroll true
     
     local MOUSE_SPEED=$(gsettings get org.gnome.desktop.peripherals.mouse speed)
     local ACCEL_PROFILE=$(gsettings get org.gnome.desktop.peripherals.mouse accel-profile)
@@ -135,28 +138,28 @@ configure_dock() {
     fi
     
     # Dock position and behavior
-    gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false
     set_dock_position_bottom
     set_dock_icon_size
-    gsettings set org.gnome.shell.extensions.dash-to-dock background-opacity 0.7
-    gsettings set org.gnome.shell.extensions.dash-to-dock transparency-mode 'FIXED'
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock background-opacity 0.7
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock transparency-mode 'FIXED'
     
     # Disable showing volumes and devices in dock
     print_status "info" "Disabling volumes and devices in dock..."
-    gsettings set org.gnome.shell.extensions.dash-to-dock show-mounts false
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock show-mounts false
     
     print_status "info" "Configuring dock auto-hide..."
-    gsettings set org.gnome.shell.extensions.dash-to-dock autohide true
-    gsettings set org.gnome.shell.extensions.dash-to-dock intellihide true
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock autohide true
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock intellihide true
     
     # Additional dock hiding settings for better behavior
-    gsettings set org.gnome.shell.extensions.dash-to-dock dock-fixed false
-    gsettings set org.gnome.shell.extensions.dash-to-dock intellihide-mode 'FOCUS_APPLICATION_WINDOWS'
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock dock-fixed false
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock intellihide-mode 'FOCUS_APPLICATION_WINDOWS'
     
     # Set hide animation speed (in seconds)
-    gsettings set org.gnome.shell.extensions.dash-to-dock animation-time 0.2
-    gsettings set org.gnome.shell.extensions.dash-to-dock hide-delay 0.2
-    gsettings set org.gnome.shell.extensions.dash-to-dock show-delay 0.25
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock animation-time 0.2
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock hide-delay 0.2
+    run_or_echo gsettings set org.gnome.shell.extensions.dash-to-dock show-delay 0.25
     
     print_status "success" "Dock auto-hide configured"
     
@@ -269,7 +272,7 @@ configure_dock() {
     local favorites_str=$(IFS=,; echo "${favorites[*]}")
     
     # Set favorites (this replaces all existing favorites)
-    gsettings set org.gnome.shell favorite-apps "[${favorites_str}]"
+    run_or_echo gsettings set org.gnome.shell favorite-apps "[${favorites_str}]"
     
     print_status "success" "Dock configured with ${#favorites[@]} favorite apps"
     print_status "info" "Apps in order: ${favorites_str}"
@@ -279,12 +282,12 @@ set_ubuntu_ui_interface() {
     print_status "info" "Setting verde-azulado (green-blue) accent color..."
     
     # Set Yaru themes
-    gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-viridian-dark'
-    gsettings set org.gnome.desktop.interface icon-theme 'Yaru-viridian'
-    gsettings set org.gnome.desktop.wm.preferences theme 'Yaru-viridian-dark'
+    run_or_echo gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-viridian-dark'
+    run_or_echo gsettings set org.gnome.desktop.interface icon-theme 'Yaru-viridian'
+    run_or_echo gsettings set org.gnome.desktop.wm.preferences theme 'Yaru-viridian-dark'
     
     # Also set color scheme to dark
-    gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+    run_or_echo gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
     
     print_status "success" "Accent color set to verde-azulado (Yaru-viridian)"
 }
@@ -296,32 +299,32 @@ configure_workspaces() {
 
 apply_additional_tweaks() {
     print_status "info" "Applying additional tweaks..."
-    gsettings set org.gnome.desktop.interface enable-animations true
+    run_or_echo gsettings set org.gnome.desktop.interface enable-animations true
 
     # Set clock format to show weekday name and week number
-    gsettings set org.gnome.desktop.interface clock-format '24h'
-    gsettings set org.gnome.desktop.interface clock-show-weekday true
-    gsettings set org.gnome.desktop.interface clock-show-date true
+    run_or_echo gsettings set org.gnome.desktop.interface clock-format '24h'
+    run_or_echo gsettings set org.gnome.desktop.interface clock-show-weekday true
+    run_or_echo gsettings set org.gnome.desktop.interface clock-show-date true
     
     # Try different methods for week number display
     if gsettings list-schemas | grep -q org.gnome.shell.clock; then
-        gsettings set org.gnome.shell.clock date-format "'%A %W'"  # shows weekday name and week number
+        run_or_echo gsettings set org.gnome.shell.clock date-format "'%A %W'"  # shows weekday name and week number
     else
         # Alternative method for newer GNOME versions
-        gsettings set org.gnome.desktop.interface clock-show-weekday true
+        run_or_echo gsettings set org.gnome.desktop.interface clock-show-weekday true
         print_status "warning" "Direct week number display not available - using weekday only"
     fi
     
     # Other tweaks
-    gsettings set org.gnome.desktop.background show-desktop-icons true
-    gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'
+    run_or_echo gsettings set org.gnome.desktop.background show-desktop-icons true
+    run_or_echo gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'
     
     print_status "success" "Additional tweaks applied"
 }
 
 configure_inactivity_time_lock() {
     print_status "info" "Set inactivity time to lock workspace..."
-    gsettings set org.gnome.desktop.session idle-delay 900
+    run_or_echo gsettings set org.gnome.desktop.session idle-delay 900
     local CURRENT_DELAY=$(gsettings get org.gnome.desktop.session idle-delay)
     print_status "success" "Inactivity time set to $CURRENT_DELAY seconds"
 }
@@ -330,8 +333,8 @@ configure_power_settings() {
     print_status "info" "Configuring power settings..."
     
     # Set screen blank time to 30 minutes (1800 seconds) when on battery
-    gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout 1800
-    gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'nothing'
+    run_or_echo gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout 1800
+    run_or_echo gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'nothing'
     
     local BATTERY_TIMEOUT=$(gsettings get org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout)
     print_status "success" "Screen will turn off after $BATTERY_TIMEOUT seconds (30 min) on battery"
@@ -357,6 +360,27 @@ organize_app_folders() {
             return 0
         fi
         return 1
+    }
+
+    # Append .desktop filenames from INSTALL_REGISTRY entries whose
+    # gnome_folder field matches $1 into the array named by $2.
+    # Registry schema: "func:label:gnome_folder:desktop_file"
+    _merge_registry_into_folder() {
+        local folder_name="$1"
+        local -n out_arr="$2"
+        local entry fn _label gnome_folder desktop_file derived result
+        for entry in "${INSTALL_REGISTRY[@]}"; do
+            IFS=':' read -r fn _label gnome_folder desktop_file <<< "$entry"
+            [ "$gnome_folder" = "$folder_name" ] || continue
+            if [ -n "$desktop_file" ]; then
+                derived="$desktop_file"
+            else
+                derived="${fn#install_}.desktop"
+            fi
+            if result=$(find_app_desktop_file "$derived"); then
+                out_arr+=("'$result'")
+            fi
+        done
     }
     
     # Get current folder settings
@@ -456,12 +480,13 @@ organize_app_folders() {
     shopt -u nullglob
     
     # Remove duplicates
+    _merge_registry_into_folder "Sistema" sistema_apps
     sistema_apps=($(echo "${sistema_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
     
     if [ ${#sistema_apps[@]} -gt 0 ]; then
         local sistema_apps_str=$(IFS=,; echo "${sistema_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ name 'Sistema'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ apps "[${sistema_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ name 'Sistema'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ apps "[${sistema_apps_str}]"
         folder_ids+=("'Sistema'")
         print_status "success" "Sistema folder created with ${#sistema_apps[@]} apps"
         print_status "config" "  Apps: ${sistema_apps_str}"
@@ -509,12 +534,13 @@ organize_app_folders() {
     done
     shopt -u nullglob
     
+    _merge_registry_into_folder "Seguranca" seguranca_apps
     seguranca_apps=($(echo "${seguranca_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
     
     if [ ${#seguranca_apps[@]} -gt 0 ]; then
         local seguranca_apps_str=$(IFS=,; echo "${seguranca_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ name 'Segurança'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ apps "[${seguranca_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ name 'Segurança'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ apps "[${seguranca_apps_str}]"
         folder_ids+=("'Seguranca'")
         print_status "success" "Segurança folder created with ${#seguranca_apps[@]} apps"
         print_status "config" "  Apps: ${seguranca_apps_str}"
@@ -608,12 +634,13 @@ organize_app_folders() {
     done
     shopt -u nullglob
     
+    _merge_registry_into_folder "Utilitarios" utilitarios_apps
     utilitarios_apps=($(echo "${utilitarios_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
     
     if [ ${#utilitarios_apps[@]} -gt 0 ]; then
         local utilitarios_apps_str=$(IFS=,; echo "${utilitarios_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ name 'Utilitários'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ apps "[${utilitarios_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ name 'Utilitários'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ apps "[${utilitarios_apps_str}]"
         folder_ids+=("'Utilitarios'")
         print_status "success" "Utilitários folder created with ${#utilitarios_apps[@]} apps"
         print_status "config" "  Apps: ${utilitarios_apps_str}"
@@ -665,12 +692,13 @@ organize_app_folders() {
     done
     shopt -u nullglob
 
+    _merge_registry_into_folder "Media" media_apps
     media_apps=($(echo "${media_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
 
     if [ ${#media_apps[@]} -gt 0 ]; then
         local media_apps_str=$(IFS=,; echo "${media_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Media/ name 'Media'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Media/ apps "[${media_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Media/ name 'Media'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Media/ apps "[${media_apps_str}]"
         folder_ids+=("'Media'")
         print_status "success" "Media folder created with ${#media_apps[@]} apps"
         print_status "config" "  Apps: ${media_apps_str}"
@@ -709,12 +737,13 @@ organize_app_folders() {
     done
     shopt -u nullglob
     
+    _merge_registry_into_folder "Sharing" sharing_apps
     sharing_apps=($(echo "${sharing_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
     
     if [ ${#sharing_apps[@]} -gt 0 ]; then
         local sharing_apps_str=$(IFS=,; echo "${sharing_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sharing/ name 'Sharing'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sharing/ apps "[${sharing_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sharing/ name 'Sharing'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sharing/ apps "[${sharing_apps_str}]"
         folder_ids+=("'Sharing'")
         print_status "success" "Sharing folder created with ${#sharing_apps[@]} apps"
         print_status "config" "  Apps: ${sharing_apps_str}"
@@ -741,8 +770,8 @@ organize_app_folders() {
     
     if [ ${#irpf_apps[@]} -gt 0 ]; then
         local irpf_apps_str=$(IFS=,; echo "${irpf_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/IRPF/ name 'IRPF'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/IRPF/ apps "[${irpf_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/IRPF/ name 'IRPF'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/IRPF/ apps "[${irpf_apps_str}]"
         folder_ids+=("'IRPF'")
         print_status "success" "IRPF folder created with ${#irpf_apps[@]} apps"
         print_status "config" "  Apps: ${irpf_apps_str}"
@@ -890,12 +919,13 @@ EOF
     fi
 
     # Remove any duplicates that might have been added
+    _merge_registry_into_folder "DEV" dev_apps
     dev_apps=($(echo "${dev_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
 
     if [ ${#dev_apps[@]} -gt 0 ]; then
         local dev_apps_str=$(IFS=,; echo "${dev_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ name 'DEV'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ apps "[${dev_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ name 'DEV'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ apps "[${dev_apps_str}]"
         folder_ids+=("'DEV'")
         print_status "success" "DEV folder created with ${#dev_apps[@]} apps"
         print_status "config" "  Apps in DEV folder:"
@@ -936,8 +966,8 @@ EOF
     
     if [ ${#ereader_apps[@]} -gt 0 ]; then
         local ereader_apps_str=$(IFS=,; echo "${ereader_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Ereader/ name 'Ereader'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Ereader/ apps "[${ereader_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Ereader/ name 'Ereader'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Ereader/ apps "[${ereader_apps_str}]"
         folder_ids+=("'Ereader'")
         print_status "success" "Ereader folder created with ${#ereader_apps[@]} apps"
         print_status "config" "  Apps: ${ereader_apps_str}"
@@ -960,8 +990,8 @@ EOF
 
     if [ ${#office_apps[@]} -gt 0 ]; then
         local office_apps_str=$(IFS=,; echo "${office_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ name 'Office'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ apps "[${office_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ name 'Office'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ apps "[${office_apps_str}]"
         folder_ids+=("'Office'")
         print_status "success" "Office folder created with ${#office_apps[@]} apps"
         print_status "config" "  Apps: ${office_apps_str}"
@@ -1002,12 +1032,13 @@ EOF
     done
     shopt -u nullglob
 
+    _merge_registry_into_folder "OrgPessoal" org_pessoal_apps
     org_pessoal_apps=($(echo "${org_pessoal_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
 
     if [ ${#org_pessoal_apps[@]} -gt 0 ]; then
         local org_pessoal_apps_str=$(IFS=,; echo "${org_pessoal_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ name 'Organização Pessoal'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ apps "[${org_pessoal_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ name 'Organização Pessoal'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ apps "[${org_pessoal_apps_str}]"
         folder_ids+=("'OrgPessoal'")
         print_status "success" "Organização Pessoal folder created with ${#org_pessoal_apps[@]} apps"
         print_status "config" "  Apps: ${org_pessoal_apps_str}"
@@ -1066,12 +1097,13 @@ EOF
     done
     shopt -u nullglob
 
+    _merge_registry_into_folder "AmbienteVirtual" ambiente_virtual_apps
     ambiente_virtual_apps=($(echo "${ambiente_virtual_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
 
     if [ ${#ambiente_virtual_apps[@]} -gt 0 ]; then
         local ambiente_virtual_apps_str=$(IFS=,; echo "${ambiente_virtual_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ name 'Ambiente Virtual'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ apps "[${ambiente_virtual_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ name 'Ambiente Virtual'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ apps "[${ambiente_virtual_apps_str}]"
         folder_ids+=("'AmbienteVirtual'")
         print_status "success" "Ambiente Virtual folder created with ${#ambiente_virtual_apps[@]} apps"
         print_status "config" "  Apps: ${ambiente_virtual_apps_str}"
@@ -1122,8 +1154,8 @@ EOF
 
     if [ ${#browsers_apps[@]} -gt 0 ]; then
         local browsers_apps_str=$(IFS=,; echo "${browsers_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Browsers/ name 'Browsers'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Browsers/ apps "[${browsers_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Browsers/ name 'Browsers'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Browsers/ apps "[${browsers_apps_str}]"
         folder_ids+=("'Browsers'")
         print_status "success" "Browsers folder created with ${#browsers_apps[@]} apps"
         print_status "config" "  Apps: ${browsers_apps_str}"
@@ -1150,8 +1182,8 @@ EOF
 
     if [ ${#newsletter_apps[@]} -gt 0 ]; then
         local newsletter_apps_str=$(IFS=,; echo "${newsletter_apps[*]}")
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ name 'Newsletter'
-        gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ apps "[${newsletter_apps_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ name 'Newsletter'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ apps "[${newsletter_apps_str}]"
         folder_ids+=("'Newsletter'")
         print_status "success" "Newsletter folder created with ${#newsletter_apps[@]} apps"
         print_status "config" "  Apps: ${newsletter_apps_str}"
@@ -1173,7 +1205,7 @@ EOF
 
     if [ ${#ordered_folder_ids[@]} -gt 0 ]; then
         local ordered_folder_ids_str=$(IFS=,; echo "${ordered_folder_ids[*]}")
-        gsettings set org.gnome.desktop.app-folders folder-children "[${ordered_folder_ids_str}]"
+        run_or_echo gsettings set org.gnome.desktop.app-folders folder-children "[${ordered_folder_ids_str}]"
         print_status "success" "App folders organized in custom order: ${ordered_folder_ids_str}"
     else
         print_status "warning" "No folders were created"
@@ -1214,96 +1246,96 @@ configure_vitals() {
     print_status "config" "Setting general preferences..."
     
     # Seconds between updates: 60
-    gsettings set org.gnome.shell.extensions.vitals refresh-time 60
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals refresh-time 60
     
     # Position in panel: Left
-    gsettings set org.gnome.shell.extensions.vitals position 0
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals position 0
     
     # Use greater precision
-    gsettings set org.gnome.shell.extensions.vitals use-custom-decimals true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals use-custom-decimals true
     
     # Alphabetize sensors
-    gsettings set org.gnome.shell.extensions.vitals alphabetical true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals alphabetical true
     
     # Hide zero values
-    gsettings set org.gnome.shell.extensions.vitals hide-zeros true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals hide-zeros true
     
     # Use fixed widths
-    gsettings set org.gnome.shell.extensions.vitals fixed-widths false
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals fixed-widths false
     
     # Hide icons in top bar
-    gsettings set org.gnome.shell.extensions.vitals hide-icons true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals hide-icons true
     
     # Menu always centered
-    gsettings set org.gnome.shell.extensions.vitals center-values true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals center-values true
     
     # Icon style: Original
-    gsettings set org.gnome.shell.extensions.vitals icons-type 0
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals icons-type 0
     
     # ==================== SENSORS ====================
     print_status "config" "Configuring sensors..."
     
     # Enable all sensors
-    gsettings set org.gnome.shell.extensions.vitals show-temperature true
-    gsettings set org.gnome.shell.extensions.vitals show-voltage true
-    gsettings set org.gnome.shell.extensions.vitals show-fan true
-    gsettings set org.gnome.shell.extensions.vitals show-memory true
-    gsettings set org.gnome.shell.extensions.vitals show-processor true
-    gsettings set org.gnome.shell.extensions.vitals show-system true
-    gsettings set org.gnome.shell.extensions.vitals show-network true
-    gsettings set org.gnome.shell.extensions.vitals show-storage true
-    gsettings set org.gnome.shell.extensions.vitals show-battery true
-    gsettings set org.gnome.shell.extensions.vitals show-graphics true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-temperature true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-voltage true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-fan true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-memory true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-processor true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-system true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-network true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-storage true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-battery true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-graphics true
     
     # ==================== ADDITIONAL CONFIGURATION ====================
     print_status "config" "Setting additional Vitals preferences..."
     
     # Set temperature unit to Celsius
-    gsettings set org.gnome.shell.extensions.vitals temperature-unit 0
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals temperature-unit 0
     
     # Set network unit to KB/s
-    gsettings set org.gnome.shell.extensions.vitals network-unit 1
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals network-unit 1
     
     # Set storage unit to GB
-    gsettings set org.gnome.shell.extensions.vitals storage-unit 2
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals storage-unit 2
     
     # Show storage in used/total format
-    gsettings set org.gnome.shell.extensions.vitals storage-style 1
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals storage-style 1
     
     # Show memory in percentage
-    gsettings set org.gnome.shell.extensions.vitals memory-style 0
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals memory-style 0
     
     # Show CPU in percentage
-    gsettings set org.gnome.shell.extensions.vitals processor-style 0
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals processor-style 0
     
     # Show battery in watts
-    gsettings set org.gnome.shell.extensions.vitals battery-style 2
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals battery-style 2
     
     # Show GPU in percentage
-    gsettings set org.gnome.shell.extensions.vitals graphics-style 0
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals graphics-style 0
     
     # Show fan in RPM
-    gsettings set org.gnome.shell.extensions.vitals fan-style 0
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals fan-style 0
     
     # Show voltage in volts
-    gsettings set org.gnome.shell.extensions.vitals voltage-style 0
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals voltage-style 0
     
     # ==================== SENSOR ORDER ====================
     print_status "config" "Setting sensor order..."
-    gsettings set org.gnome.shell.extensions.vitals order "['temperature','voltage','fan','memory','processor','system','network','storage','battery','graphics']"
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals order "['temperature','voltage','fan','memory','processor','system','network','storage','battery','graphics']"
     
     # ==================== HOT SENSORS ====================
     print_status "config" "Configuring hot sensors (thresholds)..."
-    gsettings set org.gnome.shell.extensions.vitals temperature-warning 80
-    gsettings set org.gnome.shell.extensions.vitals temperature-critical 90
-    gsettings set org.gnome.shell.extensions.vitals memory-warning 90
-    gsettings set org.gnome.shell.extensions.vitals processor-warning 90
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals temperature-warning 80
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals temperature-critical 90
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals memory-warning 90
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals processor-warning 90
     
     # ==================== DISPLAY OPTIONS ====================
     print_status "config" "Setting display options..."
-    gsettings set org.gnome.shell.extensions.vitals show-in-panel true
-    gsettings set org.gnome.shell.extensions.vitals compact true
-    gsettings set org.gnome.shell.extensions.vitals decoration false
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals show-in-panel true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals compact true
+    run_or_echo gsettings set org.gnome.shell.extensions.vitals decoration false
     
     # ==================== VERIFY CONFIGURATION ====================
     print_status "info" "Verifying Vitals configuration..."
@@ -1357,7 +1389,7 @@ configure_dim_calendar_events() {
     if command -v gnome-extensions &> /dev/null; then
         if ! gnome-extensions info "$EXT_UUID" 2>/dev/null | grep -q "ENABLED"; then
             print_status "info" "Enabling Dim Completed Calendar Events..."
-            gnome-extensions enable "$EXT_UUID" 2>/dev/null || true
+            run_or_echo gnome-extensions enable "$EXT_UUID" 2>/dev/null || true
         fi
     fi
 
@@ -1395,5 +1427,8 @@ main() {
     print_status "info" "Open 'Mostrar aplicativos' to see your organized folders!"
 }
 
-# Execute main function
-main
+# Execute main only when the script is run directly. Sourcing this file (e.g.
+# from a test or to access INSTALL_REGISTRY) must not trigger gsettings calls.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main
+fi

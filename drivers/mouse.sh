@@ -1,13 +1,8 @@
 #!/bin/bash
 
-# Color Definitions
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m' # No Color
+# Source shared print_status + color vars from repo-root lib/common.sh.
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 
 # --- Global Variables ---
 SCRIPT_DIR="$HOME/bin"
@@ -15,23 +10,6 @@ WORKSPACE_SCRIPTS=("next_workspace.sh" "prev_workspace.sh")
 XBINDKEYS_CONFIG="$HOME/.xbindkeysrc"
 AUTOSTART_DIR="$HOME/.config/autostart"
 AUTOSTART_FILE="$AUTOSTART_DIR/xbindkeys.desktop"
-
-# --- Helper Functions ---
-
-# Print status messages with color coding
-print_status() {
-    local status="$1"
-    local message="$2"
-    
-    case "$status" in
-        "success") echo -e "${GREEN}[✓]${NC} ${message}" ;;
-        "error") echo -e "${RED}[✗]${NC} ${message}" >&2 ;;
-        "warning") echo -e "${YELLOW}[!]${NC} ${message}" ;;
-        "info") echo -e "${BLUE}[i]${NC} ${message}" ;;
-        "config") echo -e "${CYAN}[→]${NC} ${message}" ;;
-        *) echo -e "[ ] ${message}" ;;
-    esac
-}
 
 # Create backup of existing files with timestamp
 backup_file() {

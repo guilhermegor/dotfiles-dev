@@ -3,15 +3,11 @@
 set -e
 set -o pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m'
-
 LOG_FILE="$HOME/starship_bash_setup_$(date +%Y%m%d_%H%M%S).log"
+
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
+
 DISTRO=""
 PACKAGE_MANAGER=""
 INSTALL_CMD=""
@@ -28,59 +24,6 @@ STARSHIP_BASH_BEGIN="# >>> dotfiles-dev starship bash >>>"
 STARSHIP_BASH_END="# <<< dotfiles-dev starship bash <<<"
 INPUTRC_BEGIN="# >>> dotfiles-dev bash autocomplete >>>"
 INPUTRC_END="# <<< dotfiles-dev bash autocomplete <<<"
-
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
-
-print_status() {
-    local status="$1"
-    local message="$2"
-
-    case "$status" in
-        "success")
-            echo -e "${GREEN}[✓]${NC} ${message}"
-            ;;
-        "error")
-            echo -e "${RED}[✗]${NC} ${message}" >&2
-            ;;
-        "warning")
-            echo -e "${YELLOW}[!]${NC} ${message}"
-            ;;
-        "info")
-            echo -e "${BLUE}[i]${NC} ${message}"
-            ;;
-        "config")
-            echo -e "${CYAN}[→]${NC} ${message}"
-            ;;
-        "section")
-            echo -e "\n${MAGENTA}========================================${NC}"
-            echo -e "${MAGENTA} $message${NC}"
-            echo -e "${MAGENTA}========================================${NC}\n"
-            ;;
-        *)
-            echo -e "[ ] ${message}"
-            ;;
-    esac
-
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$status] $message" >> "$LOG_FILE"
-}
-
-command_exists() {
-    command -v "$1" &> /dev/null
-}
-
-check_internet() {
-    print_status "info" "Checking internet connectivity..."
-
-    if ping -c 1 google.com &> /dev/null; then
-        print_status "success" "Internet connection verified"
-        return 0
-    fi
-
-    print_status "error" "No internet connection detected"
-    return 1
-}
 
 ensure_file_exists() {
     local file_path="$1"

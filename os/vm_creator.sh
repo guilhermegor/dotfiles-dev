@@ -1,31 +1,11 @@
 #!/bin/bash
 
-# color definitions
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m' # no color
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 
 # vm configuration
 RAM="8192" # 8GB ram for each vm
 CORES="2"  # 2 CPU cores for each vm
-
-print_status() {
-    local status="$1"
-    local message="$2"
-    
-    case "$status" in
-        "success") echo -e "${GREEN}[✓]${NC} ${message}" ;;
-        "error") echo -e "${RED}[✗]${NC} ${message}" >&2 ;;
-        "warning") echo -e "${YELLOW}[!]${NC} ${message}" ;;
-        "info") echo -e "${BLUE}[i]${NC} ${message}" ;;
-        "config") echo -e "${CYAN}[→]${NC} ${message}" ;;
-        *) echo -e "[ ] ${message}" ;;
-    esac
-}
 
 choose_target_drive() {
     print_status "info" "Mounted file systems:"

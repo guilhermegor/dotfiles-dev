@@ -1,18 +1,7 @@
 #!/bin/bash
 
-# colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # no color
-
-# function to print colored text
-print_status() {
-    local color="$1"
-    local message="$2"
-    echo -e "${color}${message}${NC}"
-}
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 
 # function to check if a keybinding conflicts with a GNOME default binding.
 # Custom bindings are skipped — this script fully owns and overwrites that
@@ -39,33 +28,33 @@ verify_keybindings() {
     local bindings=("$@")
     local conflict_found=0
     
-    print_status $BLUE "Verifying keybindings for conflicts..."
+    print_status info "Verifying keybindings for conflicts..."
     
     for binding in "${bindings[@]}"; do
         if keybinding_exists "$binding"; then
-            print_status $RED "Conflict detected! The keybinding '$binding' is already in use."
+            print_status error "Conflict detected! The keybinding '$binding' is already in use."
             conflict_found=1
         else
-            print_status $GREEN "Keybinding '$binding' is available."
+            print_status success "Keybinding '$binding' is available."
         fi
     done
     
     if [ $conflict_found -eq 1 ]; then
-        print_status $RED "\nWarning: One or more keybinding conflicts detected!"
+        print_status error "\nWarning: One or more keybinding conflicts detected!"
         read -p "Do you want to continue anyway? [y/N] " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_status $RED "Aborting due to keybinding conflicts."
+            print_status error "Aborting due to keybinding conflicts."
             exit 1
         fi
     else
-        print_status $GREEN "\nAll keybindings are available. No conflicts detected."
+        print_status success "\nAll keybindings are available. No conflicts detected."
     fi
 }
 
 # function to set the custom keybindings array
 set_keybindings_array() {
-    print_status $BLUE "Setting up custom keybindings array..."
+    print_status info "Setting up custom keybindings array..."
     gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
     "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', \
     '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/', \
@@ -92,7 +81,7 @@ set_individual_keybinding() {
     local command="$3"
     local binding="$4"
     
-    print_status $YELLOW "Setting up keybinding $index: $name..."
+    print_status warning "Setting up keybinding $index: $name..."
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom${index}/ name "$name"
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom${index}/ command "$command"
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom${index}/ binding "$binding"
@@ -104,7 +93,7 @@ create_copy_path_script() {
     local nautilus_scripts_dir="$HOME/.local/share/nautilus/scripts"
     local symlink_path="$nautilus_scripts_dir/Copy Path"
 
-    print_status $BLUE "Creating enhanced copy-path script at $script_path..."
+    print_status info "Creating enhanced copy-path script at $script_path..."
     
     mkdir -p "$HOME/.local/bin"
     mkdir -p "$nautilus_scripts_dir"
@@ -150,8 +139,8 @@ EOF
     # Create symlink in Nautilus scripts directory
     ln -sf "$script_path" "$symlink_path"
     
-    print_status $GREEN "Enhanced copy-path script created successfully!"
-    print_status $GREEN "Nautilus integration set up automatically!"
+    print_status success "Enhanced copy-path script created successfully!"
+    print_status success "Nautilus integration set up automatically!"
 }
 
 # function to install the external SSD backup script to ~/.local/bin
@@ -161,19 +150,19 @@ create_backup_script() {
     local src_script="$script_dir/../storage/backup_external_ssd.sh"
     local dest_script="$HOME/.local/bin/backup-external-ssd.sh"
 
-    print_status $BLUE "Installing backup-external-ssd.sh to $dest_script..."
+    print_status info "Installing backup-external-ssd.sh to $dest_script..."
 
     mkdir -p "$HOME/.local/bin"
 
     if [ ! -f "$src_script" ]; then
-        print_status $RED "Source script not found: $src_script"
+        print_status error "Source script not found: $src_script"
         return 1
     fi
 
     cp "$src_script" "$dest_script"
     chmod +x "$dest_script"
 
-    print_status $GREEN "Backup script installed at $dest_script"
+    print_status success "Backup script installed at $dest_script"
 }
 
 # function to install backup-env.sh to ~/.local/bin
@@ -183,17 +172,17 @@ create_backup_env_script() {
     local src_script="$script_dir/../storage/backup_env.sh"
     local dest_script="$HOME/.local/bin/backup-env.sh"
 
-    print_status $BLUE "Installing backup-env.sh to $dest_script..."
+    print_status info "Installing backup-env.sh to $dest_script..."
     mkdir -p "$HOME/.local/bin"
 
     if [ ! -f "$src_script" ]; then
-        print_status $RED "Source script not found: $src_script"
+        print_status error "Source script not found: $src_script"
         return 1
     fi
 
     cp "$src_script" "$dest_script"
     chmod +x "$dest_script"
-    print_status $GREEN "backup-env.sh installed at $dest_script"
+    print_status success "backup-env.sh installed at $dest_script"
 }
 
 # function to install export-memory.sh to ~/.local/bin
@@ -203,17 +192,17 @@ create_export_memory_script() {
     local src_script="$script_dir/../storage/export_memory.sh"
     local dest_script="$HOME/.local/bin/export-memory.sh"
 
-    print_status $BLUE "Installing export-memory.sh to $dest_script..."
+    print_status info "Installing export-memory.sh to $dest_script..."
     mkdir -p "$HOME/.local/bin"
 
     if [ ! -f "$src_script" ]; then
-        print_status $RED "Source script not found: $src_script"
+        print_status error "Source script not found: $src_script"
         return 1
     fi
 
     cp "$src_script" "$dest_script"
     chmod +x "$dest_script"
-    print_status $GREEN "export-memory.sh installed at $dest_script"
+    print_status success "export-memory.sh installed at $dest_script"
 }
 
 # function to install restore-env.sh to ~/.local/bin
@@ -223,17 +212,17 @@ create_restore_env_script() {
     local src_script="$script_dir/../storage/restore_env.sh"
     local dest_script="$HOME/.local/bin/restore-env.sh"
 
-    print_status $BLUE "Installing restore-env.sh to $dest_script..."
+    print_status info "Installing restore-env.sh to $dest_script..."
     mkdir -p "$HOME/.local/bin"
 
     if [ ! -f "$src_script" ]; then
-        print_status $RED "Source script not found: $src_script"
+        print_status error "Source script not found: $src_script"
         return 1
     fi
 
     cp "$src_script" "$dest_script"
     chmod +x "$dest_script"
-    print_status $GREEN "restore-env.sh installed at $dest_script"
+    print_status success "restore-env.sh installed at $dest_script"
 }
 
 # function to install restore-memory.sh to ~/.local/bin
@@ -243,24 +232,24 @@ create_restore_memory_script() {
     local src_script="$script_dir/../storage/restore_memory.sh"
     local dest_script="$HOME/.local/bin/restore-memory.sh"
 
-    print_status $BLUE "Installing restore-memory.sh to $dest_script..."
+    print_status info "Installing restore-memory.sh to $dest_script..."
     mkdir -p "$HOME/.local/bin"
 
     if [ ! -f "$src_script" ]; then
-        print_status $RED "Source script not found: $src_script"
+        print_status error "Source script not found: $src_script"
         return 1
     fi
 
     cp "$src_script" "$dest_script"
     chmod +x "$dest_script"
-    print_status $GREEN "restore-memory.sh installed at $dest_script"
+    print_status success "restore-memory.sh installed at $dest_script"
 }
 
 # function to create the show-shortcuts rofi popup script
 create_show_shortcuts_script() {
     local script_path="$HOME/.local/bin/show-shortcuts.sh"
 
-    print_status $BLUE "Creating show-shortcuts.sh at $script_path..."
+    print_status info "Creating show-shortcuts.sh at $script_path..."
     mkdir -p "$HOME/.local/bin"
 
     cat > "$script_path" << 'EOF'
@@ -375,18 +364,18 @@ main
 EOF
 
     chmod +x "$script_path"
-    print_status $GREEN "show-shortcuts.sh created successfully!"
+    print_status success "show-shortcuts.sh created successfully!"
 }
 
 # function to add claudestatus shell aliases to ~/.bashrc
 create_claudestatus_aliases() {
     local marker="# claudestatus shortcuts"
     if grep -q "$marker" ~/.bashrc 2>/dev/null; then
-        print_status $GREEN "claudestatus aliases already present in ~/.bashrc"
+        print_status success "claudestatus aliases already present in ~/.bashrc"
         return 0
     fi
 
-    print_status $BLUE "Adding claudestatus aliases to ~/.bashrc..."
+    print_status info "Adding claudestatus aliases to ~/.bashrc..."
     {
         printf '\n'
         printf '# claudestatus shortcuts\n'
@@ -394,16 +383,16 @@ create_claudestatus_aliases() {
         printf 'alias cs-quick='"'"'claudestatus --quick'"'"'  # quick recommendation\n'
         printf 'alias cs-add='"'"'claudestatus add'"'"'   # add account: cs-add <alias>\n'
     } >> ~/.bashrc
-    print_status $GREEN "claudestatus aliases added to ~/.bashrc"
-    print_status $YELLOW "  cs            → show usage dashboard"
-    print_status $YELLOW "  cs-quick      → quick account recommendation"
-    print_status $YELLOW "  cs-add <name> → add account (e.g. work, personal_1, personal_2)"
+    print_status success "claudestatus aliases added to ~/.bashrc"
+    print_status warning "  cs            → show usage dashboard"
+    print_status warning "  cs-quick      → quick account recommendation"
+    print_status warning "  cs-add <name> → add account (e.g. work, personal_1, personal_2)"
 }
 
 # function to create the claudestatus dashboard launcher script
 create_claudestatus_dashboard_script() {
     local script_path="$HOME/.local/bin/claudestatus-dashboard.sh"
-    print_status $BLUE "Creating claudestatus-dashboard.sh at $script_path..."
+    print_status info "Creating claudestatus-dashboard.sh at $script_path..."
     mkdir -p "$HOME/.local/bin"
     
     cat > "$script_path" << 'EOF'
@@ -434,12 +423,12 @@ fi
 EOF
 
     chmod +x "$script_path"
-    print_status $GREEN "claudestatus-dashboard.sh created successfully!"
+    print_status success "claudestatus-dashboard.sh created successfully!"
 }
 
 # Modified main function to set up all keybindings including Insync kill
 set_all_keybindings() {
-    print_status $GREEN "Configuring GNOME custom keybindings..."
+    print_status success "Configuring GNOME custom keybindings..."
     
     # Define the keybindings we'll be using
     local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c" "<Super>b" "<Super>j" "<Super><Shift>e" "<Super><Shift>m" "<Super><Alt>e" "<Super><Alt>m" "<Super><Shift>u")
@@ -487,25 +476,25 @@ set_all_keybindings() {
     set_individual_keybinding 14 "Restore Claude Memory" "$HOME/.local/bin/restore-memory.sh" "<Super><Alt>m"
     set_individual_keybinding 15 "Claude Usage Dashboard" "$HOME/.local/bin/claudestatus-dashboard.sh" "<Super><Shift>u"
 
-    print_status $GREEN "All keybindings have been configured successfully!"
-    print_status $YELLOW "You can now use:"
-    print_status $YELLOW "  - Ctrl+Shift+C in Nautilus to copy file paths"
-    print_status $YELLOW "  - Ctrl+Shift+V anywhere to paste the paths"
-    print_status $YELLOW "  - Super+K to kill Insync processes"
-    print_status $YELLOW "  - Ctrl+Shift+Esc to open Task Manager"
-    print_status $YELLOW "  - Super+C to open GNOME Characters"
-    print_status $YELLOW "  - Super+B to back up external SSDs to the BKP cloud-sync drive"
-    print_status $YELLOW "  - Super+J to open the shortcut cheat-sheet (rofi popup)"
-    print_status $YELLOW "  - Super+Shift+E to back up .env files from all ~/github repos"
-    print_status $YELLOW "  - Super+Shift+M to export Claude Code memory to backup"
-    print_status $YELLOW "  - Super+Alt+E to restore .env files from backup"
-    print_status $YELLOW "  - Super+Alt+M to restore Claude Code memory from backup"
-    print_status $YELLOW "  - Super+Shift+U to open the Claude usage dashboard (claudestatus)"
-    print_status $YELLOW "Shell aliases added to ~/.bashrc (reload with: source ~/.bashrc):"
-    print_status $YELLOW "  - cs            → claudestatus (usage dashboard)"
-    print_status $YELLOW "  - cs-quick      → claudestatus --quick"
-    print_status $YELLOW "  - cs-add <name> → claudestatus add <name>"
-    print_status $YELLOW "    e.g.: cs-add work | cs-add personal_1 | cs-add personal_2"
+    print_status success "All keybindings have been configured successfully!"
+    print_status warning "You can now use:"
+    print_status warning "  - Ctrl+Shift+C in Nautilus to copy file paths"
+    print_status warning "  - Ctrl+Shift+V anywhere to paste the paths"
+    print_status warning "  - Super+K to kill Insync processes"
+    print_status warning "  - Ctrl+Shift+Esc to open Task Manager"
+    print_status warning "  - Super+C to open GNOME Characters"
+    print_status warning "  - Super+B to back up external SSDs to the BKP cloud-sync drive"
+    print_status warning "  - Super+J to open the shortcut cheat-sheet (rofi popup)"
+    print_status warning "  - Super+Shift+E to back up .env files from all ~/github repos"
+    print_status warning "  - Super+Shift+M to export Claude Code memory to backup"
+    print_status warning "  - Super+Alt+E to restore .env files from backup"
+    print_status warning "  - Super+Alt+M to restore Claude Code memory from backup"
+    print_status warning "  - Super+Shift+U to open the Claude usage dashboard (claudestatus)"
+    print_status warning "Shell aliases added to ~/.bashrc (reload with: source ~/.bashrc):"
+    print_status warning "  - cs            → claudestatus (usage dashboard)"
+    print_status warning "  - cs-quick      → claudestatus --quick"
+    print_status warning "  - cs-add <name> → claudestatus add <name>"
+    print_status warning "    e.g.: cs-add work | cs-add personal_1 | cs-add personal_2"
 }
 
 # execute the main function

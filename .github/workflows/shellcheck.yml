@@ -1,0 +1,47 @@
+name: shellcheck
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  bash-syntax:
+    name: bash -n (parse check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse-check every *.sh
+        # Fail loudly if any script has a syntax error.
+        run: |
+          set -e
+          fail=0
+          while IFS= read -r -d '' f; do
+            if ! bash -n "$f"; then
+              echo "::error file=$f::bash -n failed"
+              fail=1
+            fi
+          done < <(find . -name '*.sh' -not -path './.git/*' -print0)
+          exit "$fail"
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        # Severity 'warning' surfaces real bugs (unquoted vars in dangerous contexts,
+        # broken arithmetic, etc.) while skipping style nits. Tighten to 'info' or
+        # 'style' later once the codebase is clean at this level.
+        #
+        # SC1091 (file not following) is excluded — every script sources lib/common.sh
+        # via a runtime path that shellcheck cannot follow statically.
+        run: |
+          find . -name '*.sh' -not -path './.git/*' -print0 \
+            | xargs -0 shellcheck --severity=warning --exclude=SC1091

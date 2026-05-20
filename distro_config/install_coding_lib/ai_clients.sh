@@ -1,0 +1,727 @@
+#!/bin/bash
+#
+# distro_config/install_coding_lib/ai_clients.sh
+#
+# AI coding CLIs, local AI runtimes, and developer-facing AI tooling.
+# Sourced by install_coding.sh. Depends on Node.js for npm-based installs.
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    echo "ai_clients.sh is meant to be sourced, not executed." >&2
+    exit 1
+fi
+
+# ============================================================================
+# OLLAMA (+ distro-specific helpers)
+# ============================================================================
+
+install_ollama() {
+    print_status "section" "OLLAMA AI PLATFORM"
+
+    if command_exists ollama; then
+        local current_version=$(ollama --version 2>/dev/null || echo "unknown")
+        print_status "info" "Ollama already installed (version: $current_version)"
+        return 0
+    fi
+
+    print_status "info" "Installing Ollama - Local AI platform..."
+
+    case "$PACKAGE_MANAGER" in
+        apt)        install_ollama_debian ;;
+        dnf|yum)    install_ollama_rpm ;;
+        pacman)     install_ollama_arch ;;
+        zypper)     install_ollama_opensuse ;;
+        *)
+            print_status "warning" "Unsupported package manager, using curl installation method"
+            install_ollama_curl
+            ;;
+    esac
+
+    if command_exists ollama; then
+        local version=$(ollama --version 2>/dev/null || echo "unknown")
+        print_status "success" "Ollama installed successfully (version: $version)"
+        configure_ollama_service
+        show_ollama_info
+    else
+        print_status "error" "Ollama installation failed"
+        return 1
+    fi
+}
+
+install_ollama_debian() {
+    print_status "info" "Installing Ollama on Debian-based system..."
+    print_status "info" "Installing dependencies..."
+    $INSTALL_CMD curl
+
+    cd "$DOWNLOADS_DIR"
+    print_status "info" "Downloading Ollama installer..."
+
+    if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Ollama installed via official script"
+    else
+        print_status "warning" "Official installer failed, trying alternative method..."
+        install_ollama_curl
+    fi
+
+    cd - > /dev/null
+}
+
+install_ollama_rpm() {
+    print_status "info" "Installing Ollama on RPM-based system..."
+    print_status "info" "Installing dependencies..."
+    $INSTALL_CMD curl
+
+    cd "$DOWNLOADS_DIR"
+    print_status "info" "Downloading Ollama installer..."
+
+    if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Ollama installed via official script"
+    else
+        print_status "warning" "Official installer failed, trying alternative method..."
+        install_ollama_curl
+    fi
+
+    cd - > /dev/null
+}
+
+install_ollama_arch() {
+    print_status "info" "Installing Ollama on Arch Linux..."
+
+    if command_exists yay; then
+        print_status "info" "Installing Ollama from AUR..."
+        if yay -S --noconfirm ollama 2>&1 | tee -a "$LOG_FILE"; then
+            print_status "success" "Ollama installed from AUR"
+            return 0
+        else
+            print_status "warning" "AUR installation failed, trying official installer..."
+        fi
+    fi
+
+    $INSTALL_CMD curl
+    cd "$DOWNLOADS_DIR"
+
+    if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Ollama installed via official script"
+    else
+        print_status "error" "All installation methods failed"
+        return 1
+    fi
+
+    cd - > /dev/null
+}
+
+install_ollama_opensuse() {
+    print_status "info" "Installing Ollama on openSUSE..."
+    print_status "info" "Installing dependencies..."
+    $INSTALL_CMD curl
+
+    cd "$DOWNLOADS_DIR"
+    print_status "info" "Downloading Ollama installer..."
+
+    if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Ollama installed via official script"
+    else
+        print_status "warning" "Official installer failed, trying binary installation..."
+        install_ollama_curl
+    fi
+
+    cd - > /dev/null
+}
+
+install_ollama_curl() {
+    print_status "info" "Installing Ollama using binary download..."
+
+    cd "$DOWNLOADS_DIR"
+
+    local ollama_url="https://ollama.ai/download/ollama-linux-amd64"
+    local ollama_bin="$DOWNLOADS_DIR/ollama"
+
+    print_status "info" "Downloading Ollama binary..."
+    if curl -L -o "$ollama_bin" "$ollama_url" 2>&1 | tee -a "$LOG_FILE"; then
+        run_or_echo chmod +x "$ollama_bin"
+        run_or_echo sudo cp "$ollama_bin" /usr/local/bin/ollama
+        print_status "success" "Ollama binary installed to /usr/local/bin/ollama"
+    else
+        print_status "error" "Failed to download Ollama binary"
+        cd - > /dev/null
+        return 1
+    fi
+
+    cd - > /dev/null
+}
+
+configure_ollama_service() {
+    print_status "info" "Configuring Ollama service..."
+
+    if ! command_exists systemctl; then
+        print_status "warning" "systemd not available, cannot configure service"
+        return 0
+    fi
+
+    if run_or_echo sudo systemctl enable ollama 2>/dev/null; then
+        print_status "success" "Ollama service enabled"
+    fi
+
+    if run_or_echo sudo systemctl start ollama 2>/dev/null; then
+        print_status "success" "Ollama service started"
+    else
+        print_status "warning" "Could not start Ollama service automatically"
+        print_status "info" "You can start it manually with: ollama serve"
+    fi
+}
+
+show_ollama_info() {
+    print_status "info" "Ollama usage examples:"
+    print_status "config" "  Start Ollama server: ollama serve"
+    print_status "config" "  Pull a model: ollama pull llama2"
+    print_status "config" "  Run a model: ollama run llama2"
+    print_status "config" "  List models: ollama list"
+    print_status "config" "  Available models: llama2, codellama, mistral, phi, etc."
+
+    if command_exists systemctl && systemctl is-active ollama &>/dev/null; then
+        print_status "success" "Ollama service is running"
+        print_status "info" "Ollama API available at: http://localhost:11434"
+    fi
+}
+
+# ============================================================================
+# CLAUDE CODE
+# ============================================================================
+
+install_claude_code() {
+    print_status "section" "CLAUDE CODE INSTALLATION"
+
+    if ! is_tool_installed "nodejs"; then
+        print_status "error" "Node.js is not installed! Claude Code requires Node.js."
+        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
+        read -r install_nodejs_first
+        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
+            install_nodejs
+        else
+            print_status "warning" "Skipping Claude Code installation as Node.js is required"
+            return 1
+        fi
+    fi
+
+    if ! command_exists npm; then
+        print_status "error" "npm is not available. Please ensure Node.js is properly installed."
+        return 1
+    fi
+
+    print_status "info" "Checking for existing Claude Code installation..."
+
+    local claude_version=""
+    if command_exists claude; then
+        claude_version=$(timeout 10 claude --version 2>/dev/null | head -n1 || echo "")
+    fi
+
+    if [ -n "$claude_version" ]; then
+        print_status "info" "Claude Code is already installed ($claude_version)"
+
+        echo -e "\n${YELLOW}Do you want to update Claude Code to the latest version? (y/n):${NC}"
+        read -r update_claude
+        if [[ ! "$update_claude" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing Claude Code installation"
+            return 0
+        fi
+    fi
+
+    echo -e "\n${YELLOW}Install Claude Code globally? (y/n):${NC}"
+    echo -e "${CYAN}This will run: npm install -g @anthropic-ai/claude-code${NC}"
+    read -r install_claude
+    if [[ ! "$install_claude" =~ ^[Yy]$ ]]; then
+        print_status "info" "Skipping Claude Code installation"
+        return 0
+    fi
+
+    print_status "warning" "This may take a moment..."
+
+    npm_install_global "@anthropic-ai/claude-code" || {
+        print_status "error" "Failed to install Claude Code"
+        return 1
+    }
+
+    print_status "success" "Claude Code package installed successfully"
+
+    print_status "info" "Verifying Claude Code installation..."
+    if command_exists claude; then
+        print_status "success" "Claude Code command is available: $(timeout 10 claude --version 2>/dev/null | head -n1 || echo 'Not available')"
+    else
+        print_status "warning" "Claude command not found in PATH"
+        local npm_prefix=$(npm config get prefix 2>/dev/null || echo "")
+        if [ -n "$npm_prefix" ]; then
+            print_status "info" "npm global prefix detected: $npm_prefix"
+            print_status "config" "If needed, add to PATH: export PATH=\"$npm_prefix/bin:\$PATH\""
+        fi
+    fi
+
+    echo -e "\n${YELLOW}Do you want to run Claude login now? (y/n):${NC}"
+    read -r run_claude_login
+    if [[ "$run_claude_login" =~ ^[Yy]$ ]]; then
+        print_status "info" "Starting Claude login..."
+        claude login 2>&1 | tee -a "$LOG_FILE" || print_status "warning" "Claude login was not completed in this run"
+    else
+        print_status "info" "You can login later with: claude login"
+        print_status "info" "Or set API key manually: export ANTHROPIC_API_KEY=\"your_key_here\""
+    fi
+
+    echo ""
+    print_status "info" "Claude Code usage:"
+    print_status "config" "  Check version: claude --version"
+    print_status "config" "  Login: claude login"
+    print_status "config" "  Update (current version): npm update -g @anthropic-ai/claude-code"
+    print_status "config" "  Update all nvm versions: re-run this installer and choose 'all'"
+    print_status "config" "  Run in project: cd /path/to/project && claude"
+}
+
+# ============================================================================
+# GITHUB COPILOT CLI
+# ============================================================================
+
+install_github_copilot_cli() {
+    print_status "section" "GITHUB COPILOT CLI INSTALLATION"
+
+    if ! is_tool_installed "nodejs"; then
+        print_status "error" "Node.js is not installed! GitHub Copilot CLI requires Node.js."
+        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
+        read -r install_nodejs_first
+        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
+            install_nodejs
+        else
+            print_status "warning" "Skipping GitHub Copilot CLI installation as Node.js is required"
+            return 1
+        fi
+    fi
+
+    if ! command_exists npm; then
+        print_status "error" "npm is not available. Please ensure Node.js is properly installed."
+        return 1
+    fi
+
+    print_status "info" "Checking for existing GitHub Copilot CLI installation..."
+
+    local copilot_version=""
+    if command_exists copilot; then
+        copilot_version=$(timeout 10 copilot --version 2>/dev/null | head -n1 | sed 's/.*v//' || echo "")
+    fi
+
+    if [ -n "$copilot_version" ]; then
+        print_status "info" "GitHub Copilot CLI is already installed (version: $copilot_version)"
+
+        echo -e "\n${YELLOW}Do you want to update GitHub Copilot CLI to the latest version? (y/n):${NC}"
+        read -r update_copilot
+        if [[ ! "$update_copilot" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing GitHub Copilot CLI version $copilot_version"
+            return 0
+        fi
+    fi
+
+    echo -e "\n${YELLOW}Install GitHub Copilot CLI? (y/n):${NC}"
+    read -r install_copilot
+    if [[ ! "$install_copilot" =~ ^[Yy]$ ]]; then
+        print_status "info" "Skipping GitHub Copilot CLI installation"
+        return 0
+    fi
+
+    echo -e "\n${YELLOW}Choose installation method:${NC}"
+    echo -e "${CYAN}1) npm (recommended)${NC}"
+    if command_exists brew; then
+        echo -e "${CYAN}2) Homebrew${NC}"
+    fi
+    if command_exists brew; then
+        echo -e "${CYAN}Enter 1 or 2 (default: 1):${NC}"
+    else
+        echo -e "${CYAN}Enter 1 (default: 1):${NC}"
+    fi
+    read -r method_choice
+
+    local install_method package_name
+    if [ "$method_choice" = "2" ] && command_exists brew; then
+        install_method="brew"
+        print_status "info" "Using Homebrew for installation"
+    else
+        install_method="npm"
+        print_status "info" "Using npm for installation"
+    fi
+
+    echo -e "\n${YELLOW}Install stable or prerelease version?${NC}"
+    echo -e "${CYAN}1) Stable (recommended)${NC}"
+    echo -e "${CYAN}2) Prerelease${NC}"
+    echo -e "${CYAN}Enter 1 or 2 (default: 1):${NC}"
+    read -r version_choice
+
+    local install_ok=true
+    if [ "$install_method" = "brew" ]; then
+        if [ "$version_choice" = "2" ]; then
+            package_name="copilot-cli@prerelease"
+            print_status "info" "Installing GitHub Copilot CLI prerelease version via Homebrew..."
+        else
+            package_name="copilot-cli"
+            print_status "info" "Installing GitHub Copilot CLI stable version via Homebrew..."
+        fi
+        print_status "warning" "This may take a moment..."
+        run_or_echo brew install "$package_name" 2>&1 | tee -a "$LOG_FILE" || install_ok=false
+    else
+        if [ "$version_choice" = "2" ]; then
+            package_name="@github/copilot@prerelease"
+            print_status "info" "Installing GitHub Copilot CLI prerelease version via npm..."
+        else
+            package_name="@github/copilot"
+            print_status "info" "Installing GitHub Copilot CLI stable version via npm..."
+        fi
+        print_status "warning" "This may take a moment..."
+        npm_install_global "$package_name" || install_ok=false
+    fi
+
+    if $install_ok; then
+        copilot_version=$(timeout 5 copilot --version 2>/dev/null | head -n1 | sed 's/.*v//' || echo "")
+
+        if [ -n "$copilot_version" ]; then
+            print_status "success" "GitHub Copilot CLI $copilot_version installed successfully"
+        else
+            print_status "success" "GitHub Copilot CLI installed successfully"
+        fi
+
+        local update_cmd
+        if [ "$install_method" = "brew" ]; then
+            update_cmd="brew upgrade $package_name"
+        else
+            update_cmd="npm update -g $package_name"
+        fi
+
+        print_status "info" "Verifying installation..."
+        if command_exists copilot; then
+            print_status "info" "GitHub Copilot CLI version: $(timeout 5 copilot --version 2>/dev/null | head -n1 || echo 'Not available')"
+        else
+            print_status "warning" "GitHub Copilot CLI command not found. You may need to reload your shell."
+        fi
+
+        echo ""
+        print_status "info" "GitHub Copilot CLI usage:"
+        print_status "config" "  Launch CLI: copilot"
+        print_status "config" "  Check version: copilot --version"
+        print_status "config" "  Update: $update_cmd"
+        print_status "config" "  Note: Requires GitHub CLI authentication for full functionality"
+        print_status "config" "  Authenticate with: gh auth login"
+    else
+        print_status "error" "Failed to install GitHub Copilot CLI"
+        return 1
+    fi
+}
+
+# ============================================================================
+# QWEN CODE
+# ============================================================================
+
+install_qwen() {
+    print_status "section" "QWEN CODE INSTALLATION"
+
+    local qwen_version=""
+    if command_exists qwen; then
+        qwen_version=$(timeout 10 qwen --version 2>/dev/null | head -n1 || echo "")
+    fi
+
+    if [ -n "$qwen_version" ]; then
+        print_status "info" "Qwen Code is already installed ($qwen_version)"
+
+        echo -e "\n${YELLOW}Do you want to reinstall/update Qwen Code? (y/n):${NC}"
+        read -r update_qwen
+        if [[ ! "$update_qwen" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing Qwen Code installation"
+            return 0
+        fi
+    fi
+
+    echo -e "\n${YELLOW}Install Qwen Code? (y/n):${NC}"
+    echo -e "${CYAN}This will run the official Qwen Code installer script${NC}"
+    read -r install_qwen_confirm
+    if [[ ! "$install_qwen_confirm" =~ ^[Yy]$ ]]; then
+        print_status "info" "Skipping Qwen Code installation"
+        return 0
+    fi
+
+    if ! command_exists curl; then
+        print_status "error" "curl is not available. Please install curl first."
+        return 1
+    fi
+
+    print_status "info" "Downloading and running Qwen Code installer..."
+    print_status "warning" "This may take a moment..."
+
+    if bash -c "$(curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen.sh)" -s --source qwenchat 2>&1 | tee -a "$LOG_FILE"; then
+        print_status "success" "Qwen Code installed successfully"
+
+        export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+
+        print_status "info" "Verifying Qwen Code installation..."
+        if command_exists qwen; then
+            print_status "success" "Qwen Code is available: $(timeout 10 qwen --version 2>/dev/null | head -n1 || echo 'Not available')"
+        else
+            print_status "warning" "qwen command not found in PATH. You may need to reload your shell."
+        fi
+
+        echo ""
+        print_status "info" "Qwen Code usage:"
+        print_status "config" "  Check version: qwen --version"
+        print_status "config" "  Run in project: cd /path/to/project && qwen"
+        print_status "config" "  Update: re-run the installer script"
+    else
+        print_status "error" "Failed to install Qwen Code"
+        return 1
+    fi
+}
+
+# ============================================================================
+# CLAUDESTATUS (+ display/api/cli patches)
+# ============================================================================
+
+install_claudestatus() {
+    print_status "section" "CLAUDESTATUS — CLAUDE USAGE DASHBOARD"
+
+    if command_exists claudestatus; then
+        print_status "info" "claudestatus already installed"
+        return 0
+    fi
+
+    if ! command_exists npm; then
+        print_status "error" "npm not found — install Node.js first"
+        return 1
+    fi
+
+    print_status "info" "Installing @howells/claudestatus globally via npm..."
+    run_or_echo npm install -g @howells/claudestatus &>> "$LOG_FILE"
+
+    if command_exists claudestatus; then
+        print_status "success" "claudestatus installed successfully"
+        print_status "config" "Add accounts: claudestatus add <alias>"
+        print_status "config" "View dashboard: claudestatus"
+        _claudestatus_patch_display
+    else
+        print_status "error" "claudestatus installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
+# Patches the claudestatus display.js to show Status, Session, and Weekly columns.
+_claudestatus_patch_display() {
+    local npm_root
+    npm_root="$(npm root -g 2>/dev/null)" || return 0
+    local display_js="${npm_root}/@howells/claudestatus/dist/display.js"
+    [[ -f "$display_js" ]] || return 0
+
+    print_status "info" "Patching claudestatus display with enhanced columns..."
+    cat > "$display_js" << 'DISPLAY_EOF'
+import chalk from "chalk";
+import Table from "cli-table3";
+
+function formatResetTime(isoString) {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    if (diffMs < 0) return "now";
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffMins < 60) {
+        return `${diffMins}m`;
+    } else if (diffHours < 24) {
+        const mins = diffMins % 60;
+        return mins > 0 ? `${diffHours}h ${mins}m` : `${diffHours}h`;
+    } else {
+        const hours = diffHours % 24;
+        return hours > 0 ? `${diffDays}d ${hours}h` : `${diffDays}d`;
+    }
+}
+
+function usageBar(percent, width = 8) {
+    const filled = Math.round((percent / 100) * width);
+    const empty = width - filled;
+    let color = chalk.green;
+    if (percent >= 90) color = chalk.red;
+    else if (percent >= 70) color = chalk.yellow;
+    return color("█".repeat(filled)) + chalk.gray("░".repeat(empty));
+}
+
+function formatUsageCell(limit) {
+    if (!limit) return chalk.gray("—");
+    const bar = usageBar(limit.utilization);
+    const pct = limit.utilization.toString().padStart(3) + "%";
+    const reset = chalk.gray(" ↻" + formatResetTime(limit.resets_at));
+    return `${bar} ${pct}${reset}`;
+}
+
+function formatStatusCell(account) {
+    if (account.error) return chalk.red("✗ Error");
+    if (account.plan === "unknown") return chalk.yellow("? Unknown");
+    return chalk.green("✓ Active");
+}
+
+function getAvailability(account) {
+    if (account.error) {
+        return { status: "error", waitLabel: account.error, waitMs: Number.POSITIVE_INFINITY, reason: "none" };
+    }
+    const weekly = account.usage.seven_day;
+    const session = account.usage.five_hour;
+    if (weekly && weekly.utilization >= 100) {
+        const waitMs = Math.max(0, new Date(weekly.resets_at).getTime() - Date.now());
+        return { status: waitMs <= 0 ? "available" : "wait", waitLabel: formatResetTime(weekly.resets_at), waitMs, reason: "weekly" };
+    }
+    if (session && session.utilization >= 100) {
+        const waitMs = Math.max(0, new Date(session.resets_at).getTime() - Date.now());
+        return { status: waitMs <= 0 ? "available" : "wait", waitLabel: formatResetTime(session.resets_at), waitMs, reason: "session" };
+    }
+    return { status: "available", waitLabel: "now", waitMs: 0, reason: "none" };
+}
+
+function formatNextUseLabel(availability) {
+    if (availability.status === "available" || availability.waitLabel === "now") return chalk.green("Use now");
+    if (availability.reason === "weekly") return chalk.yellow(`Wait until ${availability.waitLabel}`);
+    return chalk.yellow(`Wait ${availability.waitLabel}`);
+}
+
+function pickNextAccount(accounts) {
+    const available = accounts.filter((a) => !a.error);
+    if (available.length === 0) return null;
+    const scored = available.map((account) => ({
+        account,
+        availability: getAvailability(account),
+        score: (account.usage.five_hour?.utilization ?? 0) + (account.usage.seven_day?.utilization ?? 0),
+    }));
+    const usable = scored.filter((entry) => entry.availability.status === "available");
+    if (usable.length > 0) return usable.reduce((a, b) => (a.score <= b.score ? a : b));
+    return scored.reduce((a, b) => {
+        if (a.availability.waitMs === b.availability.waitMs) return a.score <= b.score ? a : b;
+        return a.availability.waitMs <= b.availability.waitMs ? a : b;
+    });
+}
+
+export function displayUsageTable(accounts) {
+    console.log();
+    console.log(chalk.bold("  Claude Usage Dashboard"));
+    console.log(chalk.gray("  Note: 'Days left' shows rate-limit window resets, not billing renewal dates."));
+    console.log();
+    const table = new Table({
+        head: [chalk.bold("Account"), chalk.bold("Plan"), chalk.bold("Status"), chalk.bold("Session (5h)"), chalk.bold("Weekly (7d)"), chalk.bold("Next Use")],
+        style: { head: [], border: [] },
+        colWidths: [14, 6, 12, 22, 22, 20],
+    });
+    for (const account of accounts) {
+        const availability = getAvailability(account);
+        if (account.error) {
+            table.push([chalk.yellow(account.name), chalk.gray("—"), chalk.red("✗ Error"), chalk.gray("—"), chalk.gray("—"), chalk.red(account.error.split(".")[0])]);
+            continue;
+        }
+        table.push([
+            account.name,
+            account.plan === "max" ? chalk.magenta("Max") : chalk.cyan("Pro"),
+            formatStatusCell(account),
+            formatUsageCell(account.usage.five_hour),
+            formatUsageCell(account.usage.seven_day),
+            formatNextUseLabel(availability),
+        ]);
+    }
+    console.log(table.toString());
+    console.log();
+    const next = pickNextAccount(accounts);
+    if (next) {
+        const nextUseLabel = next.availability.status === "available" ? "Use now" : `Wait ${next.availability.waitLabel}`;
+        console.log(chalk.cyan("  💡 Recommendation: ") + chalk.bold(next.account.name) + chalk.gray(` (${nextUseLabel})`));
+        console.log();
+    }
+}
+
+export function displayQuickRecommendation(accounts) {
+    const next = pickNextAccount(accounts);
+    if (!next) {
+        console.log(chalk.red("No accounts available. Run: claudestatus add <name>"));
+        return;
+    }
+    const nextUseLabel = next.availability.status === "available" ? "Use now" : `Wait ${next.availability.waitLabel}`;
+    console.log(`${next.account.name} (${nextUseLabel})`);
+}
+DISPLAY_EOF
+
+    local api_js="${npm_root}/@howells/claudestatus/dist/api.js"
+    [[ -f "$api_js" ]] && _claudestatus_patch_api "$api_js"
+
+    local cli_js="${npm_root}/@howells/claudestatus/dist/cli.js"
+    [[ -f "$cli_js" ]] && _claudestatus_patch_cli "$cli_js"
+
+    print_status "success" "claudestatus patched (display + billing scraper)"
+}
+
+_claudestatus_patch_api() {
+    local api_js="$1"
+    grep -q "fetchBillingForAccount" "$api_js" && return 0
+    cat >> "$api_js" << 'API_EOF'
+const PT_MONTHS = { jan:0,fev:1,mar:2,abr:3,mai:4,jun:5,jul:6,ago:7,set:8,out:9,nov:10,dez:11 };
+const EN_MONTHS = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+function parseBillingDate(day,monthStr,year,locale){const t=locale==="pt"?PT_MONTHS:EN_MONTHS;const m=t[monthStr.slice(0,3).toLowerCase()];if(m===undefined)return null;return new Date(parseInt(year,10),m,parseInt(day,10));}
+function parseBillingText(text){let period="unknown";let autoRenew=null;let billingDate=null;if(/mensal|monthly/i.test(text))period="monthly";else if(/anual|annual|yearly/i.test(text))period="annual";const cancelPt=text.match(/será cancelada em (\d+) de (\w+)\.?\s*de (\d{4})/i);const cancelEn=text.match(/(?:will be cancelled|cancels)\s+on\s+(\w+)\s+(\d+),?\s+(\d{4})/i);const renewPt=text.match(/(?:será renovada(?: automaticamente)?|próxima cobrança)\s+em\s+(\d+) de (\w+)\.?\s*de (\d{4})/i);const renewEn=text.match(/(?:renews(?: automatically)?|next billing)\s+on\s+(\w+)\s+(\d+),?\s+(\d{4})/i);if(cancelPt){autoRenew=false;billingDate=parseBillingDate(cancelPt[1],cancelPt[2],cancelPt[3],"pt");}else if(cancelEn){autoRenew=false;billingDate=parseBillingDate(cancelEn[2],cancelEn[1],cancelEn[3],"en");}else if(renewPt){autoRenew=true;billingDate=parseBillingDate(renewPt[1],renewPt[2],renewPt[3],"pt");}else if(renewEn){autoRenew=true;billingDate=parseBillingDate(renewEn[2],renewEn[1],renewEn[3],"en");}return{period,autoRenew,billingDate};}
+export async function fetchBillingForAccount(name){const profileDir=getProfileDir(name);const storagePath=getStorageStatePath(name);if(!fs.existsSync(profileDir)&&!fs.existsSync(storagePath))return{period:"unknown",autoRenew:null,billingDate:null};const opts={headless:false,channel:"chrome",args:["--disable-blink-features=AutomationControlled","--disable-extensions","--window-size=800,600","--window-position=-32000,-32000"],ignoreDefaultArgs:["--enable-automation"],viewport:{width:800,height:600}};if(fs.existsSync(storagePath))opts.storageState=storagePath;const context=await chromium.launchPersistentContext(profileDir,opts);const page=context.pages()[0]||(await context.newPage());try{await page.goto(CLAUDE_URL,{waitUntil:"domcontentloaded",timeout:30000});await page.waitForTimeout(2000);await page.goto(`${CLAUDE_URL}/settings/billing`,{waitUntil:"domcontentloaded",timeout:30000});await page.waitForTimeout(4000);const content=await page.content();if(content.includes("Just a moment")||content.includes("challenge-platform")||content.includes("cf-turnstile")){await context.close();return{period:"unknown",autoRenew:null,billingDate:null,error:"Cloudflare block — run: claudestatus refresh "+name};}const text=await page.evaluate(()=>document.body.innerText);await context.storageState({path:storagePath});await context.close();return parseBillingText(text);}catch{await context.close();return{period:"unknown",autoRenew:null,billingDate:null};}}
+export async function fetchAllBilling(accountNames){const results=[];for(const name of accountNames){process.stdout.write(`  Billing ${name}...`);const billing=await fetchBillingForAccount(name);console.log(" done");results.push({name,...billing});}return results;}
+API_EOF
+}
+
+_claudestatus_patch_cli() {
+    local cli_js="$1"
+    grep -q "fetchAllBilling" "$cli_js" && return 0
+    sed -i \
+        's|import { addAccount, fetchAllUsage } from "./api.js";|import { addAccount, fetchAllUsage, fetchAllBilling } from "./api.js";|' \
+        "$cli_js"
+    sed -i \
+        's|import { displayUsageTable, displayQuickRecommendation } from "./display.js";|import { displayUsageTable, displayBillingTable, displayQuickRecommendation } from "./display.js";|' \
+        "$cli_js"
+    sed -i \
+        's|const usage = await fetchAllUsage(accounts.map((a) => a.name));|const names = accounts.map((a) => a.name); const usage = await fetchAllUsage(names);|' \
+        "$cli_js"
+    sed -i \
+        's|if (options.quick) {|if (options.quick) { displayQuickRecommendation(usage); return; } displayUsageTable(usage); console.log(chalk.gray("\\nFetching billing data (browser windows will flash briefly)...\\n")); const billing = await fetchAllBilling(names); displayBillingTable(billing); if (false) {|' \
+        "$cli_js"
+}
+
+# ============================================================================
+# RTK (Rust Token Killer)
+# ============================================================================
+
+install_rtk() {
+    print_status "section" "RTK (RUST TOKEN KILLER)"
+
+    if ! command_exists rtk; then
+        if ! command_exists brew; then
+            print_status "error" "Homebrew not found — install Homebrew first"
+            return 1
+        fi
+
+        print_status "info" "Installing rtk via Homebrew..."
+        if run_or_echo brew install rtk &>> "$LOG_FILE"; then
+            print_status "success" "rtk installed successfully"
+        else
+            print_status "error" "rtk installation failed — check $LOG_FILE"
+            return 1
+        fi
+    else
+        print_status "info" "rtk already installed"
+    fi
+
+    if ! grep -q "rtk hook claude" "$HOME/.claude/settings.json" 2>/dev/null; then
+        print_status "info" "Initializing RTK for Claude Code..."
+        if rtk init -g --auto-patch &>> "$LOG_FILE"; then
+            print_status "success" "RTK initialized — PreToolUse hook added to settings.json"
+        else
+            print_status "warning" "RTK init failed — run manually: rtk init -g --auto-patch"
+        fi
+    else
+        print_status "info" "RTK hook already configured"
+    fi
+
+    print_status "config" "Usage: rtk <command> (e.g. rtk git status, rtk tree)"
+}
+
+INSTALL_REGISTRY+=(
+    "install_ollama:Ollama AI Platform::"
+    "install_claude_code:Claude Code::"
+    "install_github_copilot_cli:GitHub Copilot CLI::"
+    "install_qwen:Qwen Code::"
+    "install_claudestatus:claudestatus (Claude Usage Dashboard)::"
+    "install_rtk:RTK (Rust Token Killer)::"
+)

@@ -1,33 +1,20 @@
 #!/bin/bash
-# Shared variables and print_status used by all ai_clients setup modules.
+#
+# ai_clients/lib/utils.sh
+#
+# Shared utilities for ai_clients setup modules. Inherits print_status, color
+# vars, command_exists, check_internet from repo-root lib/common.sh.
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m'
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    echo "utils.sh is meant to be sourced, not executed." >&2
+    exit 1
+fi
 
-LOG_FILE="$HOME/ai_clients_setup_$(date +%Y%m%d_%H%M%S).log"
+# Set the ai_clients-specific log file name before sourcing common, so
+# print_status writes to the right place.
+LOG_FILE="${LOG_FILE:-$HOME/ai_clients_setup_$(date +%Y%m%d_%H%M%S).log}"
 
-readonly RED GREEN YELLOW BLUE CYAN MAGENTA NC LOG_FILE
-
-print_status() {
-    local status="$1"
-    local message="$2"
-    case "$status" in
-        "success") echo -e "${GREEN}[✓]${NC} ${message}" ;;
-        "error")   echo -e "${RED}[✗]${NC} ${message}" >&2 ;;
-        "warning") echo -e "${YELLOW}[!]${NC} ${message}" ;;
-        "info")    echo -e "${BLUE}[i]${NC} ${message}" ;;
-        "config")  echo -e "${CYAN}[→]${NC} ${message}" ;;
-        "section")
-            echo -e "\n${MAGENTA}========================================${NC}"
-            echo -e "${MAGENTA} $message${NC}"
-            echo -e "${MAGENTA}========================================${NC}\n"
-            ;;
-        *) echo -e "[ ] ${message}" ;;
-    esac
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$status] $message" >> "$LOG_FILE"
-}
+_utils_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../../lib/common.sh
+source "$_utils_dir/../../lib/common.sh"
+unset _utils_dir

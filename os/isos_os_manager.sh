@@ -1,49 +1,14 @@
 #!/bin/bash
 
 # Ventoy Automated Installer for Ubuntu (CLI)
-# Author: Your Name
-# Version: 1.1
 
-# Color Definitions
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m' # No Color
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 
 # Configuration
 VENTOY_VERSION="1.1.05"
 VENTOY_URL="https://github.com/ventoy/Ventoy/releases/download/v$VENTOY_VERSION/ventoy-$VENTOY_VERSION-linux.tar.gz"
 TEMP_DIR="$HOME/Download/ventoy_temp"
-
-# Function: Print status messages
-print_status() {
-    local status="$1"
-    local message="$2"
-    
-    case "$status" in
-        "success")
-            echo -e "${GREEN}[✓]${NC} ${message}"
-            ;;
-        "error")
-            echo -e "${RED}[✗]${NC} ${message}" >&2
-            ;;
-        "warning")
-            echo -e "${YELLOW}[!]${NC} ${message}"
-            ;;
-        "info")
-            echo -e "${BLUE}[i]${NC} ${message}"
-            ;;
-        "config")
-            echo -e "${CYAN}[→]${NC} ${message}"
-            ;;
-        *)
-            echo -e "[ ] ${message}"
-            ;;
-    esac
-}
 
 # Function: Check root privileges
 check_root() {

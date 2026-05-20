@@ -1,15 +1,21 @@
 # ===========================================
 # DOTFILES-DEV - MAKEFILE
 # ===========================================
+#
+# Help is auto-generated from target annotations:
+#   target: deps  ## Description  → appears in `make help`
+#   no annotation                 → hidden from help (internal)
+#   ##@ Section name              → group separator in help
+#
+# Keep target descriptions in sync with the target itself, not in a separate
+# block at the bottom.
 
 .DEFAULT_GOAL := help
 
-# -------------------
-# QUICK START
-# -------------------
-.PHONY: init
+##@ Quick Start
 
-init: permissions setup_env install_programs install_espanso_packages install_toolchains ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace
+.PHONY: init
+init: permissions setup_env install_programs install_espanso_packages install_coding ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace  ## Complete initial setup (RECOMMENDED first-time entry point)
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -19,7 +25,7 @@ init: permissions setup_env install_programs install_espanso_packages install_to
 	@echo "║  ✅ Essential programs installed                           ║"
 	@echo "║  ✅ AI clients configured (Claude Code)                    ║"
 	@echo "║  ✅ Espanso packages installed                             ║"
-	@echo "║  ✅ Toolchains installed                                   ║"
+	@echo "║  ✅ Coding environment installed                           ║"
 	@echo "║  ✅ Bash profile loads ~/.bashrc                           ║"
 	@echo "║  ✅ Starship prompt and autocomplete configured            ║"
 	@echo "║  ✅ VS Code configured with extensions                     ║"
@@ -36,156 +42,150 @@ init: permissions setup_env install_programs install_espanso_packages install_to
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
 
-# -------------------
-# SYSTEM SETUP
-# -------------------
-.PHONY: setup_env install_programs install_toolchains irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original
+##@ System Setup
 
-setup_env:
+.PHONY: setup_env install_programs install_coding irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original
+
+setup_env:  ## Prompt to create .env from .env.example
 	@bash distro_config/setup_env.sh
 
-install_programs:
+install_programs:  ## Install desktop apps (browsers, productivity, media, sharing, VM)
 	@echo "Installing essential programs..."
 	@bash distro_config/install_programs.sh
 
-install_toolchains:
-	@echo "Installing development toolchains..."
-	@bash distro_config/install_toolchains.sh
+install_coding:  ## Install coding env (languages, editors, databases, AI CLIs)
+	@echo "Installing coding environment (languages, editors, databases, AI CLIs)..."
+	@bash distro_config/install_coding.sh
 
-vscode_setup:
+vscode_setup:  ## Configure VS Code with extensions and keybindings
 	@echo "Configuring VS Code with extensions and shortcuts..."
 	@bash code_editors/vscode.sh
 
-vscode_restore:
+vscode_restore:  ## Restore VS Code configuration from a backup
 	@echo "Restoring VS Code configurations..."
 	@bash code_editors/vscode_restore.sh
 
-irpf_download:
+irpf_download:  ## Download IRPF (Brazilian tax software)
 	@echo "Downloading IRPF (Brazilian tax software)..."
 	@bash distro_config/irpf_download.sh
 
-set_shortcuts:
+set_shortcuts:  ## Set GNOME custom keyboard shortcuts
 	@echo "Setting custom shortcuts..."
 	@bash distro_config/set_custom_shortcuts.sh
 
-ubuntu_workspace:
+ubuntu_workspace:  ## Configure GNOME workspace, dock, theme, app folders
 	@echo "Configuring Ubuntu workspace..."
 	@bash distro_config/ubuntu_workspace.sh
 
-bash_profile:
+bash_profile:  ## Ensure ~/.bash_profile loads ~/.bashrc
 	@echo "Ensuring ~/.bash_profile loads ~/.bashrc..."
 	@bash code_editors/bash_profile_snippet.sh
 
-starship_setup:
+starship_setup:  ## Install Starship prompt + Bash autocomplete
 	@echo "Installing Starship, Bash integration, and autocomplete..."
 	@bash code_editors/setup_starship_bash.sh all
 
-starship_menu:
+starship_menu:  ## Interactive Starship / Bash setup menu
 	@echo "Opening Starship and Bash setup menu..."
 	@bash code_editors/setup_starship_bash.sh
 
-starship_undo_previous:
+starship_undo_previous:  ## Roll back Starship/Bash setup to the previous backup
 	@echo "Rolling back Starship/Bash setup to previous configuration..."
 	@bash code_editors/setup_starship_bash.sh undo-previous
 
-starship_undo_original:
+starship_undo_original:  ## Roll back Starship/Bash setup to the original config
 	@echo "Rolling back Starship/Bash setup to original configuration..."
 	@bash code_editors/setup_starship_bash.sh undo-original
 
-# -------------------
-# HARDWARE DRIVERS
-# -------------------
+##@ Hardware Drivers
+
 .PHONY: setup_bluetooth setup_keyboard setup_mouse setup_wifi setup_all_drivers
 
-setup_bluetooth:
+setup_bluetooth:  ## Setup Bluetooth adapter
 	@echo "Setting up Bluetooth adapter..."
 	@bash drivers/bluetooth_adapter.sh
 
-setup_keyboard:
+setup_keyboard:  ## Configure keyboard
 	@echo "Configuring keyboard..."
 	@bash drivers/setup_keyboard.sh
 
-setup_mouse:
+setup_mouse:  ## Configure mouse (MX Master + xbindkeys workspace buttons)
 	@echo "Configuring mouse..."
 	@bash drivers/mouse.sh
 
-setup_wifi:
+setup_wifi:  ## Setup TP-Link USB WiFi adapter driver
 	@echo "Setting up TP-Link WiFi adapter..."
 	@bash drivers/tplink_wifi_adapter.sh
 
-setup_all_drivers: setup_bluetooth setup_keyboard setup_mouse setup_wifi
+setup_all_drivers: setup_bluetooth setup_keyboard setup_mouse setup_wifi  ## Setup all hardware drivers
 	@echo "All drivers configured successfully!"
 
-# -------------------
-# STORAGE MANAGEMENT
-# -------------------
+##@ Storage Management
+
 .PHONY: check_drive_legitimacy data_recovery format_hard format_neat vault_setup mount_disks
 
-check_drive_legitimacy:
+check_drive_legitimacy:  ## Verify drive authenticity and SMART health
 	@echo "Checking drive legitimacy and integrity..."
 	@bash storage/check_legitimity.sh
 
-data_recovery:
+data_recovery:  ## Run testdisk / photorec recovery tools
 	@echo "Running data recovery tools..."
 	@bash storage/data_recovery.sh
 
-format_hard:
+format_hard:  ## Full slow format with shred (⚠️  IRREVERSIBLE)
 	@echo "⚠️  WARNING: Performing hard format (complete drive formatting)..."
 	@echo "This operation is IRREVERSIBLE. Press Ctrl+C to cancel."
 	@sleep 3
 	@bash storage/format_hard.sh
 
-format_neat:
+format_neat:  ## Quick partition + filesystem format
 	@echo "Performing neat format (quick and clean)..."
 	@bash storage/format_neat.sh
 
-vault_setup:
+vault_setup:  ## Encrypt a device with VeraCrypt (AES-256 + SHA-512)
 	@echo "Setting up secure storage vault..."
 	@bash storage/vault.sh
 
-mount_disks:
+mount_disks:  ## Auto-mount external drives under /mnt/auto/
 	@echo "Mounting unmounted non-NTFS partitions..."
 	@bash storage/mount_disks.sh
 
-# -------------------
-# OS MANAGEMENT
-# -------------------
+##@ OS Management
+
 .PHONY: manage_isos create_vm launch_vm
 
-manage_isos:
+manage_isos:  ## Manage ISO files and operating systems
 	@echo "Managing ISO files and operating systems..."
 	@bash os/isos_os_manager.sh
 
-create_vm:
+create_vm:  ## Create a KVM/QEMU virtual machine
 	@echo "Creating virtual machine..."
 	@bash os/vm_creator.sh
 
-launch_vm:
+launch_vm:  ## Launch an existing KVM virtual machine
 	@echo "Launching virtual machine..."
 	@bash os/vm_launcher.sh
 
-# -------------------
-# STORAGE ANALYTICS
-# -------------------
+##@ Storage Analytics
+
 .PHONY: storage_analysis
 
-storage_analysis:
+storage_analysis:  ## SSD/NVMe slot analysis + theoretical max capacity report
 	@echo "Running storage gap analysis..."
 	@bash storage/storage_hiato.sh
 
-# -------------------
-# BATCH OPERATIONS
-# -------------------
+##@ Batch Operations
+
 .PHONY: full_setup install_espanso_packages hardware_setup storage_setup vm_setup permissions ai_clients
 
-full_setup: permissions install_programs install_toolchains vscode_setup setup_all_drivers
+full_setup: permissions install_programs install_coding vscode_setup setup_all_drivers  ## Complete system setup (programs + coding + drivers)
 	@echo ""
 	@echo "════════════════════════════════════════════"
 	@echo "  ✅ Full system setup completed!"
 	@echo "════════════════════════════════════════════"
 	@echo ""
 
-install_espanso_packages:
+install_espanso_packages:  ## Copy espanso/*/ packages to ~/.config/espanso/packages/
 	@echo "Installing Espanso packages from repo..."
 	@PACK_DIR="$$HOME/.config/espanso/packages"; \
 	mkdir -p "$$PACK_DIR"; \
@@ -203,7 +203,6 @@ install_espanso_packages:
 		echo "Reloading espanso..."; \
 		espanso restart >/dev/null 2>&1 || espanso start >/dev/null 2>&1 || true; \
 	fi; \
-	# Run per-package setup scripts (for terminal wrappers like :shortcuts) \
 	for d in espanso/*; do \
 		if [ -f "$$d/setup.sh" ]; then \
 			echo "Running setup: $$d/setup.sh"; \
@@ -212,28 +211,28 @@ install_espanso_packages:
 	done; \
 	echo "Note: to use new terminal wrappers in this session, run: source ~/.profile"
 
-hardware_setup: setup_bluetooth setup_keyboard setup_mouse setup_wifi
+hardware_setup: setup_bluetooth setup_keyboard setup_mouse setup_wifi  ## Setup all hardware drivers (alias for setup_all_drivers)
 	@echo ""
 	@echo "════════════════════════════════════════════"
 	@echo "  ✅ Hardware setup completed!"
 	@echo "════════════════════════════════════════════"
 	@echo ""
 
-storage_setup: check_drive_legitimacy format_neat vault_setup storage_analysis
+storage_setup: check_drive_legitimacy format_neat vault_setup storage_analysis  ## Complete storage setup
 	@echo ""
 	@echo "════════════════════════════════════════════"
 	@echo "  ✅ Storage setup completed!"
 	@echo "════════════════════════════════════════════"
 	@echo ""
 
-vm_setup: manage_isos create_vm
+vm_setup: manage_isos create_vm  ## Setup virtual machine environment
 	@echo ""
 	@echo "════════════════════════════════════════════"
 	@echo "  ✅ Virtual machine setup completed!"
 	@echo "════════════════════════════════════════════"
 	@echo ""
 
-permissions:
+permissions:  ## chmod +x every *.sh in the repo
 	@echo "Making all scripts executable..."
 	@find distro_config -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find drivers -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
@@ -243,28 +242,26 @@ permissions:
 	@find ai_clients -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@echo "✅ Permissions updated successfully!"
 
-ai_clients:
+ai_clients:  ## Configure all AI clients (interactive menu: Claude Code, ...)
 	@echo "Configuring all AI clients (Claude, ...)..."
 	@bash ai_clients/main.sh
 
-# -------------------
-# CODE EDITORS
-# -------------------
+##@ Code Editors
+
 .PHONY: editors_setup
 
-editors_setup: vscode_setup ai_clients
+editors_setup: vscode_setup ai_clients  ## Setup all code editors + AI clients
 	@echo ""
 	@echo "════════════════════════════════════════════"
 	@echo "  ✅ Code editors setup completed!"
 	@echo "════════════════════════════════════════════"
 	@echo ""
 
-# -------------------
-# UTILITIES
-# -------------------
+##@ Utilities
+
 .PHONY: check_status list_scripts clean
 
-check_status:
+check_status:  ## Show distribution info and executable scripts
 	@echo "Checking system status..."
 	@echo ""
 	@echo "=== Distribution Info ==="
@@ -279,7 +276,7 @@ check_status:
 	@echo "=== AI Clients Modules ==="
 	@find ai_clients -name "*.sh" -type f 2>/dev/null | sort
 
-list_scripts:
+list_scripts:  ## List every *.sh script in the repo, grouped by directory
 	@echo "Available bash scripts:"
 	@echo ""
 	@echo "Distro Config scripts:"
@@ -300,90 +297,34 @@ list_scripts:
 	@echo "AI Clients modules:"
 	@find ai_clients -name "*.sh" -type f 2>/dev/null | sort || echo "  No agent setup scripts found"
 
-clean:
+clean:  ## Remove *.log, *.tmp, *~ files under config/driver/os/storage/editor dirs
 	@echo "Cleaning temporary files..."
 	@find distro_config drivers os storage code_editors -name "*.log" -type f -delete 2>/dev/null || true
 	@find distro_config drivers os storage code_editors -name "*.tmp" -type f -delete 2>/dev/null || true
 	@find distro_config drivers os storage code_editors -name "*~" -type f -delete 2>/dev/null || true
 	@echo "✅ Cleanup completed!"
 
-# -------------------
-# HELP
-# -------------------
+##@ Help
+
 .PHONY: help
 
-help:
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo "  DOTFILES-DEV - Available Make Targets"
-	@echo "═══════════════════════════════════════════════════════════"
+# Auto-generated from `## description` annotations on each target and `##@ Name`
+# section headers. To add a new target to the help output, append `  ## …` to
+# its declaration line.
+help:  ## Show this help message
+	@awk 'BEGIN { \
+		FS = ":.*?## "; \
+		printf "\n\033[1mDOTFILES-DEV — Make targets\033[0m\n\n"; \
+		printf "Usage:\n  make \033[36m<target>\033[0m\n"; \
+	} \
+	/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5); next } \
+	/^[a-zA-Z_][a-zA-Z_-]*:.*?## / { printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2 }' \
+	$(MAKEFILE_LIST)
 	@echo ""
-	@echo "🚀 Quick Start:"
-	@echo "  init                 - Complete initial setup (RECOMMENDED)"
-	@echo "                         Runs: permissions + all system config"
+	@echo "💡 Common flows:"
+	@echo "  make init            — first-time setup"
+	@echo "  make full_setup      — complete system setup"
+	@echo "  make help            — this message"
 	@echo ""
-	@echo "System Setup:"
-	@echo "  setup_env            - Prompt to create .env from .env.example"
-	@echo "  install_programs     - Install essential programs"
-	@echo "  install_toolchains   - Install development toolchains"
-	@echo "  starship_setup       - Install Starship + Bash autocomplete"
-	@echo "  starship_menu        - Interactive Starship/Bash setup menu"
-	@echo "  starship_undo_previous - Roll back to previous shell config"
-	@echo "  starship_undo_original - Roll back to original shell config"
-	@echo "  vscode_setup         - Configure VS Code with extensions"
-	@echo "  irpf_download        - Download IRPF (Brazilian tax software)"
-	@echo "  set_shortcuts        - Set custom keyboard shortcuts"
-	@echo "  ubuntu_workspace     - Configure Ubuntu workspace"
-	@echo ""
-	@echo "Code Editors & AI Clients:"
-	@echo "  editors_setup        - Setup all code editors + AI clients"
-	@echo "  ai_clients           - Configure all AI clients (interactive menu)"
-	@echo ""
-	@echo "Hardware Drivers:"
-	@echo "  setup_bluetooth      - Setup Bluetooth adapter"
-	@echo "  setup_keyboard       - Configure keyboard"
-	@echo "  setup_mouse          - Configure mouse"
-	@echo "  setup_wifi           - Setup TP-Link WiFi adapter"
-	@echo "  setup_all_drivers    - Setup all hardware drivers"
-	@echo ""
-	@echo "Storage Management:"
-	@echo "  check_drive_legitimacy - Check drive authenticity and integrity"
-	@echo "  data_recovery        - Run data recovery tools"
-	@echo "  format_hard          - Complete drive formatting (⚠️  DANGEROUS)"
-	@echo "  format_neat          - Quick and clean formatting"
-	@echo "  vault_setup          - Setup secure storage vault"
-	@echo "  mount_disks          - Mount unmounted non-NTFS partitions"
-	@echo ""
-	@echo "OS Management:"
-	@echo "  manage_isos          - Manage ISO files and operating systems"
-	@echo "  create_vm            - Create virtual machine"
-	@echo "  launch_vm            - Launch virtual machine"
-	@echo ""
-	@echo "Storage Analytics:"
-	@echo "  storage_analysis     - Run storage gap analysis and monitoring"
-	@echo ""
-	@echo "Batch Operations:"
-	@echo "  full_setup           - Complete system setup (programs + drivers)"
-	@echo "  hardware_setup       - Setup all hardware drivers"
-	@echo "  storage_setup        - Complete storage setup"
-	@echo "  vm_setup             - Setup virtual machine environment"
-	@echo "  editors_setup        - Setup code editors"
-	@echo "  permissions          - Make all scripts executable"
-	@echo ""
-	@echo "Utilities:"
-	@echo "  check_status         - Check system and scripts status"
-	@echo "  list_scripts         - List all available bash scripts"
-	@echo "  clean                - Clean temporary files"
-	@echo "  help                 - Show this help message"
-	@echo ""
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo ""
-	@echo "💡 Usage examples:"
-	@echo "  make init            - First-time setup (recommended!)"
-	@echo "  make full_setup      - Complete system setup"
-	@echo "  make vscode_setup    - Configure VS Code only"
-	@echo "  make editors_setup   - Setup all code editors"
-	@echo "  make setup_wifi      - Setup WiFi adapter only"
-	@echo "  make permissions     - Make all scripts executable"
-	@echo ""
-	@echo "⚠️  Warning: format_hard is IRREVERSIBLE - use with caution!"
+	@echo "⚠️  format_hard is IRREVERSIBLE — use with caution."
 	@echo ""

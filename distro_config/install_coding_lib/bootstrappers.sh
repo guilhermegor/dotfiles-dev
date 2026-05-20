@@ -32,8 +32,8 @@ install_core_dependencies() {
         dnf|yum)
             print_status "info" "Installing RPM Fusion repositories..."
             sudo $PACKAGE_MANAGER install -y \
-                https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
-                https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm || true
+                https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-"$(rpm -E %fedora)".noarch.rpm \
+                https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-"$(rpm -E %fedora)".noarch.rpm || true
             $INSTALL_CMD ffmpeg gstreamer1-plugins-{bad-\*,good-\*,base} gstreamer1-plugin-openh264 \
                 gstreamer1-libav --exclude=gstreamer1-plugins-bad-free-devel || print_status "warning" "Some codecs failed"
             ;;

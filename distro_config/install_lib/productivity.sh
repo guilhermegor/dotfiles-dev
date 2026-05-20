@@ -26,7 +26,8 @@ install_google_calendar() {
     local desktop_dir="$HOME/.local/share/applications"
     local desktop_file="$desktop_dir/google-calendar.desktop"
 
-    local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local script_root
+    script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     local icon_src="$script_root/assets/google_calendar_app.png"
     local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
     local icon_path="$icon_theme_dir/google-calendar.png"
@@ -93,7 +94,8 @@ install_notion_calendar() {
     local desktop_dir="$HOME/.local/share/applications"
     local desktop_file="$desktop_dir/notion-calendar.desktop"
 
-    local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local script_root
+    script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     local icon_src="$script_root/assets/notion_calendar_app.png"
     local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
     local icon_path="$icon_theme_dir/notion-calendar.png"
@@ -160,7 +162,8 @@ install_google_tasks() {
     local desktop_dir="$HOME/.local/share/applications"
     local desktop_file="$desktop_dir/google-tasks.desktop"
 
-    local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local script_root
+    script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     local icon_src="$script_root/assets/google_tasks_app.png"
     local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
     local icon_path="$icon_theme_dir/google-tasks.png"
@@ -227,7 +230,8 @@ install_valor_digital() {
     local desktop_dir="$HOME/.local/share/applications"
     local desktop_file="$desktop_dir/valor-digital.desktop"
 
-    local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local script_root
+    script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     local icon_src="$script_root/assets/valor_app.png"
     local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
     local icon_path="$icon_theme_dir/valor-digital.png"
@@ -294,7 +298,8 @@ install_linear() {
     local desktop_dir="$HOME/.local/share/applications"
     local desktop_file="$desktop_dir/linear.desktop"
 
-    local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local script_root
+    script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     local icon_src="$script_root/assets/linear_app.png"
     local icon_theme_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
     local icon_path="$icon_theme_dir/linear.png"

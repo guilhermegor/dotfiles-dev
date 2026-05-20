@@ -18,14 +18,16 @@ restore_backup() {
     local backup_pattern="${vscode_settings}.backup_*"
     
     # Find the most recent backup
-    local latest_backup=$(ls -t $backup_pattern 2>/dev/null | head -1)
+    local latest_backup
+    latest_backup=$(ls -t $backup_pattern 2>/dev/null | head -1)
     
     if [ -n "$latest_backup" ]; then
         print_status "info" "Found backup: $latest_backup"
         
         # Create a safety backup of current settings
         if [ -f "$vscode_settings" ]; then
-            local safety_backup="${vscode_settings}.current_$(date +%Y%m%d_%H%M%S)"
+            local safety_backup
+            safety_backup="${vscode_settings}.current_$(date +%Y%m%d_%H%M%S)"
             cp "$vscode_settings" "$safety_backup"
             print_status "info" "Created safety backup of current settings: $safety_backup"
         fi
@@ -35,7 +37,8 @@ restore_backup() {
         print_status "success" "Restored original settings from backup"
         
         # Show backup timestamp
-        local backup_time=$(stat -c %y "$latest_backup" 2>/dev/null || echo "unknown")
+        local backup_time
+        backup_time=$(stat -c %y "$latest_backup" 2>/dev/null || echo "unknown")
         print_status "config" "Backup created on: $backup_time"
         
         return 0
@@ -51,7 +54,8 @@ list_backups() {
     local vscode_settings="$HOME/.config/Code/User/settings.json"
     local backup_pattern="${vscode_settings}.backup_*"
     
-    local backups=$(ls -t $backup_pattern 2>/dev/null)
+    local backups
+    backups=$(ls -t $backup_pattern 2>/dev/null)
     
     if [ -n "$backups" ]; then
         print_status "info" "Found backup files:"
@@ -59,8 +63,10 @@ list_backups() {
         
         local count=1
         for backup in $backups; do
-            local timestamp=$(echo "$backup" | grep -oE 'backup_[0-9]{8}_[0-9]{6}' | sed 's/backup_//')
-            local formatted_time=$(echo "$timestamp" | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)_\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1-\2-\3 \4:\5:\6/')
+            local timestamp
+            timestamp=$(echo "$backup" | grep -oE 'backup_[0-9]{8}_[0-9]{6}' | sed 's/backup_//')
+            local formatted_time
+            formatted_time=$(echo "$timestamp" | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)_\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1-\2-\3 \4:\5:\6/')
             
             if [ -n "$formatted_time" ]; then
                 echo "  $count. $formatted_time"
@@ -85,7 +91,8 @@ restore_default_settings() {
     
     if [ -f "$vscode_settings" ]; then
         # Create a backup before resetting
-        local backup_file="${vscode_settings}.before_reset_$(date +%Y%m%d_%H%M%S)"
+        local backup_file
+        backup_file="${vscode_settings}.before_reset_$(date +%Y%m%d_%H%M%S)"
         cp "$vscode_settings" "$backup_file"
         print_status "info" "Created backup before reset: $backup_file"
         
@@ -122,7 +129,8 @@ remove_font_settings_only() {
     fi
     
     # Create backup
-    local backup_file="${vscode_settings}.before_font_removal_$(date +%Y%m%d_%H%M%S)"
+    local backup_file
+    backup_file="${vscode_settings}.before_font_removal_$(date +%Y%m%d_%H%M%S)"
     cp "$vscode_settings" "$backup_file"
     print_status "info" "Created backup: $backup_file"
     

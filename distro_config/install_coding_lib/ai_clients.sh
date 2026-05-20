@@ -18,7 +18,8 @@ install_ollama() {
     print_status "section" "OLLAMA AI PLATFORM"
 
     if command_exists ollama; then
-        local current_version=$(ollama --version 2>/dev/null || echo "unknown")
+        local current_version
+        current_version=$(ollama --version 2>/dev/null || echo "unknown")
         print_status "info" "Ollama already installed (version: $current_version)"
         return 0
     fi
@@ -37,7 +38,8 @@ install_ollama() {
     esac
 
     if command_exists ollama; then
-        local version=$(ollama --version 2>/dev/null || echo "unknown")
+        local version
+        version=$(ollama --version 2>/dev/null || echo "unknown")
         print_status "success" "Ollama installed successfully (version: $version)"
         configure_ollama_service
         show_ollama_info
@@ -52,7 +54,7 @@ install_ollama_debian() {
     print_status "info" "Installing dependencies..."
     $INSTALL_CMD curl
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
     print_status "info" "Downloading Ollama installer..."
 
     if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
@@ -62,7 +64,7 @@ install_ollama_debian() {
         install_ollama_curl
     fi
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 install_ollama_rpm() {
@@ -70,7 +72,7 @@ install_ollama_rpm() {
     print_status "info" "Installing dependencies..."
     $INSTALL_CMD curl
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
     print_status "info" "Downloading Ollama installer..."
 
     if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
@@ -80,7 +82,7 @@ install_ollama_rpm() {
         install_ollama_curl
     fi
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 install_ollama_arch() {
@@ -97,7 +99,7 @@ install_ollama_arch() {
     fi
 
     $INSTALL_CMD curl
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
 
     if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
         print_status "success" "Ollama installed via official script"
@@ -106,7 +108,7 @@ install_ollama_arch() {
         return 1
     fi
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 install_ollama_opensuse() {
@@ -114,7 +116,7 @@ install_ollama_opensuse() {
     print_status "info" "Installing dependencies..."
     $INSTALL_CMD curl
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
     print_status "info" "Downloading Ollama installer..."
 
     if curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tee -a "$LOG_FILE"; then
@@ -124,13 +126,13 @@ install_ollama_opensuse() {
         install_ollama_curl
     fi
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 install_ollama_curl() {
     print_status "info" "Installing Ollama using binary download..."
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
 
     local ollama_url="https://ollama.ai/download/ollama-linux-amd64"
     local ollama_bin="$DOWNLOADS_DIR/ollama"
@@ -142,11 +144,11 @@ install_ollama_curl() {
         print_status "success" "Ollama binary installed to /usr/local/bin/ollama"
     else
         print_status "error" "Failed to download Ollama binary"
-        cd - > /dev/null
+        cd - > /dev/null || return 1
         return 1
     fi
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 configure_ollama_service() {
@@ -247,7 +249,8 @@ install_claude_code() {
         print_status "success" "Claude Code command is available: $(timeout 10 claude --version 2>/dev/null | head -n1 || echo 'Not available')"
     else
         print_status "warning" "Claude command not found in PATH"
-        local npm_prefix=$(npm config get prefix 2>/dev/null || echo "")
+        local npm_prefix
+        npm_prefix=$(npm config get prefix 2>/dev/null || echo "")
         if [ -n "$npm_prefix" ]; then
             print_status "info" "npm global prefix detected: $npm_prefix"
             print_status "config" "If needed, add to PATH: export PATH=\"$npm_prefix/bin:\$PATH\""

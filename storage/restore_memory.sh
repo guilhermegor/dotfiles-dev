@@ -69,7 +69,8 @@ main() {
         --text="Restore snapshot <b>$selected_name</b>?\n\nYour current <tt>~/.claude/</tt> will be saved as a safety backup first." \
         --ok-label="Restore" --cancel-label="Cancel" || exit 0
 
-    local pre_restore="$backup_dir/pre-restore_$(date +%Y-%m-%d_%H%M%S)"
+    local pre_restore
+    pre_restore="$backup_dir/pre-restore_$(date +%Y-%m-%d_%H%M%S)"
 
     zenity --progress --pulsate --no-cancel \
         --title="Restore Memory" \

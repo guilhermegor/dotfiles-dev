@@ -51,7 +51,8 @@ _write_claude_mem_settings() {
     mkdir -p "$CLAUDE_MEM_DIR"
 
     if [ -f "$CLAUDE_MEM_SETTINGS" ]; then
-        local backup_path="${CLAUDE_MEM_SETTINGS}.backup_$(date +%Y%m%d_%H%M%S)"
+        local backup_path
+        backup_path="${CLAUDE_MEM_SETTINGS}.backup_$(date +%Y%m%d_%H%M%S)"
         cp "$CLAUDE_MEM_SETTINGS" "$backup_path"
         print_status "success" "Backed up existing settings → $(basename "$backup_path")"
     fi

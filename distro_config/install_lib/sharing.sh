@@ -24,12 +24,13 @@ install_localsend() {
         return 0
     fi
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
 
     case "$PACKAGE_MANAGER" in
         apt)
             print_status "info" "Detecting system architecture..."
-            local arch=$(dpkg --print-architecture)
+            local arch
+            arch=$(dpkg --print-architecture)
             local download_arch=""
 
             case "$arch" in
@@ -39,13 +40,14 @@ install_localsend() {
                 *)
                     print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
                     run_or_echo flatpak install -y flathub org.localsend.localsend_app
-                    cd - > /dev/null
+                    cd - > /dev/null || return 1
                     return 0
                     ;;
             esac
 
             print_status "info" "Fetching latest LocalSend release..."
-            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | \
+            local latest_url
+            latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | \
                 grep "browser_download_url.*linux-${download_arch}.deb" | head -n 1 | cut -d '"' -f 4)
 
             if [ -n "$latest_url" ] && [ "$latest_url" != "null" ]; then
@@ -70,7 +72,8 @@ install_localsend() {
             ;;
         dnf|yum|zypper)
             print_status "info" "Detecting system architecture..."
-            local arch=$(uname -m)
+            local arch
+            arch=$(uname -m)
             local download_arch=""
 
             case "$arch" in
@@ -79,13 +82,14 @@ install_localsend() {
                 *)
                     print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
                     run_or_echo flatpak install -y flathub org.localsend.localsend_app
-                    cd - > /dev/null
+                    cd - > /dev/null || return 1
                     return 0
                     ;;
             esac
 
             print_status "info" "Fetching latest LocalSend release..."
-            local latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | \
+            local latest_url
+            latest_url=$(curl -s https://api.github.com/repos/localsend/localsend/releases/latest | \
                 grep "browser_download_url.*linux-${download_arch}.rpm" | head -n 1 | cut -d '"' -f 4)
 
             if [ -n "$latest_url" ] && [ "$latest_url" != "null" ]; then
@@ -151,7 +155,7 @@ install_localsend() {
     print_status "info" "LocalSend: Secure file sharing on your local network"
     print_status "config" "Available on Android, iOS, Windows, macOS, and Linux"
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 # ============================================================================
@@ -166,12 +170,13 @@ install_rustdesk() {
         return 0
     fi
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
 
     case "$PACKAGE_MANAGER" in
         apt)
             print_status "info" "Detecting system architecture..."
-            local arch=$(dpkg --print-architecture)
+            local arch
+            arch=$(dpkg --print-architecture)
             local download_arch=""
 
             case "$arch" in
@@ -181,14 +186,16 @@ install_rustdesk() {
                 *)
                     print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
                     run_or_echo flatpak install -y flathub com.rustdesk.RustDesk
-                    cd - > /dev/null
+                    cd - > /dev/null || return 1
                     return 0
                     ;;
             esac
 
             print_status "info" "Fetching latest RustDesk release..."
-            local latest_info=$(curl -s https://api.github.com/repos/rustdesk/rustdesk/releases/latest)
-            local latest_version=$(echo "$latest_info" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+            local latest_info
+            latest_info=$(curl -s https://api.github.com/repos/rustdesk/rustdesk/releases/latest)
+            local latest_version
+            latest_version=$(echo "$latest_info" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
             if [ -z "$latest_version" ]; then
                 print_status "warning" "Could not fetch latest version, using fallback"
@@ -270,7 +277,8 @@ install_rustdesk() {
             ;;
         dnf|yum|zypper)
             print_status "info" "Detecting system architecture..."
-            local arch=$(uname -m)
+            local arch
+            arch=$(uname -m)
             local download_arch=""
 
             case "$arch" in
@@ -279,14 +287,16 @@ install_rustdesk() {
                 *)
                     print_status "warning" "Unsupported architecture: $arch. Installing via Flatpak..."
                     run_or_echo flatpak install -y flathub com.rustdesk.RustDesk
-                    cd - > /dev/null
+                    cd - > /dev/null || return 1
                     return 0
                     ;;
             esac
 
             print_status "info" "Fetching latest RustDesk release..."
-            local latest_info=$(curl -s https://api.github.com/repos/rustdesk/rustdesk/releases/latest)
-            local latest_version=$(echo "$latest_info" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+            local latest_info
+            latest_info=$(curl -s https://api.github.com/repos/rustdesk/rustdesk/releases/latest)
+            local latest_version
+            latest_version=$(echo "$latest_info" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
             if [ -z "$latest_version" ]; then
                 print_status "warning" "Could not fetch latest version, using fallback"
@@ -369,7 +379,7 @@ install_rustdesk() {
         print_status "config" "Or via Flatpak: flatpak install flathub com.rustdesk.RustDesk"
     fi
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 # ============================================================================
@@ -390,7 +400,7 @@ install_insync() {
         return 1
     fi
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
 
     local insync_codename=""
     case "$UBUNTU_CODENAME" in
@@ -486,7 +496,7 @@ install_insync() {
     print_status "config" "Launch with: insync start"
     print_status "config" "Configure with: insync show"
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 # ============================================================================

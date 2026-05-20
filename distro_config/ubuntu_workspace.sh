@@ -41,7 +41,8 @@ configure_terminal() {
     print_status "info" "Configuring terminal profile..."
     
     # get default profile ID
-    local profile_id=$(gsettings get org.gnome.Terminal.ProfilesList default)
+    local profile_id
+    profile_id=$(gsettings get org.gnome.Terminal.ProfilesList default)
     profile_id=${profile_id:1:-1} # remove single quotes
     
     # configure terminal appearance
@@ -99,7 +100,8 @@ set_workspace_app_isolation() {
         run_or_echo gsettings set org.gnome.shell.window-switcher current-workspace-only true
     fi
     
-    local CURRENT_SETTING=$(gsettings get org.gnome.shell.app-switcher current-workspace-only)
+    local CURRENT_SETTING
+    CURRENT_SETTING=$(gsettings get org.gnome.shell.app-switcher current-workspace-only)
     print_status "success" "Alternador de aplicativos configurado para espaço de trabalho atual: $CURRENT_SETTING"
 }
 
@@ -115,9 +117,12 @@ configure_mouse() {
     # Enable natural scrolling
     run_or_echo gsettings set org.gnome.desktop.peripherals.mouse natural-scroll true
     
-    local MOUSE_SPEED=$(gsettings get org.gnome.desktop.peripherals.mouse speed)
-    local ACCEL_PROFILE=$(gsettings get org.gnome.desktop.peripherals.mouse accel-profile)
-    local NATURAL_SCROLL=$(gsettings get org.gnome.desktop.peripherals.mouse natural-scroll)
+    local MOUSE_SPEED
+    MOUSE_SPEED=$(gsettings get org.gnome.desktop.peripherals.mouse speed)
+    local ACCEL_PROFILE
+    ACCEL_PROFILE=$(gsettings get org.gnome.desktop.peripherals.mouse accel-profile)
+    local NATURAL_SCROLL
+    NATURAL_SCROLL=$(gsettings get org.gnome.desktop.peripherals.mouse natural-scroll)
     
     print_status "success" "Mouse configured:"
     print_status "config" "  Speed: $MOUSE_SPEED"
@@ -269,7 +274,8 @@ configure_dock() {
     done
     
     # Convert array to comma-separated string
-    local favorites_str=$(IFS=,; echo "${favorites[*]}")
+    local favorites_str
+    favorites_str=$(IFS=,; echo "${favorites[*]}")
     
     # Set favorites (this replaces all existing favorites)
     run_or_echo gsettings set org.gnome.shell favorite-apps "[${favorites_str}]"
@@ -325,7 +331,8 @@ apply_additional_tweaks() {
 configure_inactivity_time_lock() {
     print_status "info" "Set inactivity time to lock workspace..."
     run_or_echo gsettings set org.gnome.desktop.session idle-delay 900
-    local CURRENT_DELAY=$(gsettings get org.gnome.desktop.session idle-delay)
+    local CURRENT_DELAY
+    CURRENT_DELAY=$(gsettings get org.gnome.desktop.session idle-delay)
     print_status "success" "Inactivity time set to $CURRENT_DELAY seconds"
 }
 
@@ -336,7 +343,8 @@ configure_power_settings() {
     run_or_echo gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout 1800
     run_or_echo gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'nothing'
     
-    local BATTERY_TIMEOUT=$(gsettings get org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout)
+    local BATTERY_TIMEOUT
+    BATTERY_TIMEOUT=$(gsettings get org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout)
     print_status "success" "Screen will turn off after $BATTERY_TIMEOUT seconds (30 min) on battery"
 }
 
@@ -382,9 +390,6 @@ organize_app_folders() {
             fi
         done
     }
-    
-    # Get current folder settings
-    local current_folders=$(gsettings get org.gnome.desktop.app-folders folder-children)
     
     # Initialize array to store folder IDs
     local folder_ids=()
@@ -470,9 +475,10 @@ organize_app_folders() {
                         "$HOME/.local/share/applications"/*cpu-x*.desktop \
                         "$HOME/.local/share/applications"/*NetworkDisplays*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
+            local basename
+            basename=$(basename "$desktop_file")
             if [[ ! "$basename" =~ "game" ]] && [[ ! "$basename" =~ "sound" ]] && \
-               [[ ! "$basename" =~ "color" ]] && [[ ! " ${sistema_apps[@]} " =~ " '$basename' " ]]; then
+               [[ ! "$basename" =~ "color" ]] && [[ ! " ${sistema_apps[*]} " == *" '$basename' "* ]]; then
                 sistema_apps+=("'$basename'")
             fi
         fi
@@ -481,10 +487,10 @@ organize_app_folders() {
     
     # Remove duplicates
     _merge_registry_into_folder "Sistema" sistema_apps
-    sistema_apps=($(echo "${sistema_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-    
+    mapfile -t sistema_apps < <(printf '%s\n' "${sistema_apps[@]}" | sort -u)
     if [ ${#sistema_apps[@]} -gt 0 ]; then
-        local sistema_apps_str=$(IFS=,; echo "${sistema_apps[*]}")
+        local sistema_apps_str
+        sistema_apps_str=$(IFS=,; echo "${sistema_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ name 'Sistema'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ apps "[${sistema_apps_str}]"
         folder_ids+=("'Sistema'")
@@ -526,8 +532,9 @@ organize_app_folders() {
                         "$HOME/.local/share/applications"/*timeshift*.desktop \
                         "$HOME/.local/share/applications"/*clam*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
-            if [[ ! " ${seguranca_apps[@]} " =~ " '$basename' " ]]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            if [[ ! " ${seguranca_apps[*]} " == *" '$basename' "* ]]; then
                 seguranca_apps+=("'$basename'")
             fi
         fi
@@ -535,10 +542,10 @@ organize_app_folders() {
     shopt -u nullglob
     
     _merge_registry_into_folder "Seguranca" seguranca_apps
-    seguranca_apps=($(echo "${seguranca_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-    
+    mapfile -t seguranca_apps < <(printf '%s\n' "${seguranca_apps[@]}" | sort -u)
     if [ ${#seguranca_apps[@]} -gt 0 ]; then
-        local seguranca_apps_str=$(IFS=,; echo "${seguranca_apps[*]}")
+        local seguranca_apps_str
+        seguranca_apps_str=$(IFS=,; echo "${seguranca_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ name 'Segurança'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ apps "[${seguranca_apps_str}]"
         folder_ids+=("'Seguranca'")
@@ -624,10 +631,11 @@ organize_app_folders() {
                         "$HOME/.local/share/applications"/*Raider*.desktop \
                         "$HOME/.local/share/applications"/*flameshot*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
+            local basename
+            basename=$(basename "$desktop_file")
             if [[ ! "$basename" =~ "settings" ]] && [[ ! "$basename" =~ "control-center" ]] && \
                [[ ! "$basename" =~ "software-properties" ]] && [[ ! "$basename" =~ "update" ]] && \
-               [[ ! "$basename" =~ "firmware" ]] && [[ ! " ${utilitarios_apps[@]} " =~ " '$basename' " ]]; then
+               [[ ! "$basename" =~ "firmware" ]] && [[ ! " ${utilitarios_apps[*]} " == *" '$basename' "* ]]; then
                 utilitarios_apps+=("'$basename'")
             fi
         fi
@@ -635,10 +643,10 @@ organize_app_folders() {
     shopt -u nullglob
     
     _merge_registry_into_folder "Utilitarios" utilitarios_apps
-    utilitarios_apps=($(echo "${utilitarios_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-    
+    mapfile -t utilitarios_apps < <(printf '%s\n' "${utilitarios_apps[@]}" | sort -u)
     if [ ${#utilitarios_apps[@]} -gt 0 ]; then
-        local utilitarios_apps_str=$(IFS=,; echo "${utilitarios_apps[*]}")
+        local utilitarios_apps_str
+        utilitarios_apps_str=$(IFS=,; echo "${utilitarios_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ name 'Utilitários'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ apps "[${utilitarios_apps_str}]"
         folder_ids+=("'Utilitarios'")
@@ -684,8 +692,9 @@ organize_app_folders() {
                         "$HOME/.local/share/applications"/*vlc*.desktop \
                         "$HOME/.local/share/applications"/*4kdownload*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
-            if [[ ! " ${media_apps[@]} " =~ " '$basename' " ]]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            if [[ ! " ${media_apps[*]} " == *" '$basename' "* ]]; then
                 media_apps+=("'$basename'")
             fi
         fi
@@ -693,10 +702,10 @@ organize_app_folders() {
     shopt -u nullglob
 
     _merge_registry_into_folder "Media" media_apps
-    media_apps=($(echo "${media_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-
+    mapfile -t media_apps < <(printf '%s\n' "${media_apps[@]}" | sort -u)
     if [ ${#media_apps[@]} -gt 0 ]; then
-        local media_apps_str=$(IFS=,; echo "${media_apps[*]}")
+        local media_apps_str
+        media_apps_str=$(IFS=,; echo "${media_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Media/ name 'Media'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Media/ apps "[${media_apps_str}]"
         folder_ids+=("'Media'")
@@ -729,8 +738,9 @@ organize_app_folders() {
                         /usr/share/applications/*insync*.desktop "$HOME/.local/share/applications"/*insync*.desktop \
                         /var/lib/flatpak/exports/share/applications/*insync*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
-            if [[ ! " ${sharing_apps[@]} " =~ " '$basename' " ]]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            if [[ ! " ${sharing_apps[*]} " == *" '$basename' "* ]]; then
                 sharing_apps+=("'$basename'")
             fi
         fi
@@ -738,10 +748,10 @@ organize_app_folders() {
     shopt -u nullglob
     
     _merge_registry_into_folder "Sharing" sharing_apps
-    sharing_apps=($(echo "${sharing_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-    
+    mapfile -t sharing_apps < <(printf '%s\n' "${sharing_apps[@]}" | sort -u)
     if [ ${#sharing_apps[@]} -gt 0 ]; then
-        local sharing_apps_str=$(IFS=,; echo "${sharing_apps[*]}")
+        local sharing_apps_str
+        sharing_apps_str=$(IFS=,; echo "${sharing_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sharing/ name 'Sharing'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sharing/ apps "[${sharing_apps_str}]"
         folder_ids+=("'Sharing'")
@@ -758,7 +768,8 @@ organize_app_folders() {
     shopt -s nullglob
     for desktop_file in /usr/share/applications/*.desktop "$HOME/.local/share/applications"/*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
+            local basename
+            basename=$(basename "$desktop_file")
             if [[ "$basename" =~ [Ii][Rr][Pp][Ff] ]] || [[ "$basename" =~ irpf ]]; then
                 irpf_apps+=("'$basename'")
             fi
@@ -766,10 +777,10 @@ organize_app_folders() {
     done
     shopt -u nullglob
     
-    irpf_apps=($(echo "${irpf_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-    
+    mapfile -t irpf_apps < <(printf '%s\n' "${irpf_apps[@]}" | sort -u)
     if [ ${#irpf_apps[@]} -gt 0 ]; then
-        local irpf_apps_str=$(IFS=,; echo "${irpf_apps[*]}")
+        local irpf_apps_str
+        irpf_apps_str=$(IFS=,; echo "${irpf_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/IRPF/ name 'IRPF'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/IRPF/ apps "[${irpf_apps_str}]"
         folder_ids+=("'IRPF'")
@@ -807,7 +818,7 @@ organize_app_folders() {
     # SPECIFIC Miro Snap package detection
     print_status "info" "Adding Miro Snap package..."
     if [ -f "/var/lib/snapd/desktop/applications/miro_miro.desktop" ]; then
-        if [[ ! " ${dev_apps[@]} " =~ " 'miro_miro.desktop' " ]]; then
+        if [[ ! " ${dev_apps[*]} " == *" 'miro_miro.desktop' "* ]]; then
             dev_apps+=("'miro_miro.desktop'")
             print_status "success" "✓ Added Miro Snap package: miro_miro.desktop"
         else
@@ -821,7 +832,7 @@ organize_app_folders() {
     print_status "info" "Adding Miro Chrome app..."
     local miro_chrome_app="chrome-bfldocfmjhokladppcchgfolcnpjlnng-Default.desktop"
     if [ -f "$HOME/.local/share/applications/$miro_chrome_app" ]; then
-        if [[ ! " ${dev_apps[@]} " =~ " '$miro_chrome_app' " ]]; then
+        if [[ ! " ${dev_apps[*]} " == *" '$miro_chrome_app' "* ]]; then
             dev_apps+=("'$miro_chrome_app'")
             print_status "success" "✓ Added Miro Chrome app: $miro_chrome_app"
         else
@@ -836,7 +847,8 @@ organize_app_folders() {
     shopt -s nullglob
     for desktop_file in "$HOME/.local/share/applications/chrome-"*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
+            local basename
+            basename=$(basename "$desktop_file")
             # Skip if it's already the one we specifically added
             if [ "$basename" != "$miro_chrome_app" ]; then
                 # Check if it's Miro by examining the file content
@@ -844,7 +856,7 @@ organize_app_folders() {
                 grep -q -i "Exec.*=.*miro" "$desktop_file" || 
                 grep -q -i "miro" "$desktop_file" || 
                 grep -q -i "realtimeboard" "$desktop_file"; then
-                    if [[ ! " ${dev_apps[@]} " =~ " '$basename' " ]]; then
+                    if [[ ! " ${dev_apps[*]} " == *" '$basename' "* ]]; then
                         dev_apps+=("'$basename'")
                         print_status "success" "✓ Added additional Miro Chrome shortcut: $basename"
                     fi
@@ -864,8 +876,9 @@ organize_app_folders() {
                         /var/lib/flatpak/exports/share/applications/*nvim*.desktop \
                         /var/lib/flatpak/exports/share/applications/*neovim*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
-            if [[ ! " ${dev_apps[@]} " =~ " '$basename' " ]]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            if [[ ! " ${dev_apps[*]} " == *" '$basename' "* ]]; then
                 dev_apps+=("'$basename'")
                 print_status "success" "✓ Added Neovim: $basename"
             fi
@@ -920,10 +933,10 @@ EOF
 
     # Remove any duplicates that might have been added
     _merge_registry_into_folder "DEV" dev_apps
-    dev_apps=($(echo "${dev_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-
+    mapfile -t dev_apps < <(printf '%s\n' "${dev_apps[@]}" | sort -u)
     if [ ${#dev_apps[@]} -gt 0 ]; then
-        local dev_apps_str=$(IFS=,; echo "${dev_apps[*]}")
+        local dev_apps_str
+        dev_apps_str=$(IFS=,; echo "${dev_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ name 'DEV'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ apps "[${dev_apps_str}]"
         folder_ids+=("'DEV'")
@@ -954,18 +967,19 @@ EOF
                         /usr/share/applications/*ebook*.desktop "$HOME/.local/share/applications"/*ebook*.desktop \
                         /usr/share/applications/*lrf*.desktop "$HOME/.local/share/applications"/*lrf*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
-            if [[ ! " ${ereader_apps[@]} " =~ " '$basename' " ]]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            if [[ ! " ${ereader_apps[*]} " == *" '$basename' "* ]]; then
                 ereader_apps+=("'$basename'")
             fi
         fi
     done
     shopt -u nullglob
     
-    ereader_apps=($(echo "${ereader_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-    
+    mapfile -t ereader_apps < <(printf '%s\n' "${ereader_apps[@]}" | sort -u)
     if [ ${#ereader_apps[@]} -gt 0 ]; then
-        local ereader_apps_str=$(IFS=,; echo "${ereader_apps[*]}")
+        local ereader_apps_str
+        ereader_apps_str=$(IFS=,; echo "${ereader_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Ereader/ name 'Ereader'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Ereader/ apps "[${ereader_apps_str}]"
         folder_ids+=("'Ereader'")
@@ -989,7 +1003,8 @@ EOF
     done
 
     if [ ${#office_apps[@]} -gt 0 ]; then
-        local office_apps_str=$(IFS=,; echo "${office_apps[*]}")
+        local office_apps_str
+        office_apps_str=$(IFS=,; echo "${office_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ name 'Office'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ apps "[${office_apps_str}]"
         folder_ids+=("'Office'")
@@ -1024,8 +1039,9 @@ EOF
                         /var/lib/flatpak/exports/share/applications/*Thunderbird*.desktop \
                         "$HOME/.local/share/applications"/*thunderbird*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
-            if [[ ! " ${org_pessoal_apps[@]} " =~ " '$basename' " ]]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            if [[ ! " ${org_pessoal_apps[*]} " == *" '$basename' "* ]]; then
                 org_pessoal_apps+=("'$basename'")
             fi
         fi
@@ -1033,10 +1049,10 @@ EOF
     shopt -u nullglob
 
     _merge_registry_into_folder "OrgPessoal" org_pessoal_apps
-    org_pessoal_apps=($(echo "${org_pessoal_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-
+    mapfile -t org_pessoal_apps < <(printf '%s\n' "${org_pessoal_apps[@]}" | sort -u)
     if [ ${#org_pessoal_apps[@]} -gt 0 ]; then
-        local org_pessoal_apps_str=$(IFS=,; echo "${org_pessoal_apps[*]}")
+        local org_pessoal_apps_str
+        org_pessoal_apps_str=$(IFS=,; echo "${org_pessoal_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ name 'Organização Pessoal'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ apps "[${org_pessoal_apps_str}]"
         folder_ids+=("'OrgPessoal'")
@@ -1089,8 +1105,9 @@ EOF
                         "$HOME/.local/share/applications"/*virtual*.desktop \
                         "$HOME/.local/share/applications"/*rustdesk*.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
-            if [[ ! " ${ambiente_virtual_apps[@]} " =~ " '$basename' " ]]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            if [[ ! " ${ambiente_virtual_apps[*]} " == *" '$basename' "* ]]; then
                 ambiente_virtual_apps+=("'$basename'")
             fi
         fi
@@ -1098,10 +1115,10 @@ EOF
     shopt -u nullglob
 
     _merge_registry_into_folder "AmbienteVirtual" ambiente_virtual_apps
-    ambiente_virtual_apps=($(echo "${ambiente_virtual_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-
+    mapfile -t ambiente_virtual_apps < <(printf '%s\n' "${ambiente_virtual_apps[@]}" | sort -u)
     if [ ${#ambiente_virtual_apps[@]} -gt 0 ]; then
-        local ambiente_virtual_apps_str=$(IFS=,; echo "${ambiente_virtual_apps[*]}")
+        local ambiente_virtual_apps_str
+        ambiente_virtual_apps_str=$(IFS=,; echo "${ambiente_virtual_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ name 'Ambiente Virtual'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ apps "[${ambiente_virtual_apps_str}]"
         folder_ids+=("'AmbienteVirtual'")
@@ -1126,7 +1143,7 @@ EOF
 
     for app in "${browser_app_names[@]}"; do
         if result=$(find_app_desktop_file "$app"); then
-            if [[ ! " ${browsers_apps[@]} " =~ " '$result' " ]]; then
+            if [[ ! " ${browsers_apps[*]} " == *" '$result' "* ]]; then
                 browsers_apps+=("'$result'")
             fi
         fi
@@ -1142,18 +1159,19 @@ EOF
                         "$HOME/.local/share/applications"/com.microsoft.Edge.desktop \
                         "$HOME/.local/share/applications"/com.brave.Browser.desktop; do
         if [ -f "$desktop_file" ]; then
-            local basename=$(basename "$desktop_file")
-            if [[ ! " ${browsers_apps[@]} " =~ " '$basename' " ]]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            if [[ ! " ${browsers_apps[*]} " == *" '$basename' "* ]]; then
                 browsers_apps+=("'$basename'")
             fi
         fi
     done
     shopt -u nullglob
 
-    browsers_apps=($(echo "${browsers_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-
+    mapfile -t browsers_apps < <(printf '%s\n' "${browsers_apps[@]}" | sort -u)
     if [ ${#browsers_apps[@]} -gt 0 ]; then
-        local browsers_apps_str=$(IFS=,; echo "${browsers_apps[*]}")
+        local browsers_apps_str
+        browsers_apps_str=$(IFS=,; echo "${browsers_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Browsers/ name 'Browsers'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Browsers/ apps "[${browsers_apps_str}]"
         folder_ids+=("'Browsers'")
@@ -1178,10 +1196,10 @@ EOF
         fi
     done
 
-    newsletter_apps=($(echo "${newsletter_apps[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-
+    mapfile -t newsletter_apps < <(printf '%s\n' "${newsletter_apps[@]}" | sort -u)
     if [ ${#newsletter_apps[@]} -gt 0 ]; then
-        local newsletter_apps_str=$(IFS=,; echo "${newsletter_apps[*]}")
+        local newsletter_apps_str
+        newsletter_apps_str=$(IFS=,; echo "${newsletter_apps[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ name 'Newsletter'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ apps "[${newsletter_apps_str}]"
         folder_ids+=("'Newsletter'")
@@ -1204,7 +1222,8 @@ EOF
     done
 
     if [ ${#ordered_folder_ids[@]} -gt 0 ]; then
-        local ordered_folder_ids_str=$(IFS=,; echo "${ordered_folder_ids[*]}")
+        local ordered_folder_ids_str
+        ordered_folder_ids_str=$(IFS=,; echo "${ordered_folder_ids[*]}")
         run_or_echo gsettings set org.gnome.desktop.app-folders folder-children "[${ordered_folder_ids_str}]"
         print_status "success" "App folders organized in custom order: ${ordered_folder_ids_str}"
     else
@@ -1339,8 +1358,10 @@ configure_vitals() {
     
     # ==================== VERIFY CONFIGURATION ====================
     print_status "info" "Verifying Vitals configuration..."
-    local refresh_time=$(gsettings get org.gnome.shell.extensions.vitals refresh-time)
-    local sensors_order=$(gsettings get org.gnome.shell.extensions.vitals order)
+    local refresh_time
+    refresh_time=$(gsettings get org.gnome.shell.extensions.vitals refresh-time)
+    local sensors_order
+    sensors_order=$(gsettings get org.gnome.shell.extensions.vitals order)
     
     print_status "success" "Vitals configuration complete!"
     print_status "config" "  Update interval: $refresh_time seconds"

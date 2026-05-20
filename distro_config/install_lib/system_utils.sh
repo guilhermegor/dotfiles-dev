@@ -214,16 +214,16 @@ install_vitals_manual() {
 
     if [ -d "$vitals_dir" ]; then
         print_status "info" "Vitals directory already exists, updating..."
-        cd "$vitals_dir"
+        cd "$vitals_dir" || return 1
         if git pull 2>&1 | tee -a "$LOG_FILE"; then
             print_status "success" "Vitals updated from GitHub"
         else
             print_status "warning" "Could not update Vitals, using existing version"
         fi
-        cd - > /dev/null
+        cd - > /dev/null || return 1
     else
         print_status "info" "Cloning Vitals from GitHub repository..."
-        cd "$extensions_dir"
+        cd "$extensions_dir" || return 1
         if git clone https://github.com/corecoding/Vitals.git "Vitals@CoreCoding.com" 2>&1 | tee -a "$LOG_FILE"; then
             print_status "success" "Vitals cloned from GitHub"
         else
@@ -231,7 +231,7 @@ install_vitals_manual() {
             print_status "info" "You can download it manually from: https://extensions.gnome.org/extension/1460/vitals/"
             return 1
         fi
-        cd - > /dev/null
+        cd - > /dev/null || return 1
     fi
 
     if [ ! -f "$vitals_dir/metadata.json" ]; then
@@ -493,7 +493,7 @@ install_slack() {
         return 0
     fi
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
 
     case "$PACKAGE_MANAGER" in
         apt)
@@ -590,7 +590,7 @@ install_slack() {
         print_status "info" "You can install Slack manually from https://slack.com/downloads/linux"
     fi
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 configure_gsconnect() {
@@ -842,13 +842,13 @@ install_veracrypt_appimage() {
         return 0
     fi
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
     print_status "info" "Downloading VeraCrypt AppImage..."
     run_or_echo wget -O veracrypt.AppImage "https://launchpad.net/veracrypt/trunk/1.26.24/+download/VeraCrypt-1.26.24-x86_64.AppImage"
     run_or_echo chmod +x veracrypt.AppImage
 
     print_status "success" "VeraCrypt AppImage downloaded to $DOWNLOADS_DIR"
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 # ============================================================================

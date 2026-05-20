@@ -48,10 +48,12 @@ recover_data() {
     # Try kpartx first
     if command -v kpartx >/dev/null; then
         kpartx -av "$image_file"
-        local loop_device=$(losetup --list | grep "$image_file" | awk '{print $1}')
+        local loop_device
+        loop_device=$(losetup --list | grep "$image_file" | awk '{print $1}')
         
         if [ -n "$loop_device" ]; then
-            local partitions=($(ls ${loop_device}p* 2>/dev/null))
+            local partitions
+            mapfile -t partitions < <(ls "${loop_device}"p* 2>/dev/null)
             
             if [ ${#partitions[@]} -gt 0 ]; then
                 for part in "${partitions[@]}"; do

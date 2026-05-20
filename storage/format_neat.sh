@@ -9,7 +9,8 @@ validate_label() {
     local label="$1"
     # remove any surrounding quotes if present
     label=$(echo "$label" | sed "s/^['\"]//;s/['\"]\$//")
-    local length=$(echo -n "$label" | wc -c)
+    local length
+    length=$(echo -n "$label" | wc -c)
     if [ "$length" -gt 11 ]; then
         print_status "error" "Label '$label' is too long (max 11 characters)."
         exit 1
@@ -33,7 +34,8 @@ validate_device() {
         print_status "error" "$device is not a valid block device."
         exit 1
     fi
-    local is_removable=$(lsblk -dno HOTPLUG "$device")
+    local is_removable
+    is_removable=$(lsblk -dno HOTPLUG "$device")
     if [ "$is_removable" -ne 1 ]; then
         print_status "error" "$device is not a removable (external USB) drive."
         exit 1
@@ -53,13 +55,15 @@ check_mounted() {
 unmount_partitions() {
     local device="$1"
     print_status "info" "Attempting to unmount all partitions of $device..."
-    local mounted_partitions=$(lsblk -lno NAME,MOUNTPOINT "$device" | awk '$2 != "" {print $1}')
+    local mounted_partitions
+    mounted_partitions=$(lsblk -lno NAME,MOUNTPOINT "$device" | awk '$2 != "" {print $1}')
     if [ -z "$mounted_partitions" ]; then
         print_status "success" "No partitions to unmount."
         return 0
     fi
     for partition in $mounted_partitions; do
-        local mount_point=$(lsblk -lno MOUNTPOINT "/dev/$partition")
+        local mount_point
+        mount_point=$(lsblk -lno MOUNTPOINT "/dev/$partition")
         print_status "info" "Unmounting /dev/$partition (mounted at $mount_point)..."
         umount "/dev/$partition" 2>/dev/null
         if [ $? -ne 0 ]; then

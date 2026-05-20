@@ -66,7 +66,8 @@ _write_env_file() {
 
     # Create timestamped backup before overwriting
     if [ -f "$env_file" ]; then
-        local backup_path="${env_file}.backup_$(date +%Y%m%d_%H%M%S)"
+        local backup_path
+        backup_path="${env_file}.backup_$(date +%Y%m%d_%H%M%S)"
         cp "$env_file" "$backup_path"
         print_status "success" "Backed up existing .env → $(basename "$backup_path")"
     fi

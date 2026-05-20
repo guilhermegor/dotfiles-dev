@@ -43,7 +43,9 @@ fi
 
 # Unmount any mounted partitions
 print_status "info" "Unmounting partitions..."
-for PART in $(ls "${TARGET}"* | grep -v "$TARGET$"); do
+for PART in "${TARGET}"*; do
+    [ -e "$PART" ] || continue        # glob matched nothing
+    [ "$PART" = "$TARGET" ] && continue  # skip the whole-disk device itself
     umount "$PART" 2>/dev/null && print_status "success" "Unmounted $PART" || print_status "warning" "$PART was not mounted"
 done
 

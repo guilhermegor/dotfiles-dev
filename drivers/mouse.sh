@@ -15,7 +15,8 @@ AUTOSTART_FILE="$AUTOSTART_DIR/xbindkeys.desktop"
 backup_file() {
     local file="$1"
     if [ -f "$file" ]; then
-        local backup="${file}.bak-$(date +%Y%m%d%H%M%S)"
+        local backup
+        backup="${file}.bak-$(date +%Y%m%d%H%M%S)"
         if cp "$file" "$backup"; then
             print_status "success" "Backed up ${file} to ${backup}"
         else

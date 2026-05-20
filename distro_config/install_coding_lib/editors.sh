@@ -19,14 +19,14 @@ install_vscode() {
 
     case "$PACKAGE_MANAGER" in
         apt)
-            cd "$DOWNLOADS_DIR"
+            cd "$DOWNLOADS_DIR" || return 1
             print_status "info" "Downloading VS Code..."
             run_or_echo wget -O code_amd64.deb "https://go.microsoft.com/fwlink/?LinkID=760868"
 
             print_status "info" "Installing VS Code..."
             run_or_echo sudo dpkg -i code_amd64.deb
             run_or_echo sudo apt-get install -f -y
-            cd - > /dev/null
+            cd - > /dev/null || return 1
             ;;
         dnf|yum)
             print_status "info" "Adding VS Code repository..."
@@ -64,7 +64,7 @@ install_cursor() {
         return 0
     fi
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
 
     case "$PACKAGE_MANAGER" in
         apt)
@@ -94,7 +94,7 @@ install_cursor() {
                                 print_status "success" "Cursor installed after fixing dependencies"
                             else
                                 print_status "error" "Failed to install Cursor package"
-                                cd - > /dev/null
+                                cd - > /dev/null || return 1
                                 return 1
                             fi
                         fi
@@ -103,27 +103,28 @@ install_cursor() {
                             print_status "success" "Cursor IDE installation verified"
 
                             if dpkg -l | grep -q cursor; then
-                                local version=$(dpkg -l | grep cursor | awk '{print $3}')
+                                local version
+                                version=$(dpkg -l | grep cursor | awk '{print $3}')
                                 print_status "info" "Installed version: $version"
                                 echo "Cursor version: $version" >> "$LOG_FILE"
                             fi
 
-                            cd - > /dev/null
+                            cd - > /dev/null || return 1
                             return 0
                         else
                             print_status "error" "Installation verification failed"
-                            cd - > /dev/null
+                            cd - > /dev/null || return 1
                             return 1
                         fi
                     else
                         print_status "error" "Downloaded file is not a valid .deb package"
                         rm -f cursor_latest.deb
-                        cd - > /dev/null
+                        cd - > /dev/null || return 1
                         return 1
                     fi
                 else
                     print_status "error" "Download failed or file is empty"
-                    cd - > /dev/null
+                    cd - > /dev/null || return 1
                     return 1
                 fi
             else
@@ -132,7 +133,7 @@ install_cursor() {
                 print_status "config" "1. Visit https://cursor.com to download directly"
                 print_status "config" "2. Or try: sudo snap install cursor"
                 print_status "config" "3. Or download with: wget -O cursor.deb https://api2.cursor.sh/updates/download/golden/linux-x64-deb/cursor/2.2"
-                cd - > /dev/null
+                cd - > /dev/null || return 1
                 return 1
             fi
             ;;
@@ -219,14 +220,15 @@ install_cursor() {
         print_status "config" "3. Then install: sudo dpkg -i cursor.deb"
     fi
 
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 install_neovim() {
     print_status "section" "NEOVIM INSTALLATION"
 
     if command_exists nvim; then
-        local current_version=$(nvim --version | head -n1 | awk '{print $2}')
+        local current_version
+        current_version=$(nvim --version | head -n1 | awk '{print $2}')
         print_status "info" "Neovim already installed (version: $current_version)"
         return 0
     fi
@@ -259,7 +261,8 @@ install_neovim() {
     esac
 
     if command_exists nvim; then
-        local version=$(nvim --version | head -n1 | awk '{print $2}')
+        local version
+        version=$(nvim --version | head -n1 | awk '{print $2}')
         print_status "success" "Neovim installed successfully (version: $version)"
 
         install_vim_plug
@@ -280,7 +283,7 @@ install_neovim_alternative() {
     fi
 
     print_status "info" "Downloading Neovim AppImage..."
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
 
     local nvim_appimage_url="https://github.com/neovim/neovim/releases/latest/download/nvim.appimage"
 
@@ -288,11 +291,11 @@ install_neovim_alternative() {
         run_or_echo chmod +x nvim.appimage
         run_or_echo sudo mv nvim.appimage /usr/local/bin/nvim
         print_status "success" "Neovim AppImage installed to /usr/local/bin/nvim"
-        cd - > /dev/null
+        cd - > /dev/null || return 1
         return 0
     else
         print_status "error" "Failed to download Neovim AppImage"
-        cd - > /dev/null
+        cd - > /dev/null || return 1
         return 1
     fi
 }
@@ -455,7 +458,7 @@ install_warp_terminal() {
         return 0
     fi
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
     print_status "info" "Downloading Warp Terminal..."
     run_or_echo wget -O warp-terminal.deb "https://app.warp.dev/download?package=deb"
 
@@ -463,7 +466,7 @@ install_warp_terminal() {
     run_or_echo sudo apt install -y ./warp-terminal.deb
 
     print_status "success" "Warp Terminal installed"
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 INSTALL_REGISTRY+=(

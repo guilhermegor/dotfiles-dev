@@ -62,7 +62,8 @@ select_drive() {
             print_status "warning" "Drive /dev/$drive is mounted. Attempting to unmount..."
             
             # Try to unmount all partitions
-            for partition in $(ls /dev/${drive}[0-9]* 2>/dev/null); do
+            for partition in /dev/"${drive}"[0-9]*; do
+                [ -e "$partition" ] || continue  # glob matched nothing
                 umount "$partition" 2>/dev/null
             done
             

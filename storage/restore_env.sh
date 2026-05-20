@@ -136,7 +136,8 @@ main() {
 
             case "$choice" in
                 "Back it up first, then restore")
-                    local bak="$dest.bak_$(date +%Y%m%d_%H%M%S)"
+                    local bak
+                    bak="$dest.bak_$(date +%Y%m%d_%H%M%S)"
                     local bak_err
                     if ! bak_err=$(mv "$dest" "$bak" 2>&1); then
                         failed+=(".$env_name ($project_rel): could not back up — $bak_err")

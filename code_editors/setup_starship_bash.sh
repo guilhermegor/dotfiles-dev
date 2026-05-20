@@ -11,7 +11,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 DISTRO=""
 PACKAGE_MANAGER=""
 INSTALL_CMD=""
-UPDATE_CMD=""
 
 STARSHIP_CONFIG_FILE="$HOME/.config/starship.toml"
 STARSHIP_COMPLETION_FILE="$HOME/.local/share/bash-completion/completions/starship.bash"
@@ -83,22 +82,18 @@ detect_distro() {
             ubuntu|debian|pop|linuxmint)
                 PACKAGE_MANAGER="apt"
                 INSTALL_CMD="sudo apt-get install -y"
-                UPDATE_CMD="sudo apt update"
                 ;;
             fedora|rhel|centos|rocky|almalinux)
                 PACKAGE_MANAGER="dnf"
                 INSTALL_CMD="sudo dnf install -y"
-                UPDATE_CMD="sudo dnf check-update || true"
                 ;;
             arch|manjaro|endeavouros)
                 PACKAGE_MANAGER="pacman"
                 INSTALL_CMD="sudo pacman -S --noconfirm"
-                UPDATE_CMD="sudo pacman -Sy"
                 ;;
             opensuse*|sles)
                 PACKAGE_MANAGER="zypper"
                 INSTALL_CMD="sudo zypper install -y"
-                UPDATE_CMD="sudo zypper refresh"
                 ;;
             *)
                 print_status "warning" "Unknown distribution: $DISTRO"
@@ -119,19 +114,15 @@ detect_package_manager_fallback() {
     if command_exists apt-get; then
         PACKAGE_MANAGER="apt"
         INSTALL_CMD="sudo apt-get install -y"
-        UPDATE_CMD="sudo apt update"
     elif command_exists dnf; then
         PACKAGE_MANAGER="dnf"
         INSTALL_CMD="sudo dnf install -y"
-        UPDATE_CMD="sudo dnf check-update || true"
     elif command_exists pacman; then
         PACKAGE_MANAGER="pacman"
         INSTALL_CMD="sudo pacman -S --noconfirm"
-        UPDATE_CMD="sudo pacman -Sy"
     elif command_exists zypper; then
         PACKAGE_MANAGER="zypper"
         INSTALL_CMD="sudo zypper install -y"
-        UPDATE_CMD="sudo zypper refresh"
     else
         print_status "error" "No supported package manager found"
         exit 1

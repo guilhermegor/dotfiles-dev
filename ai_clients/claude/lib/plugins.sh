@@ -13,7 +13,7 @@ bootstrap_plugin() {
     local cache_dir="$CLAUDE_DIR/plugins/cache/$marketplace_id/$plugin_name"
     local installed_file="$CLAUDE_DIR/plugins/installed_plugins.json"
 
-    if ls -d "$cache_dir"/*/ 2>/dev/null | grep -q .; then
+    if compgen -G "$cache_dir/*/" > /dev/null 2>&1; then
         promote_plugin_to_user_scope "$plugin_key" "$plugin_name" "$marketplace_id"
         return 0
     fi

@@ -5,7 +5,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 
 # Get the actual user's home directory (even when run with sudo)
 get_user_home() {
-    local user=$(whoami)
+    local user
+    user=$(whoami)
     if [ "$user" == "root" ]; then
         # If running with sudo, get the original user from SUDO_USER
         if [ -n "$SUDO_USER" ]; then

@@ -93,7 +93,8 @@ verify_configuration() {
     print_status "info" "Verifying configuration..."
     
     # Check keyboard layouts
-    local current_layouts=$(gsettings get org.gnome.desktop.input-sources sources)
+    local current_layouts
+    current_layouts=$(gsettings get org.gnome.desktop.input-sources sources)
     print_status "config" "Current keyboard layouts: $current_layouts"
     
     # Check environment configuration

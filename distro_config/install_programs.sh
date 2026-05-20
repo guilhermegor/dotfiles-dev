@@ -129,7 +129,7 @@ cleanup_system() {
     print_status "info" "Listing upgradable packages..."
     case "$PACKAGE_MANAGER" in
         apt)        run_or_echo sudo apt list --upgradable >> "$LOG_FILE" 2>&1 || true ;;
-        dnf|yum)    sudo $PACKAGE_MANAGER list upgrades >> "$LOG_FILE" 2>&1 || true ;;
+        dnf|yum)    run_or_echo sudo "$PACKAGE_MANAGER" list upgrades >> "$LOG_FILE" 2>&1 || true ;;
         pacman)     pacman -Qu >> "$LOG_FILE" 2>&1 || true ;;
     esac
 

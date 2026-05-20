@@ -15,7 +15,8 @@ backup_current_config() {
     print_status "section" "BACKING UP CURRENT CONFIGURATION"
     
     local config_dir="$HOME/.config/Code/User"
-    local backup_dir="$HOME/vscode_backup_$(date +%Y%m%d_%H%M%S)"
+    local backup_dir
+    backup_dir="$HOME/vscode_backup_$(date +%Y%m%d_%H%M%S)"
     
     mkdir -p "$backup_dir"
     
@@ -27,9 +28,12 @@ backup_current_config() {
         # Display critical settings for reference
         print_status "info" "📊 Your current visual settings:"
         if command -v jq &> /dev/null; then
-            local current_font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$config_dir/settings.json")
-            local current_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$config_dir/settings.json")
-            local current_theme=$(jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' "$config_dir/settings.json")
+            local current_font_size
+            current_font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$config_dir/settings.json")
+            local current_zoom
+            current_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$config_dir/settings.json")
+            local current_theme
+            current_theme=$(jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' "$config_dir/settings.json")
             echo "  • Font size: $current_font_size"
             echo "  • Zoom level: $current_zoom"
             echo "  • Theme: $current_theme"
@@ -141,10 +145,12 @@ configure_keybindings() {
     fi
     
     # Create a temporary keybindings file with the new shortcut
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
     
     # Read existing keybindings
-    local existing_keybindings=$(cat "$keybindings_file" 2>/dev/null || echo '[]')
+    local existing_keybindings
+    existing_keybindings=$(cat "$keybindings_file" 2>/dev/null || echo '[]')
     
     # Check if the shortcuts already exist
     if echo "$existing_keybindings" | grep -q '"ctrl+k s"'; then
@@ -207,7 +213,8 @@ configure_settings() {
     fi
     
     # Read current settings and validate JSON
-    local current_settings=$(cat "$settings_file" 2>/dev/null || echo '{}')
+    local current_settings
+    current_settings=$(cat "$settings_file" 2>/dev/null || echo '{}')
     
     # Validate JSON - if it's malformed, repair or reset it
     if ! echo "$current_settings" | jq empty 2>/dev/null; then
@@ -223,9 +230,12 @@ configure_settings() {
     print_status "info" "🔍 Analyzing your current settings..."
     
     if command -v jq &> /dev/null; then
-        local current_font_size=$(echo "$current_settings" | jq -r '.["editor.fontSize"] // "14 (default)"')
-        local current_zoom=$(echo "$current_settings" | jq -r '.["window.zoomLevel"] // "0 (default)"')
-        local current_theme=$(echo "$current_settings" | jq -r '.["workbench.colorTheme"] // "Default Dark Modern"')
+        local current_font_size
+        current_font_size=$(echo "$current_settings" | jq -r '.["editor.fontSize"] // "14 (default)"')
+        local current_zoom
+        current_zoom=$(echo "$current_settings" | jq -r '.["window.zoomLevel"] // "0 (default)"')
+        local current_theme
+        current_theme=$(echo "$current_settings" | jq -r '.["workbench.colorTheme"] // "Default Dark Modern"')
         
         echo "  • Current font size: $current_font_size"
         echo "  • Current zoom level: $current_zoom"
@@ -280,7 +290,8 @@ configure_settings() {
     print_status "warning" "⚠️  IMPORTANT: Your font size and zoom level will NOT be changed"
     
     # Backup original file
-    local backup_file="$settings_file.backup_$(date +%Y%m%d_%H%M%S)"
+    local backup_file
+    backup_file="$settings_file.backup_$(date +%Y%m%d_%H%M%S)"
     cp "$settings_file" "$backup_file"
     print_status "success" "Original settings backed up to: $backup_file"
     
@@ -314,8 +325,10 @@ configure_settings() {
         rm -f "$settings_file.tmp" "$settings_file.tmp2" "$settings_file.tmp3"
         
         # Verify the critical settings are preserved
-        local final_font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
-        local final_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
+        local final_font_size
+        final_font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
+        local final_zoom
+        final_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
         
         print_status "success" "✅ Font size preserved: $final_font_size"
         print_status "success" "✅ Zoom level preserved: $final_zoom"
@@ -349,10 +362,14 @@ configure_settings() {
     # Final verification
     print_status "info" "🔎 Final configuration check:"
     if command -v jq &> /dev/null; then
-        local final_theme=$(jq -r '.["workbench.colorTheme"] // "Not set"' "$settings_file")
-        local final_font=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
-        local final_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
-        local final_icons=$(jq -r '.["workbench.iconTheme"] // "material-icon-theme"' "$settings_file")
+        local final_theme
+        final_theme=$(jq -r '.["workbench.colorTheme"] // "Not set"' "$settings_file")
+        local final_font
+        final_font=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
+        local final_zoom
+        final_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
+        local final_icons
+        final_icons=$(jq -r '.["workbench.iconTheme"] // "material-icon-theme"' "$settings_file")
         
         echo "  • Theme: $final_theme"
         echo "  • Font size: $final_font"
@@ -389,7 +406,8 @@ sync_dotfiles_settings() {
     mkdir -p "$global_dir"
 
     if [ -f "$global_settings" ]; then
-        local backup_file="$global_settings.backup_$(date +%Y%m%d_%H%M%S)"
+        local backup_file
+        backup_file="$global_settings.backup_$(date +%Y%m%d_%H%M%S)"
         cp "$global_settings" "$backup_file"
         print_status "success" "Existing global settings backed up to: $backup_file"
     fi
@@ -467,7 +485,8 @@ verify_configuration() {
             local checks_total=0
             
             # Check cursor style (IMPORTANT - ensure it's set)
-            local cursor_style=$(jq -r '.["editor.cursorStyle"] // empty' "$settings_file")
+            local cursor_style
+            cursor_style=$(jq -r '.["editor.cursorStyle"] // empty' "$settings_file")
             checks_total=$((checks_total + 1))
             if [ "$cursor_style" = "block" ]; then
                 print_status "success" "✅ Editor cursor style: block"
@@ -477,19 +496,22 @@ verify_configuration() {
             fi
             
             # Check zoom level (CRITICAL for your issue)
-            local zoom=$(jq -r '.["window.zoomLevel"] // "0"' "$settings_file")
+            local zoom
+            zoom=$(jq -r '.["window.zoomLevel"] // "0"' "$settings_file")
             checks_total=$((checks_total + 1))
             print_status "info" "🔍 Zoom level: $zoom"
             checks_passed=$((checks_passed + 1))
             
             # Check font size
-            local font_size=$(jq -r '.["editor.fontSize"] // "14"' "$settings_file")
+            local font_size
+            font_size=$(jq -r '.["editor.fontSize"] // "14"' "$settings_file")
             checks_total=$((checks_total + 1))
             print_status "info" "🔍 Font size: $font_size"
             checks_passed=$((checks_passed + 1))
             
             # Check icon theme
-            local icons=$(jq -r '.["workbench.iconTheme"] // empty' "$settings_file")
+            local icons
+            icons=$(jq -r '.["workbench.iconTheme"] // empty' "$settings_file")
             checks_total=$((checks_total + 1))
             if [ "$icons" = "material-icon-theme" ]; then
                 print_status "success" "✅ Icon theme: material-icon-theme"
@@ -540,7 +562,8 @@ show_final_summary() {
     print_status "section" "CONFIGURATION COMPLETE"
     
     local settings_file="$HOME/.config/Code/User/settings.json"
-    local backup_files=($(ls -td "$HOME"/vscode_backup_* 2>/dev/null))
+    local backup_files
+    mapfile -t backup_files < <(ls -td "$HOME"/vscode_backup_* 2>/dev/null)
     
     print_status "success" "✅ VS Code configuration completed successfully!"
     echo ""
@@ -555,10 +578,14 @@ show_final_summary() {
     
     print_status "config" "🎨 YOUR CURRENT VISUAL SETTINGS:"
     if [ -f "$settings_file" ] && command -v jq &> /dev/null; then
-        local theme=$(jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' "$settings_file")
-        local font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
-        local zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
-        local icons=$(jq -r '.["workbench.iconTheme"] // "material-icon-theme"' "$settings_file")
+        local theme
+        theme=$(jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' "$settings_file")
+        local font_size
+        font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
+        local zoom
+        zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
+        local icons
+        icons=$(jq -r '.["workbench.iconTheme"] // "material-icon-theme"' "$settings_file")
         
         echo "  • Theme: $theme"
         echo "  • Font size: $font_size"

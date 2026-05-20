@@ -78,15 +78,14 @@ check_asdf() {
         exit 1
     fi
 
-    local asdf_version=$(get_asdf_version)
+    local asdf_version
+    asdf_version=$(get_asdf_version)
     print_status "success" "asdf is installed (version: $asdf_version)"
 
     print_status "info" "Detecting asdf command structure..."
     if asdf global --help &>/dev/null; then
-        ASDF_GLOBAL_CMD="global"
         print_status "info" "Using 'asdf global' command"
     elif asdf set --help &>/dev/null; then
-        ASDF_GLOBAL_CMD="set -g"
         print_status "info" "Using 'asdf set -g' command"
     else
         print_status "warning" "Could not detect asdf global command structure"
@@ -285,7 +284,8 @@ install_nodejs() {
     print_status "section" "NODE.JS INSTALLATION"
 
     if is_tool_installed "nodejs" && is_tool_global_set "nodejs"; then
-        local current_version=$(get_current_global_version "nodejs")
+        local current_version
+        current_version=$(get_current_global_version "nodejs")
         print_status "info" "Node.js is already installed with version $current_version set as global"
         print_status "info" "Skipping Node.js installation as requested"
         return 0
@@ -299,8 +299,10 @@ install_nodejs() {
         print_status "info" "Node.js plugin already installed"
     fi
 
-    local installed_versions=$(get_installed_versions "nodejs")
-    local latest_installed=$(get_latest_installed_version "nodejs")
+    local installed_versions
+    installed_versions=$(get_installed_versions "nodejs")
+    local latest_installed
+    latest_installed=$(get_latest_installed_version "nodejs")
 
     if [ -n "$installed_versions" ]; then
         print_status "info" "Node.js is already installed with version(s):"
@@ -345,7 +347,8 @@ install_nodejs() {
     print_status "warning" "This may take a few minutes..."
 
     if asdf install nodejs "$node_version" 2>&1 | tee -a "$LOG_FILE"; then
-        local installed_version=$(asdf list nodejs 2>/dev/null | tail -n1 | sed 's/^\s*\*//;s/^\s*//')
+        local installed_version
+        installed_version=$(asdf list nodejs 2>/dev/null | tail -n1 | sed 's/^\s*\*//;s/^\s*//')
 
         if [ -z "$installed_version" ]; then
             installed_version=$(grep "Installed node-" "$LOG_FILE" | tail -n1 | sed 's/.*node-//;s/-.*//')
@@ -419,7 +422,8 @@ install_nvm() {
     print_status "section" "NVM (Node Version Manager) Installation"
 
     if command_exists nvm || [ -d "$HOME/.nvm" ]; then
-        local nvm_version=$(nvm --version 2>/dev/null || echo "unknown")
+        local nvm_version
+        nvm_version=$(nvm --version 2>/dev/null || echo "unknown")
         print_status "warning" "NVM is already installed (version: $nvm_version)"
 
         read -r -p "Do you want to reinstall NVM? (y/n): " reinstall_nvm
@@ -461,7 +465,8 @@ install_nvm() {
 
         print_status "success" "NVM installed successfully"
 
-        local nvm_version=$(nvm --version 2>/dev/null || echo "")
+        local nvm_version
+        nvm_version=$(nvm --version 2>/dev/null || echo "")
         if [ -n "$nvm_version" ]; then
             print_status "info" "NVM version: $nvm_version"
         fi
@@ -639,7 +644,8 @@ install_npx() {
         print_status "config" "  Note: NPX comes bundled with npm 5.2+"
 
         if command_exists npm; then
-            local npm_version=$(npm --version 2>/dev/null)
+            local npm_version
+            npm_version=$(npm --version 2>/dev/null)
             if [[ "$npm_version" =~ ^[5-9]\. ]]; then
                 print_status "info" "Your npm version ($npm_version) includes npx natively"
             fi
@@ -675,7 +681,8 @@ install_typescript() {
     fi
 
     print_status "info" "Checking for existing TypeScript installation..."
-    local tsc_version=$(npm list -g typescript 2>/dev/null | grep typescript@ | head -1 | sed 's/.*typescript@//' | cut -d' ' -f1)
+    local tsc_version
+    tsc_version=$(npm list -g typescript 2>/dev/null | grep typescript@ | head -1 | sed 's/.*typescript@//' | cut -d' ' -f1)
 
     if [ -n "$tsc_version" ]; then
         print_status "info" "TypeScript is already installed globally (version: $tsc_version)"
@@ -765,7 +772,8 @@ install_nestjs() {
     fi
 
     print_status "info" "Checking for existing NestJS CLI installation..."
-    local nestjs_version=$(npm list -g @nestjs/cli 2>/dev/null | grep @nestjs/cli@ | head -1 | sed 's/.*@nestjs\/cli@//' | cut -d' ' -f1)
+    local nestjs_version
+    nestjs_version=$(npm list -g @nestjs/cli 2>/dev/null | grep @nestjs/cli@ | head -1 | sed 's/.*@nestjs\/cli@//' | cut -d' ' -f1)
 
     if [ -n "$nestjs_version" ]; then
         print_status "info" "NestJS CLI is already installed globally (version: $nestjs_version)"
@@ -838,7 +846,8 @@ install_rust() {
     print_status "section" "RUST INSTALLATION"
 
     if is_tool_installed "rust" && is_tool_global_set "rust"; then
-        local current_version=$(get_current_global_version "rust")
+        local current_version
+        current_version=$(get_current_global_version "rust")
         print_status "info" "Rust is already installed with version $current_version set as global"
         print_status "info" "Skipping Rust installation as requested"
         return 0
@@ -852,8 +861,10 @@ install_rust() {
         print_status "info" "Rust plugin already installed"
     fi
 
-    local installed_versions=$(get_installed_versions "rust")
-    local latest_installed=$(get_latest_installed_version "rust")
+    local installed_versions
+    installed_versions=$(get_installed_versions "rust")
+    local latest_installed
+    latest_installed=$(get_latest_installed_version "rust")
 
     if [ -n "$installed_versions" ]; then
         print_status "info" "Rust is already installed with version(s):"
@@ -906,7 +917,8 @@ install_rust() {
     print_status "warning" "This may take several minutes (Rust compiles from source)..."
 
     if asdf install rust "$rust_version" 2>&1 | tee -a "$LOG_FILE"; then
-        local installed_version=$(asdf list rust 2>/dev/null | tail -n1 | sed 's/^\s*\*//;s/^\s*//')
+        local installed_version
+        installed_version=$(asdf list rust 2>/dev/null | tail -n1 | sed 's/^\s*\*//;s/^\s*//')
 
         if [ -z "$installed_version" ]; then
             installed_version=$(grep -E "Installed rust-|Installed version" "$LOG_FILE" | tail -n1 | sed 's/.*rust-//;s/\s.*//')

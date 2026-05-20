@@ -17,7 +17,6 @@ install_skills() {
     mkdir -p "$skills_dst"
 
     local installed=0
-    local skipped=0
 
     for skill_file in "$skills_src"/*.md; do
         [[ -e "$skill_file" ]] || continue  # glob matched nothing

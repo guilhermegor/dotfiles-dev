@@ -65,6 +65,9 @@ install_postgresql() {
     esac
 
     print_status "info" "Installing adminpack extension..."
+    # $LOG_FILE lives under $HOME (user-owned), so the user shell opens the
+    # redirect correctly even though the command runs under sudo -u postgres.
+    # shellcheck disable=SC2024
     if sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS adminpack;" &>> "$LOG_FILE"; then
         print_status "success" "adminpack extension installed"
     else

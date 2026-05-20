@@ -36,6 +36,9 @@ install_docker() {
     run_or_echo sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
     print_status "info" "Testing Docker installation..."
+    # $LOG_FILE lives under $HOME (user-owned), so the user shell opens the
+    # redirect correctly even though the command runs under sudo.
+    # shellcheck disable=SC2024
     if sudo docker run hello-world &>> "$LOG_FILE"; then
         print_status "success" "Docker installed and working"
     else
@@ -57,7 +60,7 @@ install_docker_desktop() {
         return 0
     fi
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
     print_status "info" "Downloading Docker Desktop..."
     run_or_echo wget -O docker-desktop-amd64.deb "https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb?utm_source=docker&utm_medium=webreferral&utm_campaign=docs-driven-download-linux-amd64"
 
@@ -65,7 +68,7 @@ install_docker_desktop() {
     run_or_echo sudo apt-get install -y ./docker-desktop-amd64.deb
 
     print_status "success" "Docker Desktop installed"
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 INSTALL_REGISTRY+=(

@@ -7,7 +7,6 @@ MOUNT_BASE="/mnt/auto"
 OS_LABEL_REGEX='(efi|esp|boot|system|microsoft|windows|ubuntu|debian|fedora|arch|manjaro|mint|pop|kali|root)'
 OS_PARTTYPE_REGEX='^(c12a7328-f81f-11d2-ba4b-00a0c93ec93b|e3c9e316-0b5c-4db8-817d-f92df00215ae|21686148-6449-6e6f-744e-656564454649)$'
 
-LOG_FILE="$HOME/mount_disks_$(date +%Y%m%d_%H%M%S).log"
 
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"

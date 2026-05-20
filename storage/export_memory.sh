@@ -22,7 +22,8 @@ main() {
         exit 1
     fi
 
-    local snapshot="$backup_dir/$(date +%Y-%m-%d_%H%M%S)"
+    local snapshot
+    snapshot="$backup_dir/$(date +%Y-%m-%d_%H%M%S)"
 
     if ! mkdir -p "$snapshot/commands" "$snapshot/settings"; then
         zenity --error --title="Export Memory" \

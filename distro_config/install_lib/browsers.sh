@@ -23,7 +23,7 @@ install_chrome() {
         return 0
     fi
 
-    cd "$DOWNLOADS_DIR"
+    cd "$DOWNLOADS_DIR" || return 1
 
     case "$PACKAGE_MANAGER" in
         apt)
@@ -56,7 +56,7 @@ install_chrome() {
     esac
 
     print_status "success" "Google Chrome installed"
-    cd - > /dev/null
+    cd - > /dev/null || return 1
 }
 
 install_opera() {

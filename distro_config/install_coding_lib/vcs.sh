@@ -151,8 +151,39 @@ install_gitleaks() {
     fi
 }
 
+install_shellcheck() {
+    print_status "section" "SHELLCHECK (SHELL SCRIPT LINTER)"
+
+    if command_exists shellcheck; then
+        print_status "info" "shellcheck already installed"
+        return 0
+    fi
+
+    if command_exists brew; then
+        print_status "info" "Installing shellcheck via Homebrew..."
+        if run_or_echo brew install shellcheck &>> "$LOG_FILE"; then
+            print_status "success" "shellcheck installed via Homebrew"
+            return 0
+        fi
+        print_status "warning" "Homebrew install failed, falling back to system package..."
+    fi
+
+    # Distro package names: apt/pacman/zypper use 'shellcheck'; Fedora uses 'ShellCheck'.
+    print_status "info" "Installing shellcheck via system package manager..."
+    install_package shellcheck shellcheck ShellCheck shellcheck &>> "$LOG_FILE"
+
+    if command_exists shellcheck; then
+        shellcheck --version >> "$LOG_FILE"
+        print_status "success" "shellcheck installed: $(shellcheck --version 2>/dev/null | awk '/^version:/ {print $2}')"
+    else
+        print_status "error" "shellcheck installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
 INSTALL_REGISTRY+=(
     "install_github_cli:GitHub CLI::"
     "install_act:act (Run GitHub Actions Locally)::"
     "install_gitleaks:Gitleaks (Secret Scanner)::"
+    "install_shellcheck:shellcheck (Shell Script Linter)::"
 )

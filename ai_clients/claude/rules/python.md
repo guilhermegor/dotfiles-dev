@@ -10,7 +10,8 @@ paths:
 
 > **Priority rule:** These are personal Python defaults. Whenever a project-level CLAUDE.md
 > (or any instruction inside the active repository) conflicts with anything here, the project
-> context takes precedence. Treat this file as a fallback, not a mandate.
+> context takes precedence. Treat this file as a fallback, not a mandate — and never let
+> "best practice in general" silently override a project-specific rule.
 
 ## Toolchain
 

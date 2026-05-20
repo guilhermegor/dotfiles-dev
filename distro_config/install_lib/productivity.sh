@@ -561,12 +561,12 @@ install_espanso() {
 
 INSTALL_REGISTRY+=(
     "install_thunderbird:Thunderbird Email Client:OrgPessoal:thunderbird.desktop"
-    "install_newsflash:NewsFlash RSS Reader:OrgPessoal:io.gitlab.news_flash.NewsFlash.desktop"
+    "install_newsflash:NewsFlash RSS Reader:Newsletter:io.gitlab.news_flash.NewsFlash.desktop"
     "install_google_calendar:Google Calendar (PWA):OrgPessoal:google-calendar.desktop"
     "install_notion_calendar:Notion Calendar (PWA):OrgPessoal:notion-calendar.desktop"
     "install_google_tasks:Google Tasks (PWA):OrgPessoal:google-tasks.desktop"
-    "install_valor_digital:Valor Digital (Valor Econômico):OrgPessoal:valor-digital.desktop"
-    "install_linear:Linear (Project Management):OrgPessoal:linear.desktop"
-    "install_miro:Miro Collaboration Tool:OrgPessoal:miro.desktop"
+    "install_valor_digital:Valor Digital (Valor Econômico):Newsletter:valor-digital.desktop"
+    "install_linear:Linear (Project Management):DEV:linear.desktop"
+    "install_miro:Miro Collaboration Tool:DEV:miro.desktop"
     "install_espanso:Espanso (Text Expander)::"
 )

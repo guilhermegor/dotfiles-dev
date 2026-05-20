@@ -144,6 +144,28 @@ install_handbrake() {
     fi
 }
 
+install_obs() {
+    print_status "section" "OBS STUDIO"
+
+    if command_exists obs || \
+       flatpak list 2>/dev/null | grep -q "com.obsproject.Studio"; then
+        print_status "info" "OBS Studio already installed"
+        return 0
+    fi
+
+    setup_flatpak
+
+    print_status "info" "Installing OBS Studio via Flatpak..."
+    if run_or_echo flatpak install -y flathub com.obsproject.Studio 2>>"$LOG_FILE"; then
+        print_status "success" "OBS Studio installed via Flatpak"
+        print_status "info" "OBS Studio: open-source screen recording and live streaming"
+        print_status "config" "Launch: flatpak run com.obsproject.Studio"
+    else
+        print_status "error" "Could not install OBS Studio. Try: flatpak install flathub com.obsproject.Studio"
+        return 1
+    fi
+}
+
 # ============================================================================
 # REGISTRY
 # ============================================================================
@@ -152,4 +174,5 @@ INSTALL_REGISTRY+=(
     "install_4k_video_downloader:4K Video Downloader Plus:Media:com.4kdownload.4kvideodownloaderplus.desktop"
     "install_asunder:Asunder CD Ripper:Media:asunder.desktop"
     "install_handbrake:HandBrake DVD Ripper:Media:fr.handbrake.ghb.desktop"
+    "install_obs:OBS Studio:Media:com.obsproject.Studio.desktop"
 )

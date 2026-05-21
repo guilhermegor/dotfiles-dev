@@ -15,7 +15,9 @@
 ##@ Quick Start
 
 .PHONY: init
-init: permissions setup_env install_programs install_espanso_packages install_coding ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace  ## Complete initial setup (RECOMMENDED first-time entry point)
+# Exported so ai_clients/main.sh skips its own restore-env prompt during init.
+init: export DOTFILES_INIT_IN_PROGRESS=1
+init: restore_env_prompt permissions setup_env install_programs install_espanso_packages install_coding ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace  ## Complete initial setup (RECOMMENDED first-time entry point)
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -176,7 +178,7 @@ storage_analysis:  ## SSD/NVMe slot analysis + theoretical max capacity report
 
 ##@ Batch Operations
 
-.PHONY: full_setup install_espanso_packages hardware_setup storage_setup vm_setup permissions ai_clients
+.PHONY: full_setup install_espanso_packages hardware_setup storage_setup vm_setup permissions ai_clients restore_env_prompt
 
 full_setup: permissions install_programs install_coding vscode_setup setup_all_drivers  ## Complete system setup (programs + coding + drivers)
 	@echo ""
@@ -245,6 +247,9 @@ permissions:  ## chmod +x every *.sh in the repo
 ai_clients:  ## Configure all AI clients (interactive menu: Claude Code, ...)
 	@echo "Configuring all AI clients (Claude, ...)..."
 	@bash ai_clients/main.sh
+
+restore_env_prompt:  ## Prompt to restore .env files from external backup
+	@bash ai_clients/lib/restore_env_prompt.sh || true
 
 ##@ Code Editors
 

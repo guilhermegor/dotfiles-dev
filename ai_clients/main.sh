@@ -13,6 +13,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/lib/utils.sh"
+source "$SCRIPT_DIR/lib/restore_env_prompt.sh"
 
 # Display name overrides: directory key → human label.
 # Add an entry here for each client whose directory name does not read well when capitalised.
@@ -97,6 +98,11 @@ interactive_menu() {
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 main() {
+    # Skipped when make init has already run the prompt (DOTFILES_INIT_IN_PROGRESS=1).
+    if [[ -z "$DOTFILES_INIT_IN_PROGRESS" ]]; then
+        prompt_restore_env || true
+    fi
+
     local clients=()
     mapfile -t clients < <(discover_clients)
 

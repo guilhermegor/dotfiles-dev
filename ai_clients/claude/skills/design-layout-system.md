@@ -1,5 +1,5 @@
 ---
-name: s:brand-layout-system
+name: s:design-layout-system
 description: Use when generating the layout and spacing system for a brand
   design document. Receives brand profile and all previous tokens from
   conversation context. Produces spacing, border-radius, and grid tokens,

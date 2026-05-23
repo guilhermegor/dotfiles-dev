@@ -1,5 +1,5 @@
 ---
-name: s:brand-component-system
+name: s:design-component-system
 description: Use when generating the component token set for a brand design
   document. Receives brand profile, color tokens, and type tokens from
   conversation context. Produces component tokens and the Components prose
@@ -20,6 +20,50 @@ Read brand profile, color tokens, and type tokens from conversation context.
   24px`, `48px`) because they are layout values, not color or type tokens.
   Border-radius should reference `{rounded.*}` tokens once the layout skill
   defines them — leave as raw px for now and note in Known Gaps.
+- **Every interactive component carries a `states:` block** with the
+  applicable interaction states. States are **override deltas** over the
+  base component, not full re-declarations. The base block defines the
+  default; each state names only the properties that differ.
+- States vocabulary (apply only the ones the component supports):
+  `hover` · `active` · `focus` · `disabled` · `loading` · `error` ·
+  `selected` · `read-only`.
+- Non-interactive components (e.g. `card`, `hero`, `footer`) omit the
+  `states:` block entirely. Do not invent states a surface cannot trigger.
+
+## State matrix shape
+
+```yaml
+components:
+  <component-name>:
+    # base properties (the default state)
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.button-md}"
+    padding: "14px 24px"
+    height: 48px
+    borderRadius: "{rounded.sm}"
+    states:
+      hover:
+        # only properties that change vs base
+        backgroundColor: "{colors.primary-active}"
+      focus:
+        outline: "2px solid {colors.border-strong}"
+        outlineOffset: "2px"
+      active:
+        backgroundColor: "{colors.primary-active}"
+        transform: "translateY(1px)"
+      disabled:
+        backgroundColor: "{colors.primary-disabled}"
+        textColor: "{colors.on-primary}"
+        cursor: "not-allowed"
+      loading:
+        cursor: "wait"
+        # spinner replaces label — describe behaviour in Components prose
+```
+
+Inheritance rule (downstream consumers must apply this): a state's
+effective spec = base spec ⊕ state delta. Properties absent from the
+state inherit unchanged from base.
 
 ## Base component set (all purposes)
 
@@ -33,14 +77,20 @@ components:
     typography: "{typography.button-md}"
     padding: "14px 24px"
     height: 48px
-
-  button-primary-active:
-    backgroundColor: "{colors.primary-active}"
-    textColor: "{colors.on-primary}"
-
-  button-primary-disabled:
-    backgroundColor: "{colors.primary-disabled}"
-    textColor: "{colors.on-primary}"
+    states:
+      hover:
+        backgroundColor: "{colors.primary-active}"
+      active:
+        backgroundColor: "{colors.primary-active}"
+        transform: "translateY(1px)"
+      focus:
+        outline: "2px solid {colors.border-strong}"
+        outlineOffset: "2px"
+      disabled:
+        backgroundColor: "{colors.primary-disabled}"
+        cursor: "not-allowed"
+      loading:
+        cursor: "wait"   # spinner replaces label — see Components prose
 
   button-secondary:
     backgroundColor: "{colors.canvas}"
@@ -48,11 +98,31 @@ components:
     typography: "{typography.button-md}"
     padding: "13px 23px"
     height: 48px
+    borderColor: "{colors.hairline}"
+    states:
+      hover:
+        backgroundColor: "{colors.surface-soft}"
+      focus:
+        outline: "2px solid {colors.border-strong}"
+        outlineOffset: "2px"
+      disabled:
+        textColor: "{colors.muted-soft}"
+        borderColor: "{colors.hairline-soft}"
+        cursor: "not-allowed"
 
   button-tertiary-text:
     backgroundColor: transparent
     textColor: "{colors.ink}"
     typography: "{typography.button-md}"
+    states:
+      hover:
+        textColor: "{colors.primary}"
+      focus:
+        outline: "2px solid {colors.border-strong}"
+        outlineOffset: "2px"
+      disabled:
+        textColor: "{colors.muted-soft}"
+        cursor: "not-allowed"
 
   text-input:
     backgroundColor: "{colors.canvas}"
@@ -60,16 +130,22 @@ components:
     typography: "{typography.body-md}"
     padding: "14px 12px"
     height: 56px
-
-  text-input-focus:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    borderColor: "{colors.ink}"
-
-  text-input-error:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.error}"
-    borderColor: "{colors.error}"
+    borderColor: "{colors.hairline}"
+    states:
+      focus:
+        borderColor: "{colors.ink}"
+        outline: "2px solid {colors.border-strong}"
+        outlineOffset: "0"
+      error:
+        textColor: "{colors.error}"
+        borderColor: "{colors.error}"
+      disabled:
+        backgroundColor: "{colors.surface-soft}"
+        textColor: "{colors.muted-soft}"
+        cursor: "not-allowed"
+      read-only:
+        backgroundColor: "{colors.surface-soft}"
+        textColor: "{colors.ink}"
 ```
 
 ## Purpose-specific components
@@ -114,10 +190,11 @@ pattern as the base set above.
     textColor: "{colors.ink}"
     typography: "{typography.mono-sm}"
     padding: "12px 16px"
-
-  data-table-row-hover:
-    backgroundColor: "{colors.surface-soft}"
-    textColor: "{colors.ink}"
+    states:
+      hover:
+        backgroundColor: "{colors.surface-soft}"
+      selected:
+        backgroundColor: "{colors.surface-strong}"
 
   badge:
     backgroundColor: "{colors.surface-strong}"
@@ -153,11 +230,15 @@ pattern as the base set above.
     backgroundColor: "{colors.surface-strong}"
     textColor: "{colors.ink}"
     typography: "{typography.button-sm}"
-
-  filter-pill-active:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    typography: "{typography.button-sm}"
+    states:
+      hover:
+        backgroundColor: "{colors.surface-soft}"
+      selected:
+        backgroundColor: "{colors.primary}"
+        textColor: "{colors.on-primary}"
+      focus:
+        outline: "2px solid {colors.border-strong}"
+        outlineOffset: "2px"
 
   cart-item:
     backgroundColor: "{colors.canvas}"
@@ -177,11 +258,9 @@ pattern as the base set above.
     textColor: "{colors.muted}"
     typography: "{typography.caption-sm}"
     height: 56px
-
-  tab-bar-active:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.primary}"
-    typography: "{typography.caption-sm}"
+    states:
+      selected:
+        textColor: "{colors.primary}"
 
   list-row:
     backgroundColor: "{colors.canvas}"

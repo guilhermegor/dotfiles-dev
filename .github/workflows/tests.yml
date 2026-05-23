@@ -1,0 +1,103 @@
+name: tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  makefile:
+    name: make -n (target validity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Dry-run every documented target
+        # `make -n` expands the recipe graph and resolves prerequisites WITHOUT
+        # executing anything, so even destructive targets (format_hard, …) are
+        # safe here. Catches missing-separator/tab errors, undefined targets,
+        # and broken prerequisite chains — the failure class a Makefile edit risks.
+        run: |
+          set -e
+          fail=0
+          targets=$(grep -hoE '^[a-zA-Z_][a-zA-Z0-9_-]*:.*## ' Makefile \
+            | sed 's/:.*//' | sort -u)
+          for t in $targets; do
+            if ! make -n "$t" >/dev/null 2>&1; then
+              echo "::error::make -n $t failed"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+  bats:
+    name: bats (unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+
+      - name: Run bats suite
+        run: bats tests/
+
+  contracts:
+    name: artifact contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate artifact contracts
+        # Makes the frontmatter/name/model invariants in ai_clients/CLAUDE.md
+        # executable. Pure parse-and-assert, no external dependencies.
+        run: bash tests/validate_contracts.sh
+
+  actionlint:
+    name: actionlint (workflow lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run actionlint
+        # Lints the workflow files themselves — catches expression-injection
+        # risks and bad syntax before merge. Pinned; bump VERSION to upgrade.
+        run: |
+          VERSION=1.7.7
+          curl -fsSL \
+            "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz" \
+            | tar -xz actionlint
+          ./actionlint -color
+
+  yamllint:
+    name: yamllint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install yamllint
+        run: pipx install yamllint
+
+      - name: Lint YAML
+        run: yamllint .github/workflows/ espanso/
+
+  gitlint:
+    name: gitlint (commit messages)
+    runs-on: ubuntu-latest
+    # Only meaningful on PRs, where there is a base..head commit range.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install gitlint
+        run: pipx install gitlint-core
+
+      - name: Lint PR commits
+        # SHAs passed via env (not inlined) per workflow-injection guidance.
+        env:
+          RANGE_BASE: ${{ github.event.pull_request.base.sha }}
+          RANGE_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: gitlint --commits "${RANGE_BASE}..${RANGE_HEAD}"

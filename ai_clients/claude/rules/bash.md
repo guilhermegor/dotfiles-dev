@@ -58,6 +58,58 @@ Plain data the caller will parse (a path, a captured value) is **not** status �
 that may still go to stdout via `echo`/`printf`. The rule is about *status*,
 not all output.
 
+## Every script must have `print_status` available — source it or inherit it
+
+`print_status` is non-optional (see above). Every `*.sh` / `*.bash` file must be
+able to call it. Two acceptable ways to make it available:
+
+1. **Source the canonical helper** (preferred) — `lib/common.sh` is the single
+   source of truth (it defines `print_status`, the color vars, the idempotent
+   re-source guard, the source-only guard, and the optional `LOG_FILE` tee):
+
+   ```bash
+   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+   source "$SCRIPT_DIR/lib/common.sh"      # adjust the relative path as needed
+   ```
+
+2. **Ship the helper alongside the script** when it is distributed standalone and
+   cannot reach the repo's `lib/common.sh` (e.g. copied into a generated project):
+   copy `lib/common.sh` next to it and source it. Never silently fall back to bare
+   `echo` for status.
+
+Do not duplicate the implementation in callers — reference `lib/common.sh`. Only
+the re-source guard variable name may differ per project (e.g.
+`_DOTFILES_COMMON_LOADED` → `_BX_COMMON_LOADED`).
+
+## Structure: wrap logic in functions, drive from `main`
+
+No top-to-bottom procedural scripts. Every script organises its logic into named
+functions and ends with a single `main` entrypoint invoked as `main "$@"`. This
+keeps each step named, testable, and greppable, and makes control flow explicit.
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+
+do_thing() {
+    print_status "info" "Doing the thing..."
+    # ...
+}
+
+main() {
+    do_thing
+    print_status "success" "Done"
+}
+
+main "$@"
+```
+
+Exception: a pure library file meant only to be sourced (no entrypoint) defines
+functions and uses the source-only guard instead of a `main`.
+
 ## `cd … || return` in sourced libs, `cd … || exit` only in standalone scripts
 
 Every `cd` needs a failure guard (SC2164) — but which one depends on how the

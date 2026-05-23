@@ -1,5 +1,5 @@
 ---
-name: s:brand-color-system
+name: s:design-color-system
 description: Use when generating the color system for a brand design document.
   Receives the brand profile from conversation context. Produces color tokens
   and the Colors prose section.
@@ -11,13 +11,38 @@ allowed-tools: Read
 Read the brand profile from conversation context. Derive the full color token
 set, then write the Colors prose section.
 
+## Step 0 — Ask the contrast verification mode
+
+Before deriving any color, ask the user **once**:
+
+```
+How should I handle WCAG-AA contrast verification?
+
+  1. Flag only — compute contrast ratios; record any failures in Known Gaps;
+     do not change values. (Lightest touch.)
+  2. Auto-suggest — compute contrast; for each failing pair, propose a
+     darkened/lightened replacement hex and ask accept/override inline.
+  3. Skip — do not run contrast checks. (Not recommended.)
+
+Reply with a single number.
+```
+
+Apply the chosen mode at every contrast-bearing pair check below. If the
+user picks 3, omit the "Flag any failing contrast pair" rule and do not add
+contrast entries to Known Gaps.
+
 ## Rules (never violate)
 
 - Raw hex values live **only** in this token block. Component and typography
   tokens always reference `{colors.*}` — never raw hex.
 - `ink` on `canvas` must meet WCAG AA minimum (4.5:1 contrast ratio).
 - `primary` must be legible as a CTA on both `canvas` and `surface-card`.
-- Flag any failing contrast pair in the final Known Gaps section.
+- Apply the contrast verification mode chosen in Step 0:
+  - **Flag only:** record failing pairs in Known Gaps; do not alter values.
+  - **Auto-suggest:** for each failing pair, propose a corrected hex
+    (darken text or lighten background until ≥ 4.5:1) and ask accept/override
+    before continuing.
+  - **Skip:** do not check or report contrast.
 - Depth-B inspiration signals are already in the brand profile. Do not
   re-fetch any URLs.
 

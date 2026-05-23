@@ -1,5 +1,5 @@
 ---
-name: s:brand-type-system
+name: s:design-type-system
 description: Use when generating the typography system for a brand design
   document. Receives brand profile and color tokens from conversation context.
   Produces font role definitions with fallback stacks, type scale tokens, and

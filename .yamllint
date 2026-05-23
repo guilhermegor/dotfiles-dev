@@ -1,0 +1,11 @@
+# yamllint config — lints workflows and espanso package.yml files.
+# Relaxed base, with the rules that fight GitHub Actions / espanso turned off.
+extends: relaxed
+
+rules:
+  # Workflows and espanso manifests legitimately have long lines.
+  line-length: disable
+  # No mandatory `---` document start.
+  document-start: disable
+  # GitHub Actions `on:` reads as a truthy key; don't flag it.
+  truthy: disable

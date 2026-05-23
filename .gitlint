@@ -1,0 +1,12 @@
+# gitlint config — enforces the commit limits documented in ai_clients/CLAUDE.md.
+# Run locally: gitlint   (lints HEAD)   or   gitlint --commits origin/master..HEAD
+[general]
+ignore-merge-commits=true
+# Single-line commits are allowed; do not require a body.
+ignore=body-is-missing
+
+[title-max-length]
+line-length=72
+
+[body-max-line-length]
+line-length=80

@@ -1,0 +1,25 @@
+name: install-smoke
+
+# Deliberately NOT on pull_request: the install orchestrators can reach the
+# network for un-wrapped curl/wget steps, so this is non-deterministic and must
+# not gate a PR. It runs on demand and weekly to catch registry/sourcing drift.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+jobs:
+  dry-run:
+    name: DRY_RUN install orchestrators
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Dry-run install_programs
+        # validate_registry runs at startup (every INSTALL_REGISTRY func must be
+        # defined); </dev/null feeds EOF to the single menu read so the script
+        # validates then exits without installing anything.
+        run: DRY_RUN=1 bash distro_config/install_programs.sh </dev/null
+
+      - name: Dry-run install_coding
+        run: DRY_RUN=1 bash distro_config/install_coding.sh </dev/null

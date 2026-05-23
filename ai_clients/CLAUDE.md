@@ -12,6 +12,21 @@ Only `ai_clients/claude/` is wired up today. New clients follow the same
 pattern: add `ai_clients/<name>/main.sh` and it is auto-discovered by
 `ai_clients/main.sh`.
 
+## The restore-`.env` prompt
+
+`ai_clients/lib/restore_env_prompt.sh` defines `prompt_restore_env()`, which
+asks `[y/N]` whether to restore git-ignored `.env` files from an external
+backup drive. On yes it runs `~/.local/bin/restore-env.sh` if installed,
+otherwise falls back to the in-repo `storage/restore_env.sh`.
+
+It fires at the top of `ai_clients/main.sh`'s `main()`, and also as the
+`make restore_env_prompt` target, which `make init` runs *first* so that
+`install_programs` / `install_coding` can read restored `.env` values. The
+`init` target exports `DOTFILES_INIT_IN_PROGRESS=1`; `main.sh` checks it and
+skips its own prompt during an `init` run to avoid asking twice. This helper
+is **not** a `claude/main.sh` STEPS-registry step — it is client-agnostic and
+must run before client discovery.
+
 ## Three artifact types
 
 ### 1. Commands (slash commands)
@@ -129,6 +144,8 @@ language the artifact targets:
 | `bash-` | Bash scripts | `bash-create` |
 | `gh-` | GitHub CLI (`gh`) | `gh-create-pr` |
 | `git-` | Git commands | `git-rebase` (hypothetical) |
+| `design-` | Cross-tier design-family primitives (tokens, interview, exports) shared across the three design tiers | `design-color-system`, `design-token-export`, `design-write-language` |
+| `brand-` | Brand-tier–specific concerns (identity, voice, logo, brand book assembly) | `brand-identity`, `brand-logo-imagery`, `brand-write-book` |
 
 **Rules:**
 - Use the tool/CLI name as prefix when the skill wraps a specific external
@@ -141,6 +158,85 @@ language the artifact targets:
   `gh-create-pr.md` is correct).
 - The `name` field in frontmatter follows the same pattern with the
   namespace prefix: `s:gh-create-pr`, `s:py-audit`, `c:commit-code`.
+
+## Design family (3-tier agent architecture)
+
+The repo ships **three independent agents** that mirror the three deliverables
+of a professional design org. They share a foundation library of `design-*`
+skills and compose through on-disk artifacts — never through agent-to-agent
+calls.
+
+### Tiers
+
+| Tier | Agent | Output | Machine export |
+|---|---|---|---|
+| Brand | `a:brand-design` | `design/brand/brand-book.md` (prose-first identity manual + 5-colour identity palette + 1–3 typefaces) | none |
+| Language | `a:design-language` | `design/language/<purpose>.md` (foundation tokens + Overview/Colors/Type/Layout/Elevation/Motion/Responsive prose) | `tokens.*.json` + `theme.css` |
+| System | `a:design-system` | `design/system/<purpose>.md` (foundations + components-with-`states:` + themes + accessibility audit + governance/changelog) | `tokens.*.json` + `theme.css` |
+
+Tiers conceptually nest (system ⊃ language ⊃ brand), but agents stay
+independent. Each higher tier's `s:design-interview` checks disk for a
+lower tier's artifact and offers to reuse it; if absent, it gathers
+what it needs itself.
+
+### Skill split
+
+- **`design-*` skills** — tier-neutral primitives reused across language
+  and system tiers (and lightly by brand): `design-interview`,
+  `design-color-system`, `design-type-system`, `design-layout-system`,
+  `design-motion-system`, `design-component-system`,
+  `design-accessibility-audit`, `design-theming`, `design-governance`,
+  `design-token-export`. Plus per-tier writers `design-write-language`
+  and `design-write-system`.
+- **`brand-*` skills** — brand-tier–specific: `brand-identity`,
+  `brand-logo-imagery`, `brand-write-book`. The brand tier owns its own
+  palette + typeface picks at identity level; the full token scale
+  lives in design-language.
+
+### Runtime choices
+
+Format/behavior decisions are deferred to the *runtime user*, not baked in:
+
+- `s:design-token-export` asks **which JSON shape(s)** to emit (W3C DTCG /
+  flat namespaced / Style Dictionary) and **which CSS naming** to use
+  (dot-flattened / path-preserved / Tailwind v4 `@theme`).
+- `s:design-color-system` asks **WCAG verification mode** (flag-only /
+  auto-suggest replacements / skip).
+- `s:design-theming` asks **which theme variants** to generate (dark /
+  high-contrast / compact / none).
+
+### Output directory layout
+
+```
+design/
+├── brand/
+│   └── brand-book.md
+├── language/
+│   ├── <purpose>.md
+│   ├── tokens.dtcg.json        (per export selection)
+│   ├── tokens.flat.json
+│   ├── tokens.style-dictionary.json
+│   └── theme.css
+└── system/
+    ├── <purpose>.md
+    ├── tokens.*.json
+    └── theme.css
+```
+
+`<purpose>` is the kebab-case surface slug (e.g. `web-app`, `app-cellphone`,
+`dashboard`, `ecommerce`). The brand book is per-brand (one file, no
+purpose suffix); language and system docs are per-purpose.
+
+### Do-not list (architecture invariants)
+
+- Agents never invoke each other. Reuse is always via on-disk artifacts
+  read by `s:design-interview`.
+- The brand tier never produces a full token scale or component spec —
+  those belong to language and system respectively.
+- The language tier never produces a `components:` block — components
+  are the system tier's concern.
+- The markdown frontmatter is the canonical source of truth for tokens.
+  JSON / CSS exports are pure derivations emitted by `s:design-token-export`.
 
 ## Deployment
 

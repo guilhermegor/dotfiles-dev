@@ -1,12 +1,13 @@
 ---
-name: s:brand-interview
-description: Use when starting a brand design session to conduct the brand
-  interview. Receives brand name, purpose, and inspiration depth from the
-  calling agent. Asks questions adaptively until a complete brand profile
-  can be produced.
+name: s:design-interview
+description: Use when starting any tier of a design session (brand, language,
+  or system) to gather the brand profile. Receives brand name, purpose, and
+  inspiration depth from the calling agent. Detects and offers to reuse any
+  lower-tier artifact already on disk, then asks questions adaptively until
+  a complete brand profile can be produced.
 effort: high
 argument-hint: [brand-name] [purpose] [depth-a|b|c]
-allowed-tools: WebFetch
+allowed-tools: Read WebFetch
 ---
 
 Ask questions **one at a time**. Never ask multiple questions in one message.
@@ -14,6 +15,49 @@ Ask questions **one at a time**. Never ask multiple questions in one message.
 You already have the brand name, design purpose, and inspiration depth from
 `$ARGUMENTS`. Do not ask for them again. If any of the three is missing from
 `$ARGUMENTS`, ask only for the missing item(s) before proceeding.
+
+## Step 0 — Artifact-reuse detection
+
+Before any interview questions, check the filesystem for an existing
+lower-tier artifact that can seed this session:
+
+- If called by **a:design-language** or **a:design-system**, look for
+  `design/brand/brand-book.md`. If present, read it and offer:
+
+  ```
+  Found an existing brand book at design/brand/brand-book.md
+  (brand: <name>, last updated: <mtime>).
+
+  Reuse its identity, voice, palette personality, and typeface choices as
+  the seed for this session?
+
+    Y — reuse (I'll only ask about new surface/system concerns)
+    N — fresh interview (ignore the file)
+  ```
+
+- If called by **a:design-system**, additionally look for
+  `design/language/<purpose>.md` and `design/language/tokens.dtcg.json`
+  (or `tokens.flat.json` / `tokens.style-dictionary.json`). If present:
+
+  ```
+  Found published design language tokens at
+  design/language/<purpose>.md (+ <tokens file>).
+
+  Consume these tokens directly?
+
+    Y — skip foundation skills (color/type/layout/motion) and go straight
+        to component specs
+    N — re-derive foundations (ignore the file)
+  ```
+
+On **Y**, summarise what was seeded ("Seeding from brand book: palette
+{primary, ink, canvas}, body=Inter, display=Playfair Display, register=
+Balanced. Skipping universal questions 1–6.") and skip to the
+purpose-specific questions only.
+
+On **N**, proceed with the full interview below.
+
+If no lower-tier artifact exists, proceed silently with the full interview.
 
 ## Universal questions (always, in this order)
 

@@ -19,7 +19,7 @@ matches:
         params:
           layout: |
             Create and switch to a new branch after sync? [[proceed]]
-            
+
             Branch naming convention: <purpose>/<branch-task>
             Purposes: feature|feat, bugfix|fix, hotfix, release, docs, refactor, chore
             Examples: feat/user-authentication, fix/login-validation-issue, docs/update-api-reference

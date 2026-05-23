@@ -17,7 +17,7 @@
 .PHONY: init
 # Exported so ai_clients/main.sh skips its own restore-env prompt during init.
 init: export DOTFILES_INIT_IN_PROGRESS=1
-init: restore_env_prompt permissions setup_env install_programs install_espanso_packages install_coding ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace  ## Complete initial setup (RECOMMENDED first-time entry point)
+init: banner restore_env_prompt permissions setup_env install_programs install_espanso_packages install_coding ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace  ## Complete initial setup (RECOMMENDED first-time entry point)
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -264,7 +264,10 @@ editors_setup: vscode_setup ai_clients  ## Setup all code editors + AI clients
 
 ##@ Utilities
 
-.PHONY: check_status list_scripts clean
+.PHONY: banner check_status list_scripts clean
+
+banner:  ## Print the DOTFILES-DEV ASCII banner
+	@bash lib/banner.sh
 
 check_status:  ## Show distribution info and executable scripts
 	@echo "Checking system status..."
@@ -317,6 +320,7 @@ clean:  ## Remove *.log, *.tmp, *~ files under config/driver/os/storage/editor d
 # section headers. To add a new target to the help output, append `  ## …` to
 # its declaration line.
 help:  ## Show this help message
+	@bash lib/banner.sh
 	@awk 'BEGIN { \
 		FS = ":.*?## "; \
 		printf "\n\033[1mDOTFILES-DEV — Make targets\033[0m\n\n"; \

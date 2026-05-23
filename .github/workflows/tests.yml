@@ -93,7 +93,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install gitlint
-        run: pipx install gitlint
+        run: pipx install gitlint-core
 
       - name: Lint PR commits
         # SHAs passed via env (not inlined) per workflow-injection guidance.

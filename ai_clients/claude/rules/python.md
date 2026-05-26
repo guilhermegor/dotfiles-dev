@@ -156,3 +156,19 @@ def to_br_format(dt: date) -> str:
 - Prefer `pd.DataFrame.pipe` chains over in-place mutation.
 - Seed all RNG explicitly: `np.random.default_rng(seed=42)`.
 - scikit-learn: always wrap in a `Pipeline`; never fit outside it.
+
+## Project Tooling — Makefile ↔ tasks.sh sync
+
+Python projects scaffolded from the standard template expose every command through
+two parallel interfaces: `Makefile` (for `make`) and `tasks.sh` (for environments
+without `make`). **They must always stay in sync.**
+
+When you add, rename, or remove a Makefile target:
+
+1. Make the identical change in `tasks.sh`:
+   - Add/rename/remove the shell **function**.
+   - Add/rename/remove the **`case`** branch in the `MAIN` section.
+   - Add/rename/remove the entry in **`show_help`**.
+2. The same rule applies in reverse — `tasks.sh` changes must be mirrored in the Makefile.
+
+Verify by running `make help` and `./tasks.sh help` side-by-side after any change.

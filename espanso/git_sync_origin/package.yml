@@ -1,0 +1,30 @@
+name: git_sync_origin
+description: Sync all local tracking branches to match origin state
+parent: default
+
+matches:
+  - trigger: ":git_sync_origin"
+    replace: "{{output}}"
+    vars:
+      - name: confirm
+        type: form
+        params:
+          layout: |
+            Sync all local branches to match origin? [[confirm]]
+
+            Safe operations only:
+            - Fast-forward local branches that are only behind origin
+            - Delete local branches whose remote was deleted (skipped if unpushed commits exist)
+
+            Branches with unpushed commits are never modified or deleted.
+          fields:
+            confirm:
+              type: choice
+              values:
+                - "yes"
+                - "no"
+              default: "no"
+      - name: output
+        type: shell
+        params:
+          cmd: "if [ '{{confirm}}' = 'yes' ]; then bash ~/.config/espanso/packages/git_sync_origin/git_sync_origin.sh 2>&1; else echo 'Sync cancelled.'; fi"

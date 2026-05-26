@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gitpull_safe.sh - Safely update local main from origin/main, optionally create a branch or reset the current branch to main.
+# gitpull_safe.sh - Safely update local default branch from origin, optionally create a branch or reset the current branch.
 
 set -euo pipefail
 
@@ -21,21 +21,65 @@ print_usage() {
   echo "       $(basename "$0") --reset-current-branch-to-main"
 }
 
+detect_default_branch() {
+  local default_branch
+  default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+
+  if [ -z "$default_branch" ]; then
+    git remote set-head origin --auto >/dev/null 2>&1 || true
+    default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+  fi
+
+  if [ -z "$default_branch" ]; then
+    if git show-ref --verify --quiet refs/remotes/origin/main; then
+      default_branch="main"
+    elif git show-ref --verify --quiet refs/remotes/origin/master; then
+      default_branch="master"
+    else
+      echo "Could not determine default branch from origin." >&2
+      exit 1
+    fi
+  fi
+
+  echo "$default_branch"
+}
+
+check_unpushed_commits() {
+  local current_branch="$1"
+  local default_branch="$2"
+
+  [ "$current_branch" = "$default_branch" ] && return 0
+
+  local upstream
+  upstream=$(git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null || echo "")
+
+  local ahead_count
+  if [ -n "$upstream" ]; then
+    ahead_count=$(git rev-list --count "${upstream}..HEAD" 2>/dev/null || echo "0")
+  else
+    ahead_count=$(git rev-list --count "origin/${default_branch}..HEAD" 2>/dev/null || echo "0")
+  fi
+
+  if [ "$ahead_count" -gt 0 ]; then
+    echo "WARNING: Branch '$current_branch' has $ahead_count unpushed commit(s)."
+    echo "Push your work before syncing to avoid losing those commits."
+    exit 1
+  fi
+}
+
 ensure_git_repository_state() {
-  # Must be inside a git repo.
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
     echo "Not inside a git repository."
     exit 1
   }
 
-  # Stop if there are uncommitted or untracked changes.
   if [ -n "$(git status --porcelain)" ]; then
     echo "Working tree is not clean. Commit/stash/discard changes first."
     git status --short
     exit 1
   fi
 
-  # Stop if a merge/rebase/cherry-pick is in progress.
+  local git_dir
   git_dir="$(git rev-parse --git-dir)"
   if [ -d "$git_dir/rebase-merge" ] || [ -d "$git_dir/rebase-apply" ] || [ -f "$git_dir/MERGE_HEAD" ] || [ -f "$git_dir/CHERRY_PICK_HEAD" ]; then
     echo "Git operation in progress (merge/rebase/cherry-pick). Resolve it first."
@@ -43,11 +87,12 @@ ensure_git_repository_state() {
   fi
 }
 
-sync_main_branch() {
+sync_default_branch() {
+  local default_branch="$1"
   git fetch origin --prune
-  git switch main
-  git pull --ff-only origin main
-  echo "Local main is now up to date with origin/main."
+  git switch "$default_branch"
+  git pull --ff-only origin "$default_branch"
+  echo "Local $default_branch is now up to date with origin/$default_branch."
 }
 
 force_invalid=0
@@ -86,30 +131,32 @@ fi
 
 ensure_git_repository_state
 
-if [ "$reset_current_branch_to_main" -eq 1 ]; then
-  current_branch="$(git branch --show-current)"
+current_branch="$(git branch --show-current)"
+default_branch="$(detect_default_branch)"
 
+if [ "$reset_current_branch_to_main" -eq 1 ]; then
   if [ -z "$current_branch" ]; then
     echo "Detached HEAD is not supported for --reset-current-branch-to-main."
     exit 1
   fi
 
-  sync_main_branch
+  check_unpushed_commits "$current_branch" "$default_branch"
+  sync_default_branch "$default_branch"
 
-  if [ "$current_branch" = "main" ]; then
-    echo "Current branch is already main. Nothing else to reset."
+  if [ "$current_branch" = "$default_branch" ]; then
+    echo "Current branch is already $default_branch. Nothing else to reset."
     exit 0
   fi
 
   git switch "$current_branch"
-  git reset --hard main
-  echo "Reset branch '$current_branch' to match main without deleting the branch."
+  git reset --hard "$default_branch"
+  echo "Reset branch '$current_branch' to match $default_branch without deleting the branch."
   exit 0
 fi
 
-sync_main_branch
+check_unpushed_commits "$current_branch" "$default_branch"
+sync_default_branch "$default_branch"
 
-# Optional: create a new branch if argument is passed.
 if [ -n "$branch_name" ]; then
   if ! is_valid_branch_name "$branch_name"; then
     echo "Invalid branch name: $branch_name"

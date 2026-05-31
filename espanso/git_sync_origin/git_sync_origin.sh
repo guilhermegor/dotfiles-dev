@@ -28,6 +28,16 @@ count_commits_not_on_any_remote() {
   echo "$count"
 }
 
+detect_default_branch() {
+  if git show-ref --verify --quiet refs/remotes/origin/master 2>/dev/null; then
+    echo "master"
+  elif git show-ref --verify --quiet refs/remotes/origin/main 2>/dev/null; then
+    echo "main"
+  else
+    echo ""
+  fi
+}
+
 ensure_git_repository
 
 current_branch="$(git branch --show-current)"
@@ -50,17 +60,24 @@ for branch in "${local_branches[@]}"; do
   upstream=$(git for-each-ref --format='%(upstream:short)' "refs/heads/$branch")
 
   if [ -z "$upstream" ]; then
-    if [ "$branch" = "$current_branch" ]; then
-      no_upstream+=("$branch (current branch, no upstream)")
-    else
-      unpushed_count=$(count_commits_not_on_any_remote "$branch")
-      if [ "$unpushed_count" -gt 0 ]; then
-        no_upstream+=("$branch ($unpushed_count unpushed commit(s), no upstream)")
-      else
-        git branch -D "$branch"
-        deleted+=("$branch")
-      fi
+    unpushed_count=$(count_commits_not_on_any_remote "$branch")
+    if [ "$unpushed_count" -gt 0 ]; then
+      no_upstream+=("$branch ($unpushed_count unpushed commit(s), no upstream)")
+      continue
     fi
+
+    if [ "$branch" = "$current_branch" ]; then
+      default_branch=$(detect_default_branch)
+      if [ -z "$default_branch" ]; then
+        no_upstream+=("$branch (current branch, no upstream — could not detect default branch)")
+        continue
+      fi
+      git checkout "$default_branch"
+      current_branch="$default_branch"
+    fi
+
+    git branch -D "$branch"
+    deleted+=("$branch")
     continue
   fi
 
@@ -68,19 +85,24 @@ for branch in "${local_branches[@]}"; do
   git show-ref --verify --quiet "refs/remotes/$upstream" 2>/dev/null && remote_exists=1
 
   if [ "$remote_exists" -eq 0 ]; then
-    if [ "$branch" = "$current_branch" ]; then
-      skipped_unpushed+=("$branch (current branch, remote deleted — switch away first)")
-      continue
-    fi
-
     unpushed_count=$(count_commits_not_on_any_remote "$branch")
     if [ "$unpushed_count" -gt 0 ]; then
       skipped_unpushed+=("$branch ($unpushed_count unpushed commit(s), remote deleted)")
-    else
-      # All commits are reachable from some remote — safe to force-delete.
-      git branch -D "$branch"
-      deleted+=("$branch")
+      continue
     fi
+
+    if [ "$branch" = "$current_branch" ]; then
+      default_branch=$(detect_default_branch)
+      if [ -z "$default_branch" ]; then
+        skipped_unpushed+=("$branch (current branch, remote deleted — could not detect default branch)")
+        continue
+      fi
+      git checkout "$default_branch"
+      current_branch="$default_branch"
+    fi
+
+    git branch -D "$branch"
+    deleted+=("$branch")
     continue
   fi
 

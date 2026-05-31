@@ -459,6 +459,26 @@ install_newsflash() {
 }
 
 # ============================================================================
+# WEATHER
+# ============================================================================
+
+install_mousam() {
+    print_status "section" "MOUSAM WEATHER APP"
+
+    if flatpak list 2>/dev/null | grep -q "io.github.amit9838.mousam"; then
+        print_status "info" "Mousam already installed"
+        return 0
+    fi
+
+    setup_flatpak
+
+    print_status "info" "Installing Mousam via Flatpak..."
+    run_or_echo flatpak install -y flathub io.github.amit9838.mousam
+    print_status "success" "Mousam installed"
+    print_status "config" "Launch: flatpak run io.github.amit9838.mousam"
+}
+
+# ============================================================================
 # ESPANSO (TEXT EXPANDER)
 # ============================================================================
 
@@ -568,5 +588,6 @@ INSTALL_REGISTRY+=(
     "install_valor_digital:Valor Digital (Valor Econômico):Newsletter:valor-digital.desktop"
     "install_linear:Linear (Project Management):DEV:linear.desktop"
     "install_miro:Miro Collaboration Tool:DEV:miro.desktop"
+    "install_mousam:Mousam Weather App:OrgPessoal:io.github.amit9838.mousam.desktop"
     "install_espanso:Espanso (Text Expander)::"
 )

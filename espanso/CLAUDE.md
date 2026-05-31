@@ -29,7 +29,7 @@ espanso/<package-name>/
 | `ssh_generate` | `:sshgen` | Interactive SSH key generator with GUI prompts |
 | `ssh_list` | `:sshlist` | List SSH public keys and copy selected to clipboard |
 | `gh_protect_branch` | `:gh_protect_branch` | Apply standard GitHub branch protection to default branch |
-| `git_sync_origin` | `:git_sync_origin` | Sync all local tracking branches to match origin (fast-forward only; warns and skips branches with unpushed commits) |
+| `git_sync_origin` | `:git_sync_origin` | Sync all local tracking branches to match origin (fast-forward only; deletes or reports no-upstream branches; warns and skips branches with unpushed commits) |
 
 ## `package.yml` conventions
 

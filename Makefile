@@ -264,7 +264,10 @@ editors_setup: vscode_setup ai_clients  ## Setup all code editors + AI clients
 
 ##@ Utilities
 
-.PHONY: banner check_status list_scripts clean
+.PHONY: banner check_status list_scripts clean patch_claudestatus
+
+patch_claudestatus:  ## Patch @howells/claudestatus billing table (re-run after npm updates)
+	@bash ai_clients/claude/lib/patch_claudestatus.sh
 
 banner:  ## Print the DOTFILES-DEV ASCII banner
 	@bash lib/banner.sh

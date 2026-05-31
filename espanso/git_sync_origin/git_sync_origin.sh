@@ -42,6 +42,7 @@ skipped_unpushed=()
 skipped_diverged=()
 skipped_current_dirty=()
 already_in_sync=()
+no_upstream=()
 
 mapfile -t local_branches < <(git branch --format='%(refname:short)')
 
@@ -49,6 +50,17 @@ for branch in "${local_branches[@]}"; do
   upstream=$(git for-each-ref --format='%(upstream:short)' "refs/heads/$branch")
 
   if [ -z "$upstream" ]; then
+    if [ "$branch" = "$current_branch" ]; then
+      no_upstream+=("$branch (current branch, no upstream)")
+    else
+      unpushed_count=$(count_commits_not_on_any_remote "$branch")
+      if [ "$unpushed_count" -gt 0 ]; then
+        no_upstream+=("$branch ($unpushed_count unpushed commit(s), no upstream)")
+      else
+        git branch -D "$branch"
+        deleted+=("$branch")
+      fi
+    fi
     continue
   fi
 
@@ -111,6 +123,12 @@ if [ "${#deleted[@]}" -gt 0 ]; then
   echo ""
   echo "Deleted — remote removed (${#deleted[@]}):"
   for b in "${deleted[@]}"; do echo "  - $b"; done
+fi
+
+if [ "${#no_upstream[@]}" -gt 0 ]; then
+  echo ""
+  echo "Local only — no upstream (${#no_upstream[@]}):"
+  for b in "${no_upstream[@]}"; do echo "  ? $b"; done
 fi
 
 if [ "${#already_in_sync[@]}" -gt 0 ]; then

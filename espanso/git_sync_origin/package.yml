@@ -14,9 +14,10 @@ matches:
 
             Safe operations only:
             - Fast-forward local branches that are only behind origin
-            - Delete local branches whose remote was deleted (skipped if unpushed commits exist)
+            - Delete local branches whose remote was deleted and whose work is
+              already on origin (including squash/rebase merges)
 
-            Branches with unpushed commits are never modified or deleted.
+            Branches with genuinely unmerged work are never modified or deleted.
           fields:
             confirm:
               type: choice

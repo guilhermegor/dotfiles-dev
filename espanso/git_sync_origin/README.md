@@ -16,16 +16,17 @@ For each local branch that has a configured upstream tracking branch:
 | Branch is behind origin (no unpushed commits) | Fast-forward to origin |
 | Branch is ahead of origin (unpushed commits) | Warn and skip |
 | Remote branch was deleted, no unpushed commits | Delete local branch |
-| Remote branch was deleted, has unpushed commits | Warn and skip |
+| Remote branch was deleted, but its diff is already in the default branch (squash/rebase merge) | Delete local branch |
+| Remote branch was deleted, has genuinely unmerged commits | Warn and skip |
 | Current branch is behind, working tree dirty | Warn and skip |
 
-Local branches with no tracking upstream are always ignored.
+Local branches whose remote is gone *and* have no tracking upstream are handled the same way: deleted if fully merged (directly or squashed), otherwise reported.
 
 ## Safety guarantees
 
-- Branches with any commit absent from every remote are never modified or deleted.
+- A branch is deleted only when its work is provably already on a remote — either every commit is reachable from some remote ref, **or** its entire diff is already contained in the default branch (`origin/master` / `origin/main`). Branches that still carry unmerged work are never modified or deleted.
 - The current checked-out branch is never force-updated — only pulled with `--ff-only` if the working tree is clean.
-- Force-delete (`-D`) is used only when `git rev-list --count <branch> --not --remotes` returns zero — meaning every commit on that branch is reachable from some remote ref.
+- Squash- and rebase-merges rewrite commits to new SHAs, so `git rev-list --count <branch> --not --remotes` (which compares by commit identity) reports them as unpushed. To avoid leaving these branches behind as phantom "unpushed" cruft, the script also checks patch equivalence: it synthesises a commit holding the branch's whole diff on top of its merge-base and asks `git cherry` whether the default branch already contains that patch.
 
 ## Output
 
@@ -42,6 +43,9 @@ Updated (2):
 
 Deleted — remote removed (1):
   - chore/old-cleanup
+
+Deleted — squash-merged into master (1):
+  - feat/old-squashed-pr
 
 Already in sync (1):
   = master

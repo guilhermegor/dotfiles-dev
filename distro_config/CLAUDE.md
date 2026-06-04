@@ -145,17 +145,17 @@ Existing folders and their purpose:
 
 | dconf key | Display name | Typical contents |
 |-----------|--------------|-----------------|
-| `Sistema` | Sistema | System tools, settings, file manager |
-| `Seguranca` | Segurança | Security, antivirus, backup |
-| `Utilitarios` | Utilitários | General utilities (screenshots, image editors…) |
+| `Sistema` | System | System tools, settings, file manager |
+| `Seguranca` | Security | Security, antivirus, backup |
+| `Utilitarios` | Utilities | General utilities (screenshots, image editors…) |
 | `Media` | Media | Video players, audio players, media tools |
 | `Sharing` | Sharing | File-sharing and remote-desktop apps |
 | `IRPF` | IRPF | Brazilian tax program |
 | `DEV` | DEV | IDEs, terminals, DB clients, Docker |
 | `Ereader` | Ereader | E-book readers |
 | `Office` | Office | LibreOffice suite |
-| `OrgPessoal` | Organização Pessoal | Calendars, tasks, email, productivity |
-| `AmbienteVirtual` | Ambiente Virtual | VMs and virtualisation |
+| `OrgPessoal` | Personal Organization | Calendars, tasks, email, productivity |
+| `AmbienteVirtual` | Operating System | VMs and virtualisation |
 
 For **pre-installed system apps** (e.g. `gnome-control-center.desktop`, `mission-center.desktop`) that no install function manages, append them to the static `<id>_app_names` arrays inside `organize_app_folders()`. The registry merge runs alongside the static arrays — both contribute to the same folder.
 

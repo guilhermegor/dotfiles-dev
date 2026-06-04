@@ -4,7 +4,7 @@ description: Fix GitHub Actions CI failures on a PR — fetches the latest
   failed run, analyses errors (user-chosen model), applies fixes
   (user-chosen model), commits, pushes to origin, and loops until CI is
   green or a hard stop is reached
-model: sonnet
+model: opus
 color: red
 memory: true
 effort: high

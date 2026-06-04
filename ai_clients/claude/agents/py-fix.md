@@ -1,7 +1,7 @@
 ---
 name: a:py-fix
 description: Fix a Python bug using test-driven development — diagnose, write failing test, fix, verify, review.
-model: sonnet
+model: opus
 color: red
 memory: true
 disable-model-invocation: true

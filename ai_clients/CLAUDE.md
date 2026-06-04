@@ -74,7 +74,7 @@ argument-hint: <hint shown in autocomplete>  # optional but recommended
 ---
 name: a:<kebab-name>          # a: namespace prefix is mandatory
 description: <one-line trigger description>
-model: sonnet                 # sonnet | opus | haiku
+model: opus                   # sonnet | opus | haiku
 color: green                  # green | blue | yellow | red | purple
 memory: true                  # persist memory across invocations
 disable-model-invocation: true

@@ -5,7 +5,7 @@ description: Generate a full design system document
   interaction-state matrices, theming variants (light/dark/density),
   accessibility audit, and governance (version/status/changelog). Consumes
   an existing design language doc + tokens.json if present.
-model: sonnet
+model: opus
 color: yellow
 memory: true
 disable-model-invocation: true

@@ -5,7 +5,7 @@ description: Generate a brand book (design/brand/brand-book.md) by interviewing
   voice & tone, logo and imagery direction, an identity palette, and typeface
   choices. The identity deliverable of the design family — the design-language
   and design-system tiers consume this artifact when present.
-model: sonnet
+model: opus
 color: purple
 memory: true
 disable-model-invocation: true

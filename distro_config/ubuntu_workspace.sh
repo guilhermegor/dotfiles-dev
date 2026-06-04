@@ -265,14 +265,6 @@ configure_dock() {
         fi
     done
     
-    # 11. DBeaver CE
-    for app in 'dbeaver-ce_dbeaver-ce.desktop' 'dbeaver-ce.desktop' 'dbeaver.desktop' 'io.dbeaver.DBeaverCommunity.desktop'; do
-        if result=$(find_desktop_file "$app"); then
-            favorites+=("'$result'")
-            break
-        fi
-    done
-    
     # Convert array to comma-separated string
     local favorites_str
     favorites_str=$(IFS=,; echo "${favorites[*]}")
@@ -394,8 +386,8 @@ organize_app_folders() {
     # Initialize array to store folder IDs
     local folder_ids=()
     
-    # ==================== SISTEMA (SYSTEM) FOLDER ====================
-    print_status "info" "Creating Sistema folder..."
+    # ==================== SYSTEM FOLDER ====================
+    print_status "info" "Creating System folder..."
     local sistema_apps=()
     
     # System applications - common desktop file names
@@ -491,17 +483,17 @@ organize_app_folders() {
     if [ ${#sistema_apps[@]} -gt 0 ]; then
         local sistema_apps_str
         sistema_apps_str=$(IFS=,; echo "${sistema_apps[*]}")
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ name 'Sistema'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ name 'System'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Sistema/ apps "[${sistema_apps_str}]"
         folder_ids+=("'Sistema'")
-        print_status "success" "Sistema folder created with ${#sistema_apps[@]} apps"
+        print_status "success" "System folder created with ${#sistema_apps[@]} apps"
         print_status "config" "  Apps: ${sistema_apps_str}"
     else
-        print_status "warning" "No Sistema apps found"
+        print_status "warning" "No System apps found"
     fi
     
-    # ==================== SEGURANÇA (SECURITY) FOLDER ====================
-    print_status "info" "Creating Segurança folder..."
+    # ==================== SECURITY FOLDER ====================
+    print_status "info" "Creating Security folder..."
     local seguranca_apps=()
     
     # Security and Backup applications
@@ -546,17 +538,17 @@ organize_app_folders() {
     if [ ${#seguranca_apps[@]} -gt 0 ]; then
         local seguranca_apps_str
         seguranca_apps_str=$(IFS=,; echo "${seguranca_apps[*]}")
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ name 'Segurança'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ name 'Security'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Seguranca/ apps "[${seguranca_apps_str}]"
         folder_ids+=("'Seguranca'")
-        print_status "success" "Segurança folder created with ${#seguranca_apps[@]} apps"
+        print_status "success" "Security folder created with ${#seguranca_apps[@]} apps"
         print_status "config" "  Apps: ${seguranca_apps_str}"
     else
-        print_status "warning" "No Segurança apps found"
+        print_status "warning" "No Security apps found"
     fi
     
-    # ==================== UTILITÁRIOS (UTILITIES) FOLDER ====================
-    print_status "info" "Creating Utilitários folder..."
+    # ==================== UTILITIES FOLDER ====================
+    print_status "info" "Creating Utilities folder..."
     local utilitarios_apps=()
     
     local utility_app_names=(
@@ -647,13 +639,13 @@ organize_app_folders() {
     if [ ${#utilitarios_apps[@]} -gt 0 ]; then
         local utilitarios_apps_str
         utilitarios_apps_str=$(IFS=,; echo "${utilitarios_apps[*]}")
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ name 'Utilitários'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ name 'Utilities'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilitarios/ apps "[${utilitarios_apps_str}]"
         folder_ids+=("'Utilitarios'")
-        print_status "success" "Utilitários folder created with ${#utilitarios_apps[@]} apps"
+        print_status "success" "Utilities folder created with ${#utilitarios_apps[@]} apps"
         print_status "config" "  Apps: ${utilitarios_apps_str}"
     else
-        print_status "warning" "No Utilitários apps found"
+        print_status "warning" "No Utilities apps found"
     fi
 
     # ==================== MEDIA FOLDER ====================
@@ -1014,8 +1006,8 @@ EOF
         print_status "warning" "No Office apps found"
     fi
     
-    # ==================== ORGANIZAÇÃO PESSOAL FOLDER ====================
-    print_status "info" "Creating Organização Pessoal folder..."
+    # ==================== PERSONAL ORGANIZATION FOLDER ====================
+    print_status "info" "Creating Personal Organization folder..."
     local org_pessoal_apps=()
 
     local org_pessoal_app_names=(
@@ -1053,17 +1045,17 @@ EOF
     if [ ${#org_pessoal_apps[@]} -gt 0 ]; then
         local org_pessoal_apps_str
         org_pessoal_apps_str=$(IFS=,; echo "${org_pessoal_apps[*]}")
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ name 'Organização Pessoal'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ name 'Personal Organization'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ apps "[${org_pessoal_apps_str}]"
         folder_ids+=("'OrgPessoal'")
-        print_status "success" "Organização Pessoal folder created with ${#org_pessoal_apps[@]} apps"
+        print_status "success" "Personal Organization folder created with ${#org_pessoal_apps[@]} apps"
         print_status "config" "  Apps: ${org_pessoal_apps_str}"
     else
-        print_status "warning" "No Organização Pessoal apps found"
+        print_status "warning" "No Personal Organization apps found"
     fi
     
-    # ==================== AMBIENTE VIRTUAL FOLDER ====================
-    print_status "info" "Creating Ambiente Virtual folder..."
+    # ==================== OPERATING SYSTEM FOLDER ====================
+    print_status "info" "Creating Operating System folder..."
     local ambiente_virtual_apps=()
 
     local virtualization_app_names=(
@@ -1119,13 +1111,13 @@ EOF
     if [ ${#ambiente_virtual_apps[@]} -gt 0 ]; then
         local ambiente_virtual_apps_str
         ambiente_virtual_apps_str=$(IFS=,; echo "${ambiente_virtual_apps[*]}")
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ name 'Ambiente Virtual'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ name 'Operating System'
         run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ apps "[${ambiente_virtual_apps_str}]"
         folder_ids+=("'AmbienteVirtual'")
-        print_status "success" "Ambiente Virtual folder created with ${#ambiente_virtual_apps[@]} apps"
+        print_status "success" "Operating System folder created with ${#ambiente_virtual_apps[@]} apps"
         print_status "config" "  Apps: ${ambiente_virtual_apps_str}"
     else
-        print_status "warning" "No Ambiente Virtual apps found"
+        print_status "warning" "No Operating System apps found"
     fi
     
     # ==================== BROWSERS FOLDER ====================

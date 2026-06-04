@@ -1,7 +1,7 @@
 ---
 name: a:py-pr
 description: Validate Python code is PR-ready — review, audit, test coverage, and summary report. Trigger before creating a pull request.
-model: sonnet
+model: opus
 color: blue
 memory: true
 disable-model-invocation: true

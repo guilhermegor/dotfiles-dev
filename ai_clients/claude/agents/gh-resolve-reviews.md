@@ -4,7 +4,7 @@ description: Resolve GitHub PR review comments end-to-end — fetches all review
   comments, drafts replies and code changes, presents an overview, then either
   walks through each comment step-by-step with user confirmation (guided) or
   prints the full resolution plan for the user to handle independently (self)
-model: sonnet
+model: opus
 color: blue
 memory: true
 effort: high

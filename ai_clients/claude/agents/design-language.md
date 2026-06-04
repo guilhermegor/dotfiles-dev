@@ -5,7 +5,7 @@ description: Generate a design language / foundations document
   (tokens.*.json, theme.css) by interviewing the user about their brand and
   producing the full token primitives — color, typography, layout, motion —
   in the awesome-design-md format. Consumes an existing brand book if present.
-model: sonnet
+model: opus
 color: blue
 memory: true
 disable-model-invocation: true

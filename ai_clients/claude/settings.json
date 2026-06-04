@@ -2,7 +2,7 @@
   "env": {
     "DISABLE_PROMPT_CACHING": "false"
   },
-  "model": "sonnet",
+  "model": "opus",
   "smallFastModel": "haiku",
   "voiceEnabled": true,
   "permissions": {

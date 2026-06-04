@@ -1,7 +1,7 @@
 ---
 name: a:py-dev
 description: Run the full Python development pipeline — create/improve, audit, optimise, refactor, review, test, and document a Python module.
-model: sonnet
+model: opus
 color: green
 memory: true
 disable-model-invocation: true

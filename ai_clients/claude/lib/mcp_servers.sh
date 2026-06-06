@@ -17,7 +17,7 @@ install_mcp_servers() {
     _install_context7 "$env_file"
     _install_tavily "$env_file"
     _install_playwright_mcp
-    _install_notesnook
+    _install_notesnook "$env_file"
 }
 
 _install_tavily() {
@@ -59,9 +59,12 @@ _install_playwright_mcp() {
 
 _install_notesnook() {
     # Notesnook is a local HTTP/SSE daemon (port 3457), not a hosted URL or an
-    # npx package — so we clone + build the upstream repo and let its own
-    # installer own the build/systemd/wizard steps, then register the SSE
-    # endpoint with Claude. Runtime prerequisite: the Notesnook desktop app.
+    # npx package. We deliberately do NOT run upstream's install.sh: its final
+    # step launches the server in the FOREGROUND ("first-run wizard"), which
+    # never returns and would hang this orchestrator. Instead we drive the
+    # non-blocking steps ourselves while still sourcing the build scripts and
+    # the systemd unit template from upstream. Runtime prereq: Notesnook desktop.
+    local env_file="$1"
     local repo_url="https://github.com/johnfire/openclaw-notesnook-mcp.git"
     local install_dir="$HOME/.local/share/notesnook-mcp"
     local sse_url="http://localhost:3457/sse"
@@ -83,6 +86,20 @@ _install_notesnook() {
         return 0
     fi
 
+    # Resolve the sync folder: prefer .env (non-interactive), else prompt.
+    local sync_root=""
+    if [ -f "$env_file" ]; then
+        sync_root=$(grep -E '^NOTESNOOK_SYNC_ROOT=' "$env_file" | head -1 | cut -d'=' -f2-)
+    fi
+    if [ -z "$sync_root" ]; then
+        read -rp "Enter the full path to your Notesnook sync folder: " sync_root
+    fi
+    if [ -z "$sync_root" ]; then
+        print_status "warning" "No Notesnook sync folder provided — skipping notesnook"
+        return 0
+    fi
+    sync_root="${sync_root/#\~/$HOME}"
+
     if [ ! -d "$install_dir" ]; then
         print_status "info" "Cloning notesnook MCP to $install_dir..."
         if ! git clone --depth=1 --quiet "$repo_url" "$install_dir"; then
@@ -91,12 +108,37 @@ _install_notesnook() {
         fi
     fi
 
-    print_status "info" "Running upstream notesnook installer (interactive)"
-    print_status "info" "It prompts for a sync folder and enables a systemd user service"
-    print_status "info" "Runtime prerequisite: the Notesnook desktop app"
-    if ! (cd "$install_dir" && ./install.sh); then
-        print_status "error" "notesnook installer failed — skipping registration"
+    print_status "info" "Building notesnook MCP (npm install + build)..."
+    if ! (cd "$install_dir" && npm install --no-fund --no-audit && npm run build); then
+        print_status "error" "notesnook build failed — skipping notesnook"
         return 1
+    fi
+    if [ ! -f "$install_dir/dist/index.js" ]; then
+        print_status "error" "notesnook build incomplete (no dist/index.js) — skipping"
+        return 1
+    fi
+
+    mkdir -p "$sync_root/export" "$sync_root/import"
+
+    # Install the systemd user service from upstream's unit template, then
+    # enable+start it in the background (systemctl returns immediately, unlike
+    # the foreground `node` invocation in upstream's wizard).
+    local template="$install_dir/notesnook-mcp.service"
+    if command -v systemctl &>/dev/null && [ -f "$template" ]; then
+        local service_dir="$HOME/.config/systemd/user"
+        mkdir -p "$service_dir"
+        sed \
+            -e "s|INSTALL_DIR|$install_dir|g" \
+            -e "s|SYNC_ROOT_PATH|$sync_root|g" \
+            "$template" > "$service_dir/notesnook-mcp.service"
+        systemctl --user daemon-reload
+        if systemctl --user enable --now notesnook-mcp 2>/dev/null; then
+            print_status "success" "notesnook-mcp systemd user service started"
+        else
+            print_status "warning" "notesnook-mcp service installed but could not start"
+        fi
+    else
+        print_status "warning" "systemctl unavailable — start the server manually"
     fi
 
     claude mcp add --scope user \
@@ -105,6 +147,7 @@ _install_notesnook() {
         "$sse_url"
 
     print_status "success" "notesnook MCP registered (SSE transport, user scope)"
+    print_status "info" "Export notes from Notesnook desktop into: $sync_root/export"
 }
 
 _install_context7() {

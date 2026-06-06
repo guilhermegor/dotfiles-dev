@@ -36,10 +36,27 @@ teardown() {
 
 # ── Example test 1 (provided) ────────────────────────────────────────────────
 
-@test "bare Enter (default no) skips and returns 0" {
+@test "bare Enter skips when .env exists (default no)" {
+    touch "$REPO_ROOT/.env"
     run prompt_restore_env <<< ""
     [ "$status" -eq 0 ]
     [[ "$output" == *"Skipping .env restore."* ]]
+}
+
+# ── New: existence-aware default ─────────────────────────────────────────────
+# When the repo-root .env is absent (fresh setup), the default flips to yes, so
+# a bare Enter proceeds with the restore instead of skipping.
+
+@test "bare Enter restores when .env is absent (default yes)" {
+    cat > "$HOME/.local/bin/restore-env.sh" <<'STUB'
+#!/bin/bash
+echo "INSTALLED-RAN"
+STUB
+    chmod +x "$HOME/.local/bin/restore-env.sh"
+
+    run prompt_restore_env <<< ""
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"INSTALLED-RAN"* ]]
 }
 
 # ── Example test 2 (provided) ────────────────────────────────────────────────

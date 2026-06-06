@@ -25,10 +25,21 @@ fi
 
 # Ask whether to restore .env files; on yes, delegate to the installed
 # restore-env.sh binary, falling back to the in-repo storage/restore_env.sh.
-# Default is no (bare Enter skips). Never aborts the caller — returns instead.
+# The default adapts to the repo-root .env (the file downstream installs read):
+# present → default no (don't clobber an existing config); absent → default yes
+# (a fresh setup needs values before installs run). Bare Enter takes the default.
+# Never aborts the caller — returns instead.
 prompt_restore_env() {
     local reply
-    read -rp "Restore .env files from an external drive? [y/N]: " reply
+    if [[ -f "$REPO_ROOT/.env" ]]; then
+        read -rp "Restore .env files from an external drive? [y/N]: " reply
+        reply="${reply:-n}"
+    else
+        print_status "info" "No .env at $REPO_ROOT — restore recommended on a fresh setup"
+        read -rp "Restore .env files from an external drive? [Y/n]: " reply
+        reply="${reply:-y}"
+    fi
+
     if [[ ! "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]; then
         print_status "info" "Skipping .env restore."
         return 0

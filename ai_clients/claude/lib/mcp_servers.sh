@@ -92,7 +92,17 @@ _install_notesnook() {
         sync_root=$(grep -E '^NOTESNOOK_SYNC_ROOT=' "$env_file" | head -1 | cut -d'=' -f2-)
     fi
     if [ -z "$sync_root" ]; then
-        local default_sync_root="$HOME/Documents/Notesnook"
+        # Resolve the localized XDG Documents dir (e.g. Documentos on pt-BR)
+        # so we don't create an English "Documents" alongside the real one.
+        # Fall back to ~/Documents when xdg-user-dir is missing or unset ($HOME).
+        local docs_dir=""
+        if command -v xdg-user-dir &>/dev/null; then
+            docs_dir=$(xdg-user-dir DOCUMENTS 2>/dev/null)
+        fi
+        if [ -z "$docs_dir" ] || [ "$docs_dir" = "$HOME" ]; then
+            docs_dir="$HOME/Documents"
+        fi
+        local default_sync_root="$docs_dir/Notesnook"
         read -rp "Notesnook sync folder [$default_sync_root]: " sync_root
         sync_root="${sync_root:-$default_sync_root}"
     fi

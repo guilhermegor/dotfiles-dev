@@ -17,6 +17,7 @@ install_mcp_servers() {
     _install_context7 "$env_file"
     _install_tavily "$env_file"
     _install_playwright_mcp
+    _install_notesnook
 }
 
 _install_tavily() {
@@ -54,6 +55,56 @@ _install_playwright_mcp() {
         npx @playwright/mcp@latest
 
     print_status "success" "playwright MCP registered (stdio transport, user scope)"
+}
+
+_install_notesnook() {
+    # Notesnook is a local HTTP/SSE daemon (port 3457), not a hosted URL or an
+    # npx package — so we clone + build the upstream repo and let its own
+    # installer own the build/systemd/wizard steps, then register the SSE
+    # endpoint with Claude. Runtime prerequisite: the Notesnook desktop app.
+    local repo_url="https://github.com/johnfire/openclaw-notesnook-mcp.git"
+    local install_dir="$HOME/.local/share/notesnook-mcp"
+    local sse_url="http://localhost:3457/sse"
+
+    if claude mcp list 2>/dev/null | grep -q '^notesnook'; then
+        print_status "info" "notesnook MCP already registered — skipping"
+        return 0
+    fi
+
+    if ! command -v git &>/dev/null; then
+        print_status "warning" "git not found — skipping notesnook"
+        return 0
+    fi
+
+    local node_major
+    node_major=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1)
+    if [ -z "$node_major" ] || [ "$node_major" -lt 22 ]; then
+        print_status "warning" "Node.js >= 22 required — skipping notesnook"
+        return 0
+    fi
+
+    if [ ! -d "$install_dir" ]; then
+        print_status "info" "Cloning notesnook MCP to $install_dir..."
+        if ! git clone --depth=1 --quiet "$repo_url" "$install_dir"; then
+            print_status "error" "git clone failed — skipping notesnook"
+            return 1
+        fi
+    fi
+
+    print_status "info" "Running upstream notesnook installer (interactive)"
+    print_status "info" "It prompts for a sync folder and enables a systemd user service"
+    print_status "info" "Runtime prerequisite: the Notesnook desktop app"
+    if ! (cd "$install_dir" && ./install.sh); then
+        print_status "error" "notesnook installer failed — skipping registration"
+        return 1
+    fi
+
+    claude mcp add --scope user \
+        --transport sse \
+        notesnook \
+        "$sse_url"
+
+    print_status "success" "notesnook MCP registered (SSE transport, user scope)"
 }
 
 _install_context7() {

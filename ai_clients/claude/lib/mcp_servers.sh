@@ -92,11 +92,9 @@ _install_notesnook() {
         sync_root=$(grep -E '^NOTESNOOK_SYNC_ROOT=' "$env_file" | head -1 | cut -d'=' -f2-)
     fi
     if [ -z "$sync_root" ]; then
-        read -rp "Enter the full path to your Notesnook sync folder: " sync_root
-    fi
-    if [ -z "$sync_root" ]; then
-        print_status "warning" "No Notesnook sync folder provided — skipping notesnook"
-        return 0
+        local default_sync_root="$HOME/Documents/Notesnook"
+        read -rp "Notesnook sync folder [$default_sync_root]: " sync_root
+        sync_root="${sync_root:-$default_sync_root}"
     fi
     sync_root="${sync_root/#\~/$HOME}"
 
@@ -127,7 +125,13 @@ _install_notesnook() {
     if command -v systemctl &>/dev/null && [ -f "$template" ]; then
         local service_dir="$HOME/.config/systemd/user"
         mkdir -p "$service_dir"
+        # Upstream's unit hardcodes /usr/bin/node, which is absent on version-
+        # manager setups (asdf/nvm). Substitute the resolved node path so the
+        # service can actually start under systemd's minimal environment.
+        local node_bin
+        node_bin=$(command -v node)
         sed \
+            -e "s|/usr/bin/node|$node_bin|g" \
             -e "s|INSTALL_DIR|$install_dir|g" \
             -e "s|SYNC_ROOT_PATH|$sync_root|g" \
             "$template" > "$service_dir/notesnook-mcp.service"

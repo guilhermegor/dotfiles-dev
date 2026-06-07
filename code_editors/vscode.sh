@@ -7,6 +7,57 @@ LOG_FILE="$HOME/vscode_configuration_$(date +%Y%m%d_%H%M%S).log"
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 
+# VS Code's settings.json / keybindings.json are JSONC: they allow // and /* */
+# comments and trailing commas, which jq cannot parse. strip_jsonc emits strict
+# JSON so jq can read the file. It is string-aware, so "//" or "/*" inside a
+# value (e.g. a URL) is left intact. Falls back to the raw file if python3 is
+# unavailable. Output is JSON values only — comments are not preserved (jq
+# rewrites drop them anyway), but the original file is always backed up first.
+strip_jsonc() {
+    local file="$1"
+    [ -f "$file" ] || { echo "{}"; return 0; }
+    if command -v python3 &> /dev/null; then
+        python3 - "$file" <<'PYEOF'
+import sys, re
+try:
+    s = open(sys.argv[1], encoding="utf-8").read()
+except OSError:
+    sys.stdout.write("{}"); sys.exit(0)
+out, i, n = [], 0, len(s)
+in_str = esc = False
+while i < n:
+    c = s[i]
+    if in_str:
+        out.append(c)
+        if esc:
+            esc = False
+        elif c == "\\":
+            esc = True
+        elif c == '"':
+            in_str = False
+        i += 1
+        continue
+    if c == '"':
+        in_str = True; out.append(c); i += 1; continue
+    if c == "/" and i + 1 < n and s[i + 1] == "/":
+        while i < n and s[i] != "\n":
+            i += 1
+        continue
+    if c == "/" and i + 1 < n and s[i + 1] == "*":
+        i += 2
+        while i + 1 < n and not (s[i] == "*" and s[i + 1] == "/"):
+            i += 1
+        i += 2
+        continue
+    out.append(c); i += 1
+res = re.sub(r",(\s*[}\]])", r"\1", "".join(out))  # strip trailing commas
+sys.stdout.write(res)
+PYEOF
+    else
+        cat "$file"
+    fi
+}
+
 # ============================================================================
 # VS CODE CONFIGURATION FUNCTIONS
 # ============================================================================
@@ -28,12 +79,12 @@ backup_current_config() {
         # Display critical settings for reference
         print_status "info" "📊 Your current visual settings:"
         if command -v jq &> /dev/null; then
-            local current_font_size
-            current_font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$config_dir/settings.json")
-            local current_zoom
-            current_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$config_dir/settings.json")
-            local current_theme
-            current_theme=$(jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' "$config_dir/settings.json")
+            local clean_json
+            clean_json=$(strip_jsonc "$config_dir/settings.json")
+            local current_font_size current_zoom current_theme
+            current_font_size=$(echo "$clean_json" | jq -r '.["editor.fontSize"] // "14 (default)"' 2>/dev/null || echo "14 (default)")
+            current_zoom=$(echo "$clean_json" | jq -r '.["window.zoomLevel"] // "0 (default)"' 2>/dev/null || echo "0 (default)")
+            current_theme=$(echo "$clean_json" | jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' 2>/dev/null || echo "Default Dark Modern")
             echo "  • Font size: $current_font_size"
             echo "  • Zoom level: $current_zoom"
             echo "  • Theme: $current_theme"
@@ -148,9 +199,10 @@ configure_keybindings() {
     local temp_file
     temp_file=$(mktemp)
     
-    # Read existing keybindings
+    # Read existing keybindings (JSONC → strict JSON so jq can merge them).
     local existing_keybindings
-    existing_keybindings=$(cat "$keybindings_file" 2>/dev/null || echo '[]')
+    existing_keybindings=$(strip_jsonc "$keybindings_file" 2>/dev/null || echo '[]')
+    [ -n "$existing_keybindings" ] || existing_keybindings='[]'
     
     # Check if the shortcuts already exist
     if echo "$existing_keybindings" | grep -q '"ctrl+k s"'; then
@@ -216,10 +268,13 @@ configure_settings() {
         echo '{}' > "$settings_file"
     fi
     
-    # Read current settings and validate JSON
+    # Read current settings (JSONC → strict JSON so jq can parse + merge it;
+    # without this, a commented settings.json is wrongly seen as "corrupted"
+    # below and reset to {}, discarding all of the user's real settings).
     local current_settings
-    current_settings=$(cat "$settings_file" 2>/dev/null || echo '{}')
-    
+    current_settings=$(strip_jsonc "$settings_file" 2>/dev/null || echo '{}')
+    [ -n "$current_settings" ] || current_settings='{}'
+
     # Validate JSON - if it's malformed, repair or reset it
     if ! echo "$current_settings" | jq empty 2>/dev/null; then
         print_status "warning" "⚠️  Your settings.json has invalid JSON syntax"

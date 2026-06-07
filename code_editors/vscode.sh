@@ -167,16 +167,20 @@ configure_keybindings() {
                 "key": "ctrl+k ctrl+s",
                 "command": "workbench.action.openGlobalKeybindingsFindWidget",
                 "when": "editorTextFocus"
+            },
+            {
+                "key": "ctrl+k ctrl+t",
+                "command": "workbench.action.tasks.test"
             }
         ]' > "$temp_file" 2>/dev/null || {
             print_status "warning" "jq not found, using manual JSON manipulation"
             # Fallback if jq is not installed
             if [ "$existing_keybindings" = "[]" ]; then
-                echo '[{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"}]' > "$temp_file"
+                echo '[{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+t", "command": "workbench.action.tasks.test"}]' > "$temp_file"
             else
                 # Remove the last bracket, add comma and new entry, then add bracket back
                 echo "$existing_keybindings" | sed '$ s/\]//' > "$temp_file"
-                echo ',{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"}]' >> "$temp_file"
+                echo ',{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+t", "command": "workbench.action.tasks.test"}]' >> "$temp_file"
             fi
         }
         
@@ -186,7 +190,7 @@ configure_keybindings() {
         # Copy the new keybindings
         cp "$temp_file" "$keybindings_file"
         
-        print_status "success" "Added Ctrl+K S shortcut for 'Save All' and Ctrl+K Ctrl+S for 'Keyboard Shortcuts Help'"
+        print_status "success" "Added Ctrl+K S shortcut for 'Save All', Ctrl+K Ctrl+S for 'Keyboard Shortcuts Help', and Ctrl+K Ctrl+T for 'Run Test Task'"
     fi
     
     # Clean up temp file

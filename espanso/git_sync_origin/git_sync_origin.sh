@@ -163,7 +163,10 @@ for branch in "${local_branches[@]}"; do
   fi
 
   if [ "$branch" = "$current_branch" ]; then
-    if [ -n "$(git status --porcelain)" ]; then
+    # Only tracked modifications endanger a fast-forward; untracked files do not
+    # (--ff-only aborts safely on the rare untracked-name collision). Excluding
+    # them here stops a stray file like .claude/ from blocking the sync.
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
       skipped_current_dirty+=("$branch (working tree not clean)")
       continue
     fi

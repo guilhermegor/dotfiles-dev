@@ -552,8 +552,17 @@ function formatUsageCell(limit) {
     return `${bar} ${pct}${reset}`;
 }
 
+function planLabel(plan) {
+    if (plan === "max") return chalk.magenta("Max");
+    if (plan === "team") return chalk.blue("Team");
+    if (plan === "free") return chalk.red("Free");
+    if (plan === "pro") return chalk.cyan("Pro");
+    return chalk.gray("—");
+}
+
 function formatStatusCell(account) {
     if (account.error) return chalk.red("✗ Error");
+    if (account.plan === "free") return chalk.red("✗ Free");
     if (account.plan === "unknown") return chalk.yellow("? Unknown");
     return chalk.green("✓ Active");
 }
@@ -561,6 +570,10 @@ function formatStatusCell(account) {
 function getAvailability(account) {
     if (account.error) {
         return { status: "error", waitLabel: account.error, waitMs: Number.POSITIVE_INFINITY, reason: "none" };
+    }
+    // A Free account cannot run Claude Code work — never recommend it.
+    if (account.plan === "free") {
+        return { status: "unusable", waitLabel: "Upgrade", waitMs: Number.POSITIVE_INFINITY, reason: "free" };
     }
     const weekly = account.usage.seven_day;
     const session = account.usage.five_hour;
@@ -576,13 +589,15 @@ function getAvailability(account) {
 }
 
 function formatNextUseLabel(availability) {
+    if (availability.status === "unusable") return chalk.red("Upgrade req.");
     if (availability.status === "available" || availability.waitLabel === "now") return chalk.green("Use now");
     if (availability.reason === "weekly") return chalk.yellow(`Wait until ${availability.waitLabel}`);
     return chalk.yellow(`Wait ${availability.waitLabel}`);
 }
 
 function pickNextAccount(accounts) {
-    const available = accounts.filter((a) => !a.error);
+    // Exclude error rows and Free accounts (Free cannot be used for Pro work).
+    const available = accounts.filter((a) => !a.error && a.plan !== "free");
     if (available.length === 0) return null;
     const scored = available.map((account) => ({
         account,
@@ -615,7 +630,7 @@ export function displayUsageTable(accounts) {
         }
         table.push([
             account.name,
-            account.plan === "max" ? chalk.magenta("Max") : chalk.cyan("Pro"),
+            planLabel(account.plan),
             formatStatusCell(account),
             formatUsageCell(account.usage.five_hour),
             formatUsageCell(account.usage.seven_day),
@@ -636,45 +651,30 @@ export function displayBillingTable(billingData) {
     console.log(chalk.bold("  Billing Status"));
     console.log();
     const table = new Table({
-        head: [chalk.bold("Account"), chalk.bold("Period"), chalk.bold("Days Left"), chalk.bold("Date"), chalk.bold("Auto-Renew")],
+        head: [chalk.bold("Account"), chalk.bold("Plan"), chalk.bold("Paid"), chalk.bold("Renewal"), chalk.bold("Auto-Renew")],
         style: { head: [], border: [] },
-        colWidths: [14, 10, 12, 18, 14],
+        colWidths: [14, 8, 9, 21, 13],
     });
     for (const b of billingData) {
-        if (b.error) {
-            table.push([chalk.yellow(b.name), chalk.gray("—"), chalk.gray("—"), chalk.red(b.error.split("—")[0].trim()), chalk.gray("—")]);
-            continue;
-        }
-        const periodLabel = b.period === "monthly" ? "Monthly" : b.period === "annual" ? "Annual" : chalk.gray("—");
-        let daysLabel = chalk.gray("—");
-        let dateLabel = chalk.gray("—");
+        const paidLabel = b.paid === true ? chalk.green("✓ Paid") : b.paid === false ? chalk.gray("Free") : chalk.gray("—");
+        let renewal = chalk.gray("—");
         if (b.billingDate) {
-            const ms = b.billingDate.getTime() - Date.now();
-            const days = Math.ceil(ms / (1000 * 60 * 60 * 24));
-            dateLabel = b.billingDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-            if (days <= 0) {
-                daysLabel = chalk.red("Expired");
-            }
-            else if (b.autoRenew === false && days <= 7) {
-                daysLabel = chalk.red(`${days}d`);
-            }
-            else if (b.autoRenew === false) {
-                daysLabel = chalk.yellow(`${days}d`);
-            }
-            else {
-                daysLabel = chalk.green(`${days}d`);
-            }
+            const d = new Date(b.billingDate);
+            const days = b.daysLeft != null ? b.daysLeft : Math.ceil((d.getTime() - Date.now()) / 86400000);
+            const dateStr = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+            renewal = `${days <= 0 ? chalk.red("expired") : days + "d"} · ${dateStr}`;
+        } else if (b.daysLeft != null) {
+            renewal = b.daysLeft <= 0 ? chalk.red("expired") : `~${b.daysLeft}d`;
+        } else if (b.error) {
+            renewal = chalk.yellow(b.error.split("—")[0].trim());
         }
-        const autoRenewLabel = b.autoRenew === true
-            ? chalk.green("✓ Auto")
-            : b.autoRenew === false
-                ? chalk.red("✗ Expires")
-                : chalk.gray("—");
-        table.push([b.name, periodLabel, daysLabel, dateLabel, autoRenewLabel]);
+        const autoRenewLabel = b.autoRenew === true ? chalk.green("✓ Auto") : b.autoRenew === false ? chalk.red("✗ Expires") : chalk.gray("—");
+        table.push([b.name, planLabel(b.plan), paidLabel, renewal, autoRenewLabel]);
     }
     console.log(table.toString());
     console.log();
 }
+
 export function displayQuickRecommendation(accounts) {
     const next = pickNextAccount(accounts);
     if (!next) {
@@ -697,16 +697,31 @@ DISPLAY_EOF
 
 _claudestatus_patch_api() {
     local api_js="$1"
+    # Rewrite the usage-path plan snippets to classifyPlan() (free/pro/max/team).
+    python3 - "$api_js" <<'PLAN_EOF'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+old = ('        const plan = org.capabilities.includes("claude_max")\n'
+       '            ? "max"\n'
+       '            : org.capabilities.includes("chat")\n'
+       '                ? "pro"\n'
+       '                : "unknown";')
+s2 = s.replace(old, '        const plan = classifyPlan(org.capabilities);')
+if s2 != s:
+    p.write_text(s2)
+PLAN_EOF
     grep -q "fetchBillingForAccount" "$api_js" && return 0
     cat >> "$api_js" << 'API_EOF'
-const PT_MONTHS = {
-    jan: 0, fev: 1, mar: 2, abr: 3, mai: 4, jun: 5,
-    jul: 6, ago: 7, set: 8, out: 9, nov: 10, dez: 11,
-};
-const EN_MONTHS = {
-    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
-};
+function classifyPlan(capabilities) {
+    const c = capabilities || [];
+    if (c.includes("claude_max")) return "max";
+    if (c.includes("claude_pro")) return "pro";
+    if (c.includes("raven")) return "team";
+    if (c.includes("chat")) return "free";
+    return "unknown";
+}
+const PT_MONTHS = { jan: 0, fev: 1, mar: 2, abr: 3, mai: 4, jun: 5, jul: 6, ago: 7, set: 8, out: 9, nov: 10, dez: 11 };
+const EN_MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
 function parseBillingDate(day, monthStr, year, locale) {
     const table = locale === "pt" ? PT_MONTHS : EN_MONTHS;
     const m = table[monthStr.slice(0, 3).toLowerCase()];
@@ -718,43 +733,100 @@ function parseBillingText(text) {
     let period = "unknown";
     let autoRenew = null;
     let billingDate = null;
+    let daysLeft = null;
+    // Relative day counters from the plan banner (PT: "termina em 12 dias").
+    const relPt = text.match(/termina em (\d+)\s+dias?/i);
+    if (relPt)
+        daysLeft = parseInt(relPt[1], 10);
+    const relEn = text.match(/ends?\s+in\s+(\d+)\s+days?/i);
+    if (daysLeft === null && relEn)
+        daysLeft = parseInt(relEn[1], 10);
+    // Auto-renew signals. "Reassinar" / "Fazer Upgrade" mean the plan is lapsing.
+    if (/reassinar|fazer upgrade|resubscribe/i.test(text))
+        autoRenew = false;
+    else if (/renova(?:ção)?\s+autom|renews automatically|próxima cobran|next billing/i.test(text))
+        autoRenew = true;
     if (/mensal|monthly/i.test(text))
         period = "monthly";
     else if (/anual|annual|yearly/i.test(text))
         period = "annual";
-    // PT cancellation: "será cancelada em DD de MMM. de YYYY"
+    // Absolute-date fallbacks.
     const cancelPt = text.match(/será cancelada em (\d+) de (\w+)\.?\s*de (\d{4})/i);
-    // EN cancellation: "will be cancelled/canceled on Month DD, YYYY" or "subscription cancels on ..."
-    const cancelEn = text.match(/(?:will\s+be\s+cancell?ed|(?:subscription\s+)?cancels)\s+on\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})/i);
-    // PT auto-renew: "será renovada automaticamente em DD de MMM. de YYYY"
-    //             or "próxima cobrança em DD de MMM. de YYYY"
     const renewPt = text.match(/(?:será renovada(?: automaticamente)?|próxima cobrança)\s+em\s+(\d+) de (\w+)\.?\s*de (\d{4})/i);
-    // EN auto-renew: covers "renews [automatically] [on] Month DD", "will renew [on] ...", "next billing/renewal [on] ..."
+    const cancelEn = text.match(/(?:will\s+be\s+cancell?ed|(?:subscription\s+)?cancels)\s+on\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})/i);
     const renewEn = text.match(/(?:(?:will\s+)?renews?(?: automatically)?|next\s+(?:billing|renewal))\s+(?:on\s+)?(\w+)\s+(\d{1,2}),?\s+(\d{4})/i);
     if (cancelPt) {
         autoRenew = false;
         billingDate = parseBillingDate(cancelPt[1], cancelPt[2], cancelPt[3], "pt");
     }
+    else if (renewPt) {
+        if (autoRenew === null)
+            autoRenew = true;
+        billingDate = parseBillingDate(renewPt[1], renewPt[2], renewPt[3], "pt");
+    }
     else if (cancelEn) {
         autoRenew = false;
         billingDate = parseBillingDate(cancelEn[2], cancelEn[1], cancelEn[3], "en");
     }
-    else if (renewPt) {
-        autoRenew = true;
-        billingDate = parseBillingDate(renewPt[1], renewPt[2], renewPt[3], "pt");
-    }
     else if (renewEn) {
-        autoRenew = true;
+        if (autoRenew === null)
+            autoRenew = true;
         billingDate = parseBillingDate(renewEn[2], renewEn[1], renewEn[3], "en");
     }
-    return { period, autoRenew, billingDate };
+    if (!billingDate && daysLeft !== null)
+        billingDate = new Date(Date.now() + daysLeft * 86400000);
+    return { period, autoRenew, billingDate, daysLeft };
+}
+// Cloudflare-free: read plan + paid status straight from the JSON API.
+async function fetchBillingMetaViaApi(storagePath) {
+    if (!fs.existsSync(storagePath))
+        return { plan: "unknown", paid: null };
+    const api = await request.newContext({
+        baseURL: CLAUDE_URL,
+        storageState: storagePath,
+        extraHTTPHeaders: { "User-Agent": USER_AGENT, Accept: "application/json" },
+    });
+    try {
+        const orgsRes = await api.get("/api/organizations");
+        if (!orgsRes.ok())
+            return { plan: "unknown", paid: null };
+        const orgs = await orgsRes.json();
+        const org = orgs.find((o) => o.capabilities?.includes("chat")) || orgs[0];
+        const plan = classifyPlan(org?.capabilities);
+        let paid = plan === "free" ? false : null;
+        if (org?.uuid) {
+            const detail = await api.get(`/api/organizations/${org.uuid}`);
+            if (detail.ok()) {
+                const d = await detail.json();
+                if (typeof d.billing_type === "string")
+                    paid = d.billing_type !== "none";
+            }
+        }
+        return { plan, paid };
+    }
+    catch {
+        return { plan: "unknown", paid: null };
+    }
+    finally {
+        await api.dispose();
+    }
 }
 export async function fetchBillingForAccount(name) {
     const profileDir = getProfileDir(name);
     const storagePath = getStorageStatePath(name);
     if (!fs.existsSync(profileDir) && !fs.existsSync(storagePath)) {
-        return { period: "unknown", autoRenew: null, billingDate: null };
+        return { plan: "unknown", paid: null, period: "unknown", autoRenew: null, billingDate: null, daysLeft: null };
     }
+    // 1) API-first (no Cloudflare): plan + paid/free.
+    const meta = await fetchBillingMetaViaApi(storagePath);
+    const base = { plan: meta.plan, paid: meta.paid, period: "unknown", autoRenew: null, billingDate: null, daysLeft: null };
+    // Free accounts have no subscription to scrape — done, no browser needed.
+    if (meta.plan === "free" || meta.paid === false) {
+        return { ...base, paid: false, period: "free" };
+    }
+    // 2) Best-effort: scrape the plan banner for the renewal date (PT-aware). On a
+    //    Cloudflare/parse failure, return the API plan + paid so the row shows the
+    //    plan instead of a bare "Cloudflare block".
     const contextOpts = {
         headless: false,
         channel: "chrome",
@@ -767,67 +839,47 @@ export async function fetchBillingForAccount(name) {
         ignoreDefaultArgs: ["--enable-automation"],
         viewport: { width: 800, height: 600 },
     };
-    if (fs.existsSync(storagePath)) {
+    if (fs.existsSync(storagePath))
         contextOpts.storageState = storagePath;
-    }
     const context = await chromium.launchPersistentContext(profileDir, contextOpts);
     const page = context.pages()[0] || (await context.newPage());
     try {
-        // Navigate to homepage first to warm up the Cloudflare clearance cookie,
-        // then navigate to billing. Jumping straight to /settings/billing on a
-        // cold profile triggers Cloudflare's bot check.
         await page.goto(CLAUDE_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
         await page.waitForTimeout(2000);
-        await page.goto(`${CLAUDE_URL}/settings/billing`, {
-            waitUntil: "domcontentloaded",
-            timeout: 30000,
-        });
-        // Dismiss the cookie-consent banner — it overlays the billing panel and
-        // its text was being scraped instead of the real billing content.
+        await page.goto(`${CLAUDE_URL}/settings/billing`, { waitUntil: "domcontentloaded", timeout: 30000 });
         try {
             await page.getByRole("button", { name: /reject all|accept all/i }).first().click({ timeout: 3000 });
         }
         catch {
-            // No banner shown — nothing to dismiss.
+            // No cookie banner shown.
         }
-        // Wait for the SPA to render real billing content instead of "Loading…".
-        // A headed real-Chrome session also lets Cloudflare's challenge auto-clear
-        // within this window, so we no longer false-positive on a transient block.
         try {
             await page.waitForFunction(() => {
                 const t = document.body.innerText || "";
-                if (/just a moment/i.test(t)) return false;
-                if (/^\s*loading/i.test(t)) return false;
-                return /(monthly|annual|mensal|anual|renew|renova|cancel|cobran|billing|plan|subscription)/i.test(t);
-            }, { timeout: 25000 });
+                if (/just a moment/i.test(t))
+                    return false;
+                if (/^\s*loading/i.test(t))
+                    return false;
+                return /(termina em|renova|próxima cobran|reassinar|monthly|annual|mensal|anual|renew|cancel|plano|plan)/i.test(t);
+            }, { timeout: 20000 });
         }
         catch {
-            // Timed out — fall through; the Cloudflare / parse checks below report why.
-        }
-        const content = await page.content();
-        if (content.includes("Just a moment") ||
-            content.includes("challenge-platform") ||
-            content.includes("cf-turnstile")) {
-            await context.close();
-            return { period: "unknown", autoRenew: null, billingDate: null, error: "Cloudflare block — run: claudestatus refresh " + name };
+            // Timed out — parse whatever rendered below.
         }
         const text = await page.evaluate(() => document.body.innerText);
-        // Do NOT persist storageState here: a degraded/unauthenticated billing
-        // load would overwrite the good session cookie and brick the account
-        // into a false "Session expired". Billing is read-only — never save.
+        // Read-only flow — never persist storageState (would clobber the session).
         await context.close();
         const parsed = parseBillingText(text);
-        if (!parsed.billingDate && parsed.period === "unknown" && parsed.autoRenew === null) {
-            const debugPath = `/tmp/claudestatus_billing_${name}.txt`;
-            fs.writeFileSync(debugPath, text);
-            return { ...parsed, error: `Could not parse — debug: ${debugPath}` };
+        if (parsed.billingDate || parsed.daysLeft !== null || parsed.period !== "unknown" || parsed.autoRenew !== null) {
+            return { ...base, ...parsed, paid: true };
         }
-        return parsed;
+        fs.writeFileSync(`/tmp/claudestatus_billing_${name}.txt`, text);
+        return { ...base, paid: true };
     }
-    catch (err) {
-        await context.close();
-        const msg = err instanceof Error ? err.message : String(err);
-        return { period: "unknown", autoRenew: null, billingDate: null, error: msg };
+    catch {
+        await context.close().catch(() => { });
+        // Cloudflare / navigation error — still report the API-derived plan + paid.
+        return { ...base, paid: meta.paid === null ? true : meta.paid };
     }
 }
 export async function fetchAllBilling(accountNames) {

@@ -385,9 +385,9 @@ configure_settings() {
         
         # Verify the critical settings are preserved
         local final_font_size
-        final_font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
+        final_font_size=$(strip_jsonc "$settings_file" | jq -r '.["editor.fontSize"] // "14 (default)"')
         local final_zoom
-        final_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
+        final_zoom=$(strip_jsonc "$settings_file" | jq -r '.["window.zoomLevel"] // "0 (default)"')
         
         print_status "success" "✅ Font size preserved: $final_font_size"
         print_status "success" "✅ Zoom level preserved: $final_zoom"
@@ -422,13 +422,13 @@ configure_settings() {
     print_status "info" "🔎 Final configuration check:"
     if command -v jq &> /dev/null; then
         local final_theme
-        final_theme=$(jq -r '.["workbench.colorTheme"] // "Not set"' "$settings_file")
+        final_theme=$(strip_jsonc "$settings_file" | jq -r '.["workbench.colorTheme"] // "Not set"')
         local final_font
-        final_font=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
+        final_font=$(strip_jsonc "$settings_file" | jq -r '.["editor.fontSize"] // "14 (default)"')
         local final_zoom
-        final_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
+        final_zoom=$(strip_jsonc "$settings_file" | jq -r '.["window.zoomLevel"] // "0 (default)"')
         local final_icons
-        final_icons=$(jq -r '.["workbench.iconTheme"] // "material-icon-theme"' "$settings_file")
+        final_icons=$(strip_jsonc "$settings_file" | jq -r '.["workbench.iconTheme"] // "material-icon-theme"')
         
         echo "  • Theme: $final_theme"
         echo "  • Font size: $final_font"
@@ -545,7 +545,7 @@ verify_configuration() {
             
             # Check cursor style (IMPORTANT - ensure it's set)
             local cursor_style
-            cursor_style=$(jq -r '.["editor.cursorStyle"] // empty' "$settings_file")
+            cursor_style=$(strip_jsonc "$settings_file" | jq -r '.["editor.cursorStyle"] // empty')
             checks_total=$((checks_total + 1))
             if [ "$cursor_style" = "block" ]; then
                 print_status "success" "✅ Editor cursor style: block"
@@ -556,21 +556,21 @@ verify_configuration() {
             
             # Check zoom level (CRITICAL for your issue)
             local zoom
-            zoom=$(jq -r '.["window.zoomLevel"] // "0"' "$settings_file")
+            zoom=$(strip_jsonc "$settings_file" | jq -r '.["window.zoomLevel"] // "0"')
             checks_total=$((checks_total + 1))
             print_status "info" "🔍 Zoom level: $zoom"
             checks_passed=$((checks_passed + 1))
             
             # Check font size
             local font_size
-            font_size=$(jq -r '.["editor.fontSize"] // "14"' "$settings_file")
+            font_size=$(strip_jsonc "$settings_file" | jq -r '.["editor.fontSize"] // "14"')
             checks_total=$((checks_total + 1))
             print_status "info" "🔍 Font size: $font_size"
             checks_passed=$((checks_passed + 1))
             
             # Check icon theme
             local icons
-            icons=$(jq -r '.["workbench.iconTheme"] // empty' "$settings_file")
+            icons=$(strip_jsonc "$settings_file" | jq -r '.["workbench.iconTheme"] // empty')
             checks_total=$((checks_total + 1))
             if [ "$icons" = "material-icon-theme" ]; then
                 print_status "success" "✅ Icon theme: material-icon-theme"
@@ -638,13 +638,13 @@ show_final_summary() {
     print_status "config" "🎨 YOUR CURRENT VISUAL SETTINGS:"
     if [ -f "$settings_file" ] && command -v jq &> /dev/null; then
         local theme
-        theme=$(jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' "$settings_file")
+        theme=$(strip_jsonc "$settings_file" | jq -r '.["workbench.colorTheme"] // "Default Dark Modern"')
         local font_size
-        font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
+        font_size=$(strip_jsonc "$settings_file" | jq -r '.["editor.fontSize"] // "14 (default)"')
         local zoom
-        zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
+        zoom=$(strip_jsonc "$settings_file" | jq -r '.["window.zoomLevel"] // "0 (default)"')
         local icons
-        icons=$(jq -r '.["workbench.iconTheme"] // "material-icon-theme"' "$settings_file")
+        icons=$(strip_jsonc "$settings_file" | jq -r '.["workbench.iconTheme"] // "material-icon-theme"')
         
         echo "  • Theme: $theme"
         echo "  • Font size: $font_size"

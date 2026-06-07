@@ -82,9 +82,7 @@ src = src.replace(
     '        return { period: "unknown", autoRenew: null, billingDate: null };\n'
     '    }',
     '        const text = await page.evaluate(() => document.body.innerText);\n'
-    '        // Do NOT persist storageState here: the billing page can load in a\n'
-    '        // degraded/unauthenticated state and saving it overwrites the good\n'
-    '        // session cookie — the bug that bricked accounts into "Session expired".\n'
+    '        await context.storageState({ path: storagePath });\n'
     '        await context.close();\n'
     '        const parsed = parseBillingText(text);\n'
     '        if (!parsed.billingDate && parsed.period === "unknown" && parsed.autoRenew === null) {\n'
@@ -145,6 +143,27 @@ src = src.replace(
     '            await context.close();\n'
     '            return { period: "unknown", autoRenew: null, billingDate: null, error: "Cloudflare block — run: claudestatus refresh " + name };\n'
     '        }\n',
+    1
+)
+
+# ── Patch 5: ROOT-CAUSE — stop the billing flow from clobbering the session ──────
+# The billing page is read-only, but it can load degraded (Cloudflare / "Loading…"
+# / mid-cookie-rotation). Saving storageState from that state overwrote the good
+# session cookie on disk, so the next usage fetch returned 401 and the dashboard
+# showed a FALSE "Session expired" — the bug that nearly triggered a needless
+# re-subscribe. Anchored on the parseBillingText() line so it targets the BILLING
+# save only (the addAccount / usage saves are kept — they run on confirmed auth).
+src = src.replace(
+    '        const text = await page.evaluate(() => document.body.innerText);\n'
+    '        await context.storageState({ path: storagePath });\n'
+    '        await context.close();\n'
+    '        const parsed = parseBillingText(text);\n',
+    '        const text = await page.evaluate(() => document.body.innerText);\n'
+    '        // Do NOT persist storageState here: a degraded/unauthenticated billing\n'
+    '        // load would overwrite the good session cookie and brick the account\n'
+    '        // into a false "Session expired". Billing is read-only — never save.\n'
+    '        await context.close();\n'
+    '        const parsed = parseBillingText(text);\n',
     1
 )
 

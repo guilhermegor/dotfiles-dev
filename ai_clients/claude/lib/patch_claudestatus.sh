@@ -6,6 +6,15 @@
 #   2. cancelEn regex — safer pattern: won't false-match "Cancel on <date>" button text
 #   3. Post-parse null check — writes page text to /tmp for debugging when no pattern matches
 #   4. Silent catch{} — surfaces exception messages instead of blank billing rows
+#   5. No storageState save on the billing flow (ROOT-CAUSE FIX) — billing is
+#      read-only, but the page can load degraded (Cloudflare / "Loading…" /
+#      cookie-rotation). Saving that state overwrote the good session cookie and
+#      bricked accounts into a false "Session expired" in the usage table.
+#   6. Cookie-consent banner dismissal — it overlaid the billing panel, so its text
+#      ("We use cookies…") was scraped instead of the real billing content.
+#   7. Wait for rendered billing content instead of a fixed 4s timeout — fixes empty
+#      / "Could not parse" rows and lets the headed-browser Cloudflare challenge
+#      auto-clear before we decide the account is blocked.
 
 set -euo pipefail
 
@@ -73,7 +82,9 @@ src = src.replace(
     '        return { period: "unknown", autoRenew: null, billingDate: null };\n'
     '    }',
     '        const text = await page.evaluate(() => document.body.innerText);\n'
-    '        await context.storageState({ path: storagePath });\n'
+    '        // Do NOT persist storageState here: the billing page can load in a\n'
+    '        // degraded/unauthenticated state and saving it overwrites the good\n'
+    '        // session cookie — the bug that bricked accounts into "Session expired".\n'
     '        await context.close();\n'
     '        const parsed = parseBillingText(text);\n'
     '        if (!parsed.billingDate && parsed.period === "unknown" && parsed.autoRenew === null) {\n'
@@ -88,6 +99,52 @@ src = src.replace(
     '        const msg = err instanceof Error ? err.message : String(err);\n'
     '        return { period: "unknown", autoRenew: null, billingDate: null, error: msg };\n'
     '    }',
+    1
+)
+
+# ── Patch 4: dismiss cookie banner + wait for real content (not a fixed timeout) ─
+# Replaces the fixed `waitForTimeout(4000)` race. The old code captured the page
+# while it still said "Loading…" behind the cookie-consent banner, producing empty
+# / "Could not parse" rows. Waiting for actual billing keywords also gives the
+# headed-browser Cloudflare challenge time to auto-clear before we flag a block.
+src = src.replace(
+    '        await page.waitForTimeout(4000);\n'
+    '        const content = await page.content();\n'
+    '        if (content.includes("Just a moment") ||\n'
+    '            content.includes("challenge-platform") ||\n'
+    '            content.includes("cf-turnstile")) {\n'
+    '            await context.close();\n'
+    '            return { period: "unknown", autoRenew: null, billingDate: null, error: "Cloudflare block — run: claudestatus refresh " + name };\n'
+    '        }\n',
+    '        // Dismiss the cookie-consent banner — it overlays the billing panel and\n'
+    '        // its text was being scraped instead of the real billing content.\n'
+    '        try {\n'
+    '            await page.getByRole("button", { name: /reject all|accept all/i }).first().click({ timeout: 3000 });\n'
+    '        }\n'
+    '        catch {\n'
+    '            // No banner shown — nothing to dismiss.\n'
+    '        }\n'
+    '        // Wait for the SPA to render real billing content instead of "Loading…".\n'
+    '        // A headed real-Chrome session also lets Cloudflare\'s challenge auto-clear\n'
+    '        // within this window, so we no longer false-positive on a transient block.\n'
+    '        try {\n'
+    '            await page.waitForFunction(() => {\n'
+    '                const t = document.body.innerText || "";\n'
+    '                if (/just a moment/i.test(t)) return false;\n'
+    '                if (/^\\s*loading/i.test(t)) return false;\n'
+    '                return /(monthly|annual|mensal|anual|renew|renova|cancel|cobran|billing|plan|subscription)/i.test(t);\n'
+    '            }, { timeout: 25000 });\n'
+    '        }\n'
+    '        catch {\n'
+    '            // Timed out — fall through; the Cloudflare / parse checks below report why.\n'
+    '        }\n'
+    '        const content = await page.content();\n'
+    '        if (content.includes("Just a moment") ||\n'
+    '            content.includes("challenge-platform") ||\n'
+    '            content.includes("cf-turnstile")) {\n'
+    '            await context.close();\n'
+    '            return { period: "unknown", autoRenew: null, billingDate: null, error: "Cloudflare block — run: claudestatus refresh " + name };\n'
+    '        }\n',
     1
 )
 

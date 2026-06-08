@@ -149,6 +149,7 @@ install_extensions() {
         "bierner.markdown-mermaid"
         "firsttris.vscode-jest-runner"
         "usernamehw.errorlens"
+        "mechatroner.rainbow-csv"
     )
     
     local installed_count=0

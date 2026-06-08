@@ -314,7 +314,7 @@ function formatUsageCell(limit) {
     if (!limit) return chalk.gray("—");
     const bar = usageBar(limit.utilization);
     const pct = limit.utilization.toString().padStart(3) + "%";
-    const reset = chalk.gray(" ↻" + formatResetTime(limit.resets_at));
+    const reset = chalk.gray("   ↻" + formatResetTime(limit.resets_at));
     return `${bar} ${pct}${reset}`;
 }
 
@@ -386,7 +386,7 @@ export function displayUsageTable(accounts) {
     const table = new Table({
         head: [chalk.bold("Account"), chalk.bold("Plan"), chalk.bold("Status"), chalk.bold("Session (5h)"), chalk.bold("Weekly (7d)"), chalk.bold("Next Use")],
         style: { head: [], border: [] },
-        colWidths: [14, 6, 12, 26, 26, 20],
+        colWidths: [14, 6, 12, 30, 30, 20],
     });
     for (const account of accounts) {
         const availability = getAvailability(account);

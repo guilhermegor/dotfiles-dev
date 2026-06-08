@@ -620,7 +620,7 @@ export function displayUsageTable(accounts) {
     const table = new Table({
         head: [chalk.bold("Account"), chalk.bold("Plan"), chalk.bold("Status"), chalk.bold("Session (5h)"), chalk.bold("Weekly (7d)"), chalk.bold("Next Use")],
         style: { head: [], border: [] },
-        colWidths: [14, 6, 12, 22, 22, 20],
+        colWidths: [14, 6, 12, 26, 26, 20],
     });
     for (const account of accounts) {
         const availability = getAvailability(account);

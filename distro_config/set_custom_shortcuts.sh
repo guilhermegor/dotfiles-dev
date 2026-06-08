@@ -413,9 +413,9 @@ read -rp "Press Enter to close..."
 '
 
 if command -v gnome-terminal &>/dev/null; then
-    gnome-terminal -- bash -ic "$cmd"
+    gnome-terminal --maximize -- bash -ic "$cmd"
 elif command -v xterm &>/dev/null; then
-    xterm -e bash -ic "$cmd"
+    xterm -maximized -e bash -ic "$cmd"
 else
     notify-send "claudestatus" \
         "No terminal emulator found. Run 'claudestatus' manually in a terminal."

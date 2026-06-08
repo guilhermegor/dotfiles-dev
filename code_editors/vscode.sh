@@ -7,6 +7,57 @@ LOG_FILE="$HOME/vscode_configuration_$(date +%Y%m%d_%H%M%S).log"
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 
+# VS Code's settings.json / keybindings.json are JSONC: they allow // and /* */
+# comments and trailing commas, which jq cannot parse. strip_jsonc emits strict
+# JSON so jq can read the file. It is string-aware, so "//" or "/*" inside a
+# value (e.g. a URL) is left intact. Falls back to the raw file if python3 is
+# unavailable. Output is JSON values only — comments are not preserved (jq
+# rewrites drop them anyway), but the original file is always backed up first.
+strip_jsonc() {
+    local file="$1"
+    [ -f "$file" ] || { echo "{}"; return 0; }
+    if command -v python3 &> /dev/null; then
+        python3 - "$file" <<'PYEOF'
+import sys, re
+try:
+    s = open(sys.argv[1], encoding="utf-8").read()
+except OSError:
+    sys.stdout.write("{}"); sys.exit(0)
+out, i, n = [], 0, len(s)
+in_str = esc = False
+while i < n:
+    c = s[i]
+    if in_str:
+        out.append(c)
+        if esc:
+            esc = False
+        elif c == "\\":
+            esc = True
+        elif c == '"':
+            in_str = False
+        i += 1
+        continue
+    if c == '"':
+        in_str = True; out.append(c); i += 1; continue
+    if c == "/" and i + 1 < n and s[i + 1] == "/":
+        while i < n and s[i] != "\n":
+            i += 1
+        continue
+    if c == "/" and i + 1 < n and s[i + 1] == "*":
+        i += 2
+        while i + 1 < n and not (s[i] == "*" and s[i + 1] == "/"):
+            i += 1
+        i += 2
+        continue
+    out.append(c); i += 1
+res = re.sub(r",(\s*[}\]])", r"\1", "".join(out))  # strip trailing commas
+sys.stdout.write(res)
+PYEOF
+    else
+        cat "$file"
+    fi
+}
+
 # ============================================================================
 # VS CODE CONFIGURATION FUNCTIONS
 # ============================================================================
@@ -28,12 +79,12 @@ backup_current_config() {
         # Display critical settings for reference
         print_status "info" "📊 Your current visual settings:"
         if command -v jq &> /dev/null; then
-            local current_font_size
-            current_font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$config_dir/settings.json")
-            local current_zoom
-            current_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$config_dir/settings.json")
-            local current_theme
-            current_theme=$(jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' "$config_dir/settings.json")
+            local clean_json
+            clean_json=$(strip_jsonc "$config_dir/settings.json")
+            local current_font_size current_zoom current_theme
+            current_font_size=$(echo "$clean_json" | jq -r '.["editor.fontSize"] // "14 (default)"' 2>/dev/null || echo "14 (default)")
+            current_zoom=$(echo "$clean_json" | jq -r '.["window.zoomLevel"] // "0 (default)"' 2>/dev/null || echo "0 (default)")
+            current_theme=$(echo "$clean_json" | jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' 2>/dev/null || echo "Default Dark Modern")
             echo "  • Font size: $current_font_size"
             echo "  • Zoom level: $current_zoom"
             echo "  • Theme: $current_theme"
@@ -148,9 +199,10 @@ configure_keybindings() {
     local temp_file
     temp_file=$(mktemp)
     
-    # Read existing keybindings
+    # Read existing keybindings (JSONC → strict JSON so jq can merge them).
     local existing_keybindings
-    existing_keybindings=$(cat "$keybindings_file" 2>/dev/null || echo '[]')
+    existing_keybindings=$(strip_jsonc "$keybindings_file" 2>/dev/null || echo '[]')
+    [ -n "$existing_keybindings" ] || existing_keybindings='[]'
     
     # Check if the shortcuts already exist
     if echo "$existing_keybindings" | grep -q '"ctrl+k s"'; then
@@ -167,16 +219,20 @@ configure_keybindings() {
                 "key": "ctrl+k ctrl+s",
                 "command": "workbench.action.openGlobalKeybindingsFindWidget",
                 "when": "editorTextFocus"
+            },
+            {
+                "key": "ctrl+k ctrl+t",
+                "command": "workbench.action.tasks.test"
             }
         ]' > "$temp_file" 2>/dev/null || {
             print_status "warning" "jq not found, using manual JSON manipulation"
             # Fallback if jq is not installed
             if [ "$existing_keybindings" = "[]" ]; then
-                echo '[{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"}]' > "$temp_file"
+                echo '[{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+t", "command": "workbench.action.tasks.test"}]' > "$temp_file"
             else
                 # Remove the last bracket, add comma and new entry, then add bracket back
                 echo "$existing_keybindings" | sed '$ s/\]//' > "$temp_file"
-                echo ',{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"}]' >> "$temp_file"
+                echo ',{"key": "ctrl+k s", "command": "workbench.action.files.saveAll", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+s", "command": "workbench.action.openGlobalKeybindingsFindWidget", "when": "editorTextFocus"},{"key": "ctrl+k ctrl+t", "command": "workbench.action.tasks.test"}]' >> "$temp_file"
             fi
         }
         
@@ -186,7 +242,7 @@ configure_keybindings() {
         # Copy the new keybindings
         cp "$temp_file" "$keybindings_file"
         
-        print_status "success" "Added Ctrl+K S shortcut for 'Save All' and Ctrl+K Ctrl+S for 'Keyboard Shortcuts Help'"
+        print_status "success" "Added Ctrl+K S shortcut for 'Save All', Ctrl+K Ctrl+S for 'Keyboard Shortcuts Help', and Ctrl+K Ctrl+T for 'Run Test Task'"
     fi
     
     # Clean up temp file
@@ -212,10 +268,13 @@ configure_settings() {
         echo '{}' > "$settings_file"
     fi
     
-    # Read current settings and validate JSON
+    # Read current settings (JSONC → strict JSON so jq can parse + merge it;
+    # without this, a commented settings.json is wrongly seen as "corrupted"
+    # below and reset to {}, discarding all of the user's real settings).
     local current_settings
-    current_settings=$(cat "$settings_file" 2>/dev/null || echo '{}')
-    
+    current_settings=$(strip_jsonc "$settings_file" 2>/dev/null || echo '{}')
+    [ -n "$current_settings" ] || current_settings='{}'
+
     # Validate JSON - if it's malformed, repair or reset it
     if ! echo "$current_settings" | jq empty 2>/dev/null; then
         print_status "warning" "⚠️  Your settings.json has invalid JSON syntax"
@@ -326,9 +385,9 @@ configure_settings() {
         
         # Verify the critical settings are preserved
         local final_font_size
-        final_font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
+        final_font_size=$(strip_jsonc "$settings_file" | jq -r '.["editor.fontSize"] // "14 (default)"')
         local final_zoom
-        final_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
+        final_zoom=$(strip_jsonc "$settings_file" | jq -r '.["window.zoomLevel"] // "0 (default)"')
         
         print_status "success" "✅ Font size preserved: $final_font_size"
         print_status "success" "✅ Zoom level preserved: $final_zoom"
@@ -363,13 +422,13 @@ configure_settings() {
     print_status "info" "🔎 Final configuration check:"
     if command -v jq &> /dev/null; then
         local final_theme
-        final_theme=$(jq -r '.["workbench.colorTheme"] // "Not set"' "$settings_file")
+        final_theme=$(strip_jsonc "$settings_file" | jq -r '.["workbench.colorTheme"] // "Not set"')
         local final_font
-        final_font=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
+        final_font=$(strip_jsonc "$settings_file" | jq -r '.["editor.fontSize"] // "14 (default)"')
         local final_zoom
-        final_zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
+        final_zoom=$(strip_jsonc "$settings_file" | jq -r '.["window.zoomLevel"] // "0 (default)"')
         local final_icons
-        final_icons=$(jq -r '.["workbench.iconTheme"] // "material-icon-theme"' "$settings_file")
+        final_icons=$(strip_jsonc "$settings_file" | jq -r '.["workbench.iconTheme"] // "material-icon-theme"')
         
         echo "  • Theme: $final_theme"
         echo "  • Font size: $final_font"
@@ -486,7 +545,7 @@ verify_configuration() {
             
             # Check cursor style (IMPORTANT - ensure it's set)
             local cursor_style
-            cursor_style=$(jq -r '.["editor.cursorStyle"] // empty' "$settings_file")
+            cursor_style=$(strip_jsonc "$settings_file" | jq -r '.["editor.cursorStyle"] // empty')
             checks_total=$((checks_total + 1))
             if [ "$cursor_style" = "block" ]; then
                 print_status "success" "✅ Editor cursor style: block"
@@ -497,21 +556,21 @@ verify_configuration() {
             
             # Check zoom level (CRITICAL for your issue)
             local zoom
-            zoom=$(jq -r '.["window.zoomLevel"] // "0"' "$settings_file")
+            zoom=$(strip_jsonc "$settings_file" | jq -r '.["window.zoomLevel"] // "0"')
             checks_total=$((checks_total + 1))
             print_status "info" "🔍 Zoom level: $zoom"
             checks_passed=$((checks_passed + 1))
             
             # Check font size
             local font_size
-            font_size=$(jq -r '.["editor.fontSize"] // "14"' "$settings_file")
+            font_size=$(strip_jsonc "$settings_file" | jq -r '.["editor.fontSize"] // "14"')
             checks_total=$((checks_total + 1))
             print_status "info" "🔍 Font size: $font_size"
             checks_passed=$((checks_passed + 1))
             
             # Check icon theme
             local icons
-            icons=$(jq -r '.["workbench.iconTheme"] // empty' "$settings_file")
+            icons=$(strip_jsonc "$settings_file" | jq -r '.["workbench.iconTheme"] // empty')
             checks_total=$((checks_total + 1))
             if [ "$icons" = "material-icon-theme" ]; then
                 print_status "success" "✅ Icon theme: material-icon-theme"
@@ -579,13 +638,13 @@ show_final_summary() {
     print_status "config" "🎨 YOUR CURRENT VISUAL SETTINGS:"
     if [ -f "$settings_file" ] && command -v jq &> /dev/null; then
         local theme
-        theme=$(jq -r '.["workbench.colorTheme"] // "Default Dark Modern"' "$settings_file")
+        theme=$(strip_jsonc "$settings_file" | jq -r '.["workbench.colorTheme"] // "Default Dark Modern"')
         local font_size
-        font_size=$(jq -r '.["editor.fontSize"] // "14 (default)"' "$settings_file")
+        font_size=$(strip_jsonc "$settings_file" | jq -r '.["editor.fontSize"] // "14 (default)"')
         local zoom
-        zoom=$(jq -r '.["window.zoomLevel"] // "0 (default)"' "$settings_file")
+        zoom=$(strip_jsonc "$settings_file" | jq -r '.["window.zoomLevel"] // "0 (default)"')
         local icons
-        icons=$(jq -r '.["workbench.iconTheme"] // "material-icon-theme"' "$settings_file")
+        icons=$(strip_jsonc "$settings_file" | jq -r '.["workbench.iconTheme"] // "material-icon-theme"')
         
         echo "  • Theme: $theme"
         echo "  • Font size: $font_size"

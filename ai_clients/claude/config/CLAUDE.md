@@ -315,6 +315,26 @@ its parent directory if they do not exist.
 - Never delete or archive lessons — accumulate them so pattern trends are
   visible over time.
 
+## Scaffolding lessons — capture before moving on (standing instruction)
+
+When work in **any BlueprintX-scaffolded repo** (`mvc-*`, `ddd-*`, `react-*`, and any
+future tier) yields a **generalizable** change — a reusable seam, tooling, convention,
+or guardrail, *not* a project-specific business rule — capture it **before moving on**:
+
+1. Save it in the global store `~/.claude/memory/lessons/` as **one file per lesson**
+   (kebab-case), in the format `# Title` then `Tier / Lesson / Why / Scaffold into /
+   Origin`, and add it to that store's `README.md` index. Tier is one of
+   `language-common`, `python-common`, `language-specific (<lang>)`, or a scaffolding
+   tier (`mvc-*`, `ddd-*`, `react-*`, …).
+2. Mirror it in the originating repo's `docs/blueprintx-lessons.md`, kept
+   **git-ignored** and **excluded from the docs site** (untracked whenever the repo has
+   a remote, so the internal note never ships).
+
+Later, apply the captured lessons to the BlueprintX templates at
+`~/github/blueprintx/templates/` so future scaffolds inherit them instead of
+rediscovering them. Full convention: `~/.claude/memory/lessons/README.md`. This is
+**global — it applies to every project**, not one repo.
+
 ## Compaction
 
 When the context window is compacted, apply this priority order:

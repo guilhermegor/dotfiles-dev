@@ -37,6 +37,15 @@ Exceptions where bare binary is always correct:
 - **Composition over inheritance:** Inject collaborators; avoid deep class hierarchies.
 - **Explicit over implicit:** no hidden side effects, no magic conventions.
 - **Fail fast:** raise meaningful, descriptive errors early.
+- **Root cause over symptom — even when it is more work:** always default to the
+  fix that resolves the problem at its source (the tool, the config, the data, the
+  design), and present that as the primary recommendation, regardless of how much
+  more total labour it is than a workaround, suppression, or exemption. Never nudge
+  toward the lighter option, and never editorialise thoroughness as a "tax",
+  "busywork", or "churn". Effort is not the decision criterion — correctness and
+  durability are. Assume "do it properly and completely" unless told otherwise.
+  (This does not license scope creep: keep the *change* minimal per *Simplicity
+  first*, but make it a real fix, not a patch over the symptom.)
 - **Reproducibility:** prefer automated, deterministic solutions over manual steps.
 - Keep functions/methods small and single-purpose (SRP).
 - Immutability by default; mutate only at well-defined boundaries.

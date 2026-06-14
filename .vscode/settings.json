@@ -183,6 +183,13 @@
   // =============================================
   "terminal.integrated.defaultProfile.windows": "Git Bash",
   "terminal.integrated.fontSize": 14,
+  // Nerd Font so statusLine / powerline / claude-hud icons render instead of
+  // tofu. Installed by code_editors/vscode.sh; falls back to plain Cascadia and
+  // Noto CJK so text + emoji still render if the Nerd Font is not yet present.
+  "terminal.integrated.fontFamily": "'CaskaydiaCove Nerd Font Mono', 'Cascadia Code', 'Noto Sans Mono CJK SC', monospace",
+  // Force the DOM renderer: the WebGL/canvas atlas drops the leading glyph of
+  // bold/colored runs (e.g. "Wrote"->"rote"), corrupting Claude Code's TUI.
+  "terminal.integrated.gpuAcceleration": "off",
   "terminal.integrated.defaultColumns": 118,
   "terminal.integrated.defaultRows": 56,
   "workbench.panel.defaultLocation": "right",

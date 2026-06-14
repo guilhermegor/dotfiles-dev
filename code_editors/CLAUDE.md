@@ -8,7 +8,7 @@ Scripts for setting up and restoring code editor configurations.
 
 | File | What it does |
 |------|-------------|
-| `vscode.sh` | Install extensions, merge `settings.json`, configure keybindings |
+| `vscode.sh` | Install extensions, merge `settings.json`, configure keybindings, install terminal Nerd Font |
 | `vscode_restore.sh` | Restore VS Code config from a backup |
 | `bash_profile_snippet.sh` | Append shell aliases/env vars to `~/.bash_profile` |
 | `setup_starship_bash.sh` | Install and configure the Starship prompt |

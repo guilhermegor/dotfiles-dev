@@ -706,6 +706,59 @@ show_final_summary() {
 # MAIN EXECUTION
 # ============================================================================
 
+install_terminal_font() {
+    print_status "section" "INSTALLING TERMINAL NERD FONT"
+
+    # CaskaydiaCove is the Nerd-Font-patched build of Cascadia Code
+    # (ryanoasis/nerd-fonts). It matches the existing Cascadia family while
+    # adding the Private-Use-Area icon glyphs the terminal statusLine / powerline
+    # segments need — plain Cascadia renders those as tofu. "latest/download" is
+    # GitHub's stable redirect to the newest release asset, so the link never
+    # rots to a pinned dead version.
+    local font_family="CaskaydiaCove Nerd Font"
+    local asset_url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaCode.zip"
+    local fonts_dir="$HOME/.local/share/fonts"
+
+    if fc-list | grep -qi "$font_family"; then
+        print_status "success" "$font_family already installed — skipping"
+        return 0
+    fi
+
+    if ! command -v unzip &> /dev/null; then
+        print_status "error" "unzip is required to install the Nerd Font — install it and re-run"
+        return 1
+    fi
+
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+
+    print_status "info" "Downloading $font_family from ryanoasis/nerd-fonts..."
+    # $LOG_FILE is under $HOME (user-owned); the user shell opens the redirect.
+    # shellcheck disable=SC2024
+    if ! curl -fsSL "$asset_url" -o "$tmp_dir/CascadiaCode.zip" 2>> "$LOG_FILE"; then
+        print_status "error" "Download failed — check network or $LOG_FILE"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    mkdir -p "$fonts_dir"
+    # Only the Mono .ttf variants — they keep terminal columns aligned.
+    if ! unzip -o -j "$tmp_dir/CascadiaCode.zip" "*Mono*.ttf" -d "$fonts_dir" > /dev/null; then
+        print_status "error" "Failed to extract font files from the archive"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    rm -rf "$tmp_dir"
+    fc-cache -f "$fonts_dir" > /dev/null
+
+    if fc-list | grep -qi "$font_family"; then
+        print_status "success" "$font_family installed"
+    else
+        print_status "warning" "Font extracted but not yet visible to fontconfig — log out/in if it does not appear"
+    fi
+}
+
 main() {
     print_status "section" "VS CODE CONFIGURATION SCRIPT"
     print_status "info" "Log file: $LOG_FILE"
@@ -733,6 +786,7 @@ main() {
     configure_keybindings
     configure_settings
     sync_dotfiles_settings
+    install_terminal_font
     verify_configuration
     show_final_summary
 }

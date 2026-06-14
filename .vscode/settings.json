@@ -183,6 +183,9 @@
   // =============================================
   "terminal.integrated.defaultProfile.windows": "Git Bash",
   "terminal.integrated.fontSize": 14,
+  // Force the DOM renderer: the WebGL/canvas atlas drops the leading glyph of
+  // bold/colored runs (e.g. "Wrote"->"rote"), corrupting Claude Code's TUI.
+  "terminal.integrated.gpuAcceleration": "off",
   "terminal.integrated.defaultColumns": 118,
   "terminal.integrated.defaultRows": 56,
   "workbench.panel.defaultLocation": "right",

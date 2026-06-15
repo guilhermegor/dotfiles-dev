@@ -152,6 +152,10 @@
   "workbench.editorAssociations": {
     "*.ipynb": "jupyter-notebook"
   },
+  // Keep the secondary side bar collapsed in every new window/workspace
+  // (toggle on demand with Ctrl+Alt+B). Without this, VS Code shows it by
+  // default when opening a folder.
+  "workbench.secondarySideBar.defaultVisibility": "hidden",
   // =============================================
   // JUPYTER NOTEBOOK SETTINGS
   // =============================================
@@ -170,7 +174,8 @@
   },
   "files.exclude": {
     "**/.git": false,
-    "**/.gitkeep": true
+    "**/.gitkeep": true,
+    "**/.keep": true
   },
   "security.workspace.trust.untrustedFiles": "open",
   // =============================================

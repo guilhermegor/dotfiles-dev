@@ -15,7 +15,7 @@ backup, and capacity analysis.
 | `format_neat.sh` | Quick format — partition table + filesystem only |
 | `data_recovery.sh` | Attempt file recovery with `testdisk` / `photorec` |
 | `check_legitimity.sh` | Verify drive health via SMART data |
-| `backup_external_ssd.sh` | GUI-driven rsync backup of a mounted SSD to a cloud folder |
+| `backup_external_ssd.sh` | GUI-driven `.zip` backup of a mounted SSD to a cloud folder |
 | `storage_hiato.sh` | Detect SSDs, SATA/NVMe slots, report theoretical max capacity |
 
 ## Conventions
@@ -34,8 +34,13 @@ backup, and capacity analysis.
 - Uses `zenity` GUI dialogs — works from the GNOME Super+B keybinding without a terminal.
 - Prompts for the source drive (from mounted drives) and the cloud destination path.
 - Destination path is saved to `~/.config/backup-external-ssd.conf` between runs.
-- Destination structure: `<cloud_path>/<source_drive_name>/<yyyymmdd_hhmmss>/`
-- Uses `rsync -a --exclude='lost+found'` (archive mode, skips unreadable root dirs).
+- Destination structure: `<cloud_path>/<source_drive_name>/<yyyymmdd_hhmmss>.zip`
+- Archives the drive into a single compressed `.zip` (`zip -r -y -q -6`, excluding
+  `lost+found`) streamed directly from the source — no uncompressed mirror is staged,
+  so each run leaves one compact file instead of a full duplicate of the drive.
+- Compression level is the `ZIP_LEVEL` constant (default `6`, zip's balanced default);
+  every level is lossless, higher only trades CPU time for a smaller archive.
+- Requires `zip` (`sudo apt install zip`); the script aborts with a dialog if missing.
 
 ## Adding a new script
 

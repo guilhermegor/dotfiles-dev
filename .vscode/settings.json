@@ -170,7 +170,8 @@
   },
   "files.exclude": {
     "**/.git": false,
-    "**/.gitkeep": true
+    "**/.gitkeep": true,
+    "**/.keep": true
   },
   "security.workspace.trust.untrustedFiles": "open",
   // =============================================

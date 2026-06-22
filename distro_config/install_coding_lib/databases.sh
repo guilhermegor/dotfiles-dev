@@ -86,7 +86,14 @@ install_pgadmin() {
     print_status "section" "PGADMIN4"
 
     print_status "info" "Adding pgAdmin repository..."
-    curl -fsS https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo gpg --dearmor -o /usr/share/keyrings/packages-pgadmin-org.gpg
+    # Idempotent: only import the signing key if it isn't already present, and
+    # use --batch --yes so gpg never prompts "overwrite?" on re-runs (which left
+    # the install looking like it reinstalled every time).
+    if [ ! -f /usr/share/keyrings/packages-pgadmin-org.gpg ]; then
+        curl -fsS https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/packages-pgadmin-org.gpg
+    else
+        print_status "info" "pgAdmin signing key already present — skipping key import"
+    fi
 
     sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/packages-pgadmin-org.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/$(lsb_release -cs) pgadmin4 main" > /etc/apt/sources.list.d/pgadmin4.list'
 

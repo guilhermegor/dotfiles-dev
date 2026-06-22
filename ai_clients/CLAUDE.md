@@ -20,10 +20,10 @@ backup drive. On yes it runs `~/.local/bin/restore-env.sh` if installed,
 otherwise falls back to the in-repo `storage/restore_env.sh`.
 
 It fires at the top of `ai_clients/main.sh`'s `main()`, and also as the
-`make restore_env_prompt` target, which `make init` runs *first* so that
+`make restore_env_prompt` target, which `make run` runs *first* so that
 `install_programs` / `install_coding` can read restored `.env` values. The
-`init` target exports `DOTFILES_INIT_IN_PROGRESS=1`; `main.sh` checks it and
-skips its own prompt during an `init` run to avoid asking twice. This helper
+`run` target exports `DOTFILES_INIT_IN_PROGRESS=1`; `main.sh` checks it and
+skips its own prompt during a `run` invocation to avoid asking twice. This helper
 is **not** a `claude/main.sh` STEPS-registry step — it is client-agnostic and
 must run before client discovery.
 

@@ -98,7 +98,7 @@ interactive_menu() {
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 main() {
-    # Skipped when make init has already run the prompt (DOTFILES_INIT_IN_PROGRESS=1).
+    # Skipped when make run has already run the prompt (DOTFILES_INIT_IN_PROGRESS=1).
     if [[ -z "$DOTFILES_INIT_IN_PROGRESS" ]]; then
         prompt_restore_env || true
     fi

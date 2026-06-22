@@ -75,7 +75,7 @@ cd ~/github
 git clone https://github.com/guilhermegor/dotfiles-dev.git
 cd dotfiles-dev
 
-make init
+make run
 ```
 
 ### 📋 Important Notes
@@ -100,7 +100,7 @@ During the setup process, you will be prompted to enter your system password mul
 
 **🔄 What to Expect**
 
-The `make init` command will:
+The `make run` command will:
 - ✅ Set executable permissions for all scripts
 - ✅ Install essential programs
 - ✅ Download IRPF (Brazilian tax software)
@@ -108,7 +108,7 @@ The `make init` command will:
 - ✅ Set up Ubuntu workspace
 
 
-After `make init` completes, you can optionally run:
+After `make run` completes, you can optionally run:
 ```bash
 make setup_all_drivers    # Configure all hardware
 make storage_setup        # Setup storage management
@@ -162,7 +162,7 @@ make help
 
 Run complete initial setup:
 ```bash
-make init
+make run
 ```
 
 Run full system setup:
@@ -258,18 +258,18 @@ dotfiles-dev/
 
 ## ⚙️ Configuration Workflow
 
-### Recommended Workflow (Using `make init`)
+### Recommended Workflow (Using `make run`)
 
 1. **Clone and Initialize (One Command)**
 ```bash
    git clone https://github.com/guilhermegor/dotfiles-dev.git
    cd dotfiles-dev
-   make init
+   make run
 ```
 
 2. **Optional: Additional Configuration**
    
-   After `make init` completes, optionally configure:
+   After `make run` completes, optionally configure:
 
    **Hardware Configuration**
 ```bash
@@ -341,7 +341,7 @@ dotfiles-dev/
 Run `make help` to see all available commands, or check these common recipes:
 
 ### Quick Start
-- `make init` - **Complete initial setup (RECOMMENDED)** - Sets permissions and configures all system essentials
+- `make run` - **Complete initial setup (RECOMMENDED)** - Sets permissions and configures all system essentials
 
 ### System Setup
 - `make install_programs` - Install essential programs

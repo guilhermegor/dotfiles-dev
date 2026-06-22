@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # distro_config/setup_env.sh
-# Prompts the user to create a .env file from .env.example during `make init`.
+# Prompts the user to create a .env file from .env.example during `make run`.
 
 set -euo pipefail
 

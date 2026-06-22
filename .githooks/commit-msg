@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Local commit-msg hook — lint the message with gitlint so title/body length
+# violations (and other rules in .gitlint) are caught HERE, before push/CI,
+# instead of after a red CI round-trip.
+#
+# No-op when gitlint is absent so the hook never blocks a machine without it
+# (CI still enforces). Enable with `make git_hooks`; install gitlint with
+# `make install_coding`.
+set -euo pipefail
+
+if ! command -v gitlint >/dev/null 2>&1; then
+	printf '%s\n' "gitlint not installed — skipping local commit-msg lint (CI enforces). Install: make install_coding" >&2
+	exit 0
+fi
+
+exec gitlint --msg-filename "$1"

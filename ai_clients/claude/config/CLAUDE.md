@@ -19,6 +19,22 @@ Exceptions where bare binary is always correct:
 - Install instructions (`sudo apt install ...`)
 - Prohibition examples in "Do Not" sections
 
+### Never infer existence from rtk-proxied `ls`/`find` output
+
+The rtk proxy can collapse real `ls`/`find`/`grep` results to `(empty)` to save
+tokens — so an empty-looking result is **"unknown", never "absent"**. Acting on a
+false negative silently skips real files (PR templates, populated stores, lessons
+files) and has repeatedly produced wrong "this is empty / does not exist" claims.
+
+- To check whether a path exists, use the **Read** or **Glob** tool — never
+  rtk-proxied `ls`/`find`.
+- To list a directory reliably, use **Glob** (`dir/**`) or the raw escape hatch
+  **`rtk proxy ls <dir>`** / **`rtk proxy find <dir>`** (RTK.md: "execute raw
+  command without filtering").
+- If a result looks empty but anything (a memory, an index, prior knowledge) says
+  the path should exist, verify with `Read`/`Glob` before concluding absence. A
+  negative from a lossy channel is not evidence.
+
 # Global Programming Preferences
 
 > **Priority rule:** These are personal defaults. Whenever a project-level CLAUDE.md (or any

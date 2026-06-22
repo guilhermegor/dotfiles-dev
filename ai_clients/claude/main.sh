@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/../lib/utils.sh"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 source "$SCRIPT_DIR/lib/prerequisites.sh"
 source "$SCRIPT_DIR/lib/settings.sh"
+source "$SCRIPT_DIR/lib/hooks.sh"
 source "$SCRIPT_DIR/lib/marketplaces.sh"
 source "$SCRIPT_DIR/lib/plugins.sh"
 source "$SCRIPT_DIR/lib/slash_commands.sh"
@@ -75,6 +76,7 @@ run_plugins() {
 
 STEPS=(
     "settings|Configure settings.json"
+    "hooks|Install hook scripts (SessionStart context, ...)"
     "env|Configure .env (backup path, etc.)"
     "slash_commands|Install custom slash commands"
     "skills|Install user skills"
@@ -91,6 +93,7 @@ dispatch_step() {
     local key="$1"
     case "$key" in
         settings)       configure_settings ;;
+        hooks)          install_hooks ;;
         env)            configure_env ;;
         slash_commands) install_slash_commands ;;
         skills)         install_skills ;;

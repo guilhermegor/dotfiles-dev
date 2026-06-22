@@ -264,7 +264,13 @@ editors_setup: vscode_setup ai_clients  ## Setup all code editors + AI clients
 
 ##@ Utilities
 
-.PHONY: banner check_status list_scripts clean patch_claudestatus
+.PHONY: banner check_status list_scripts clean patch_claudestatus git_hooks
+
+git_hooks:  ## Enable this repo's local git hooks (gitlint commit-msg lint)
+	@command -v gitlint >/dev/null 2>&1 || { echo "Installing gitlint..."; pipx install gitlint-core 2>/dev/null || python3 -m pip install --user gitlint-core; }
+	@git config core.hooksPath .githooks
+	@find .githooks -type f -exec chmod +x {} \;
+	@echo "✅ Local git hooks enabled (core.hooksPath → .githooks; gitlint lints commit messages before push)"
 
 patch_claudestatus:  ## Patch @howells/claudestatus billing table (re-run after npm updates)
 	@bash ai_clients/claude/lib/patch_claudestatus.sh

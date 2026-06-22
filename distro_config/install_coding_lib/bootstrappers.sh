@@ -255,6 +255,35 @@ install_pyenv() {
     print_status "success" "pyenv installed with Python 3.12.8"
 }
 
+install_pipx() {
+    print_status "section" "PYTHON CLI TOOLING (pip + pipx)"
+
+    # Ubuntu 24.04 ships python3 WITHOUT the pip module and without pipx, and
+    # PEP 668 blocks `pip install --user`. pipx installs Python CLIs (gitlint,
+    # etc.) in isolated venvs — the correct path on modern Debian/Ubuntu. Install
+    # both python3-pip (library installs) and pipx (CLI installs) here so later
+    # steps that need a Python CLI don't fail with "No module named pip".
+    if command_exists pipx; then
+        print_status "info" "pipx already installed"
+    elif command_exists apt; then
+        print_status "info" "Installing python3-pip + pipx via apt..."
+        run_or_echo sudo apt install -y python3-pip pipx
+    elif command_exists brew; then
+        print_status "info" "Installing pipx via Homebrew..."
+        run_or_echo brew install pipx &>> "$LOG_FILE"
+    else
+        print_status "warning" "No apt/brew found — install pipx manually (https://pipx.pypa.io)"
+        return 1
+    fi
+
+    if command_exists pipx; then
+        run_or_echo pipx ensurepath &>> "$LOG_FILE"
+        print_status "success" "pipx ready: $(pipx --version 2>/dev/null)"
+    else
+        print_status "warning" "pipx installed but not on PATH yet — run: pipx ensurepath && source ~/.bashrc"
+    fi
+}
+
 # Bootstrappers are not registered in INSTALL_REGISTRY here — install_coding.sh
 # splices them in as framework-prepended entries (similar to how
 # install_programs.sh handles create_dev_folder / update_system / setup_firewall).

@@ -59,6 +59,7 @@ INSTALL_REGISTRY=(
     "install_homebrew:Homebrew Package Manager::"
     "install_asdf:asdf Version Manager::"
     "install_pyenv:Python (pyenv)::"
+    "install_pipx:Python CLI tooling (pip + pipx)::"
     "${INSTALL_REGISTRY[@]}"
 )
 

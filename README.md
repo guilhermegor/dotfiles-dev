@@ -115,6 +115,14 @@ make storage_setup        # Setup storage management
 make vm_setup            # Configure virtual machines
 ```
 
+**Contributing to this repo?** Enable the local commit-message linter once so
+gitlint catches title/body length violations *before* you push (the same check
+runs in CI):
+```bash
+make install_coding   # installs gitlint (among other dev tools)
+make git_hooks        # points core.hooksPath at .githooks (gitlint commit-msg)
+```
+
 ### Alternative Installation Methods
 
 **Option 1: Step-by-Step with Makefile**

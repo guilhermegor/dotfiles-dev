@@ -181,9 +181,39 @@ install_shellcheck() {
     fi
 }
 
+install_gitlint() {
+    print_status "section" "GITLINT (COMMIT MESSAGE LINTER)"
+
+    if command_exists gitlint; then
+        print_status "info" "gitlint already installed"
+        return 0
+    fi
+
+    if command_exists pipx; then
+        print_status "info" "Installing gitlint via pipx..."
+        if run_or_echo pipx install gitlint-core &>> "$LOG_FILE"; then
+            print_status "success" "gitlint installed via pipx"
+            return 0
+        fi
+        print_status "warning" "pipx install failed, falling back to pip --user..."
+    fi
+
+    print_status "info" "Installing gitlint via pip (--user)..."
+    run_or_echo python3 -m pip install --user gitlint-core &>> "$LOG_FILE"
+
+    if command_exists gitlint; then
+        gitlint --version >> "$LOG_FILE"
+        print_status "success" "gitlint installed: $(gitlint --version 2>/dev/null)"
+    else
+        print_status "error" "gitlint installation failed — check $LOG_FILE (ensure ~/.local/bin is on PATH)"
+        return 1
+    fi
+}
+
 INSTALL_REGISTRY+=(
     "install_github_cli:GitHub CLI::"
     "install_act:act (Run GitHub Actions Locally)::"
     "install_gitleaks:Gitleaks (Secret Scanner)::"
     "install_shellcheck:shellcheck (Shell Script Linter)::"
+    "install_gitlint:gitlint (Commit Message Linter)::"
 )

@@ -189,23 +189,31 @@ install_gitlint() {
         return 0
     fi
 
-    if command_exists pipx; then
-        print_status "info" "Installing gitlint via pipx..."
-        if run_or_echo pipx install gitlint-core &>> "$LOG_FILE"; then
-            print_status "success" "gitlint installed via pipx"
+    if command_exists brew; then
+        print_status "info" "Installing gitlint via Homebrew..."
+        if run_or_echo brew install gitlint &>> "$LOG_FILE"; then
+            print_status "success" "gitlint installed via Homebrew"
             return 0
         fi
-        print_status "warning" "pipx install failed, falling back to pip --user..."
+        print_status "warning" "Homebrew install failed, falling back to pipx..."
     fi
 
-    print_status "info" "Installing gitlint via pip (--user)..."
-    run_or_echo python3 -m pip install --user gitlint-core &>> "$LOG_FILE"
+    # pipx installs the CLI in an isolated venv — the correct path on PEP 668
+    # distros (Ubuntu 24.04 blocks `pip install --user` and ships python3 with
+    # no pip module). The install_pipx bootstrapper normally provides pipx
+    # before this step runs.
+    if command_exists pipx; then
+        print_status "info" "Installing gitlint via pipx..."
+        run_or_echo pipx install gitlint-core &>> "$LOG_FILE"
+    else
+        print_status "warning" "pipx not found — run the 'Python CLI tooling (pip + pipx)' step first"
+    fi
 
     if command_exists gitlint; then
         gitlint --version >> "$LOG_FILE"
         print_status "success" "gitlint installed: $(gitlint --version 2>/dev/null)"
     else
-        print_status "error" "gitlint installation failed — check $LOG_FILE (ensure ~/.local/bin is on PATH)"
+        print_status "error" "gitlint install failed — try: brew install gitlint  OR  pipx install gitlint-core (ensure ~/.local/bin on PATH)"
         return 1
     fi
 }

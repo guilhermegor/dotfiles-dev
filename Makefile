@@ -44,6 +44,13 @@ run: banner restore_env_prompt permissions setup_env install_programs install_es
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
 
+.PHONY: init
+# Transitional alias — `init` was renamed to `run`. Warn first, then hand off
+# (recursive call so `run`'s target-export DOTFILES_INIT_IN_PROGRESS still applies).
+init:  ## Deprecated alias for `make run` (kept for muscle memory)
+	@printf '\033[0;33m[warning]\033[0m `make init` is deprecated — use `make run` instead.\n'
+	@$(MAKE) --no-print-directory run
+
 ##@ System Setup
 
 .PHONY: setup_env install_programs install_coding irpf_download set_shortcuts ubuntu_workspace vscode_setup vscode_restore bash_profile starship_setup starship_menu starship_undo_previous starship_undo_original

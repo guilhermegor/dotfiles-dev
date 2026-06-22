@@ -67,34 +67,30 @@ Rules:
 - Do not add boilerplate footers or `Co-Authored-By` lines unless explicitly
   asked.
 
-## 4a. Verify line lengths before committing
+## 4a. Verify line lengths before committing (deterministic — never eyeball)
 
-After composing the message, measure every line with the shell and fix any
-violations **before** proceeding to step 5:
+You cannot reliably count characters by eye. Let the shell do it: write the
+**full** composed message to a file and check every line in a single pass.
 
 ```bash
-# Check title (must be ≤ 72)
-echo -n "<type>(<scope>): <your title here>" | wc -c
-
-# Check each bullet (must be ≤ 80)
-echo -n "  - <your bullet text> → <filename>" | wc -c
+cat > /tmp/commit_msg.txt <<'EOF'
+<your full composed message — title line, blank line, then body bullets>
+EOF
+awk 'NR==1 && length($0) > 72 { printf "TITLE FAIL (%d>72): %s\n", length($0), $0; bad=1 }
+     NR>1  && length($0) > 80 { printf "BODY FAIL  (%d>80): %s\n", length($0), $0; bad=1 }
+     END   { print (bad ? "✗ shorten the lines above, rewrite the file, re-run" : "✓ all lines within limits") }' /tmp/commit_msg.txt
 ```
 
-Report results in this format:
-
-```
-Title:  <N> chars — must be ≤ 72 → PASS / FAIL
-Bullet: <N> chars — must be ≤ 80 → PASS / FAIL
-```
-
-If any line fails, shorten the text, re-measure, and update the report before proceeding.
-Only proceed to step 5 once every line shows PASS.
+(`awk` counts bytes, so for non-ASCII text it is *stricter* than gitlint's
+character count — a `✓` here is always safe.) If any line FAILS, shorten that
+line's text — never wrap a bullet onto a continuation line — rewrite the file,
+and re-run until it prints `✓`. Only then proceed to step 5.
 
 ## 5. Stage, commit, and push
 
 1. If there are unstaged changes the user likely wants included, stage them with `git add` targeting specific files — never `git add -A` blindly. Ask the user if it is ambiguous which files to include.
 2. Show the composed message to the user for confirmation before running `git commit`.
-3. Run `git commit [--no-verify] -m "$(cat <<'EOF' ... EOF)"` using a heredoc to preserve formatting, including `--no-verify` only if the user requested it in step 0.
+3. Run `git commit [--no-verify] -F /tmp/commit_msg.txt` — commit the exact file you validated in step 4a (never retype the message in a heredoc, which can silently reintroduce a too-long line). Include `--no-verify` only if the user requested it in step 0.
 4. Run `git push origin HEAD` to push the branch to the remote.
 5. Report the resulting commit hash, one-line summary, and push status.
 

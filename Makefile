@@ -14,10 +14,10 @@
 
 ##@ Quick Start
 
-.PHONY: init
-# Exported so ai_clients/main.sh skips its own restore-env prompt during init.
-init: export DOTFILES_INIT_IN_PROGRESS=1
-init: banner restore_env_prompt permissions setup_env install_programs install_espanso_packages install_coding ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace  ## Complete initial setup (RECOMMENDED first-time entry point)
+.PHONY: run
+# Exported so ai_clients/main.sh skips its own restore-env prompt during the run.
+run: export DOTFILES_INIT_IN_PROGRESS=1
+run: banner restore_env_prompt permissions setup_env install_programs install_espanso_packages install_coding ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace  ## Complete initial setup (RECOMMENDED first-time entry point)
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"
@@ -340,7 +340,7 @@ help:  ## Show this help message
 	$(MAKEFILE_LIST)
 	@echo ""
 	@echo "💡 Common flows:"
-	@echo "  make init            — first-time setup"
+	@echo "  make run             — first-time setup"
 	@echo "  make full_setup      — complete system setup"
 	@echo "  make help            — this message"
 	@echo ""

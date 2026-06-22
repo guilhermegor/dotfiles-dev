@@ -10,7 +10,7 @@ A Bash-based Linux dotfiles and system-setup toolkit. Everything is orchestrated
 
 ```bash
 make help                  # Show all targets
-make init                  # Full first-time setup (recommended entry point)
+make run                   # Full first-time setup (recommended entry point)
 make permissions           # chmod +x all *.sh scripts
 make ai_clients            # Interactive AI clients menu (Claude Code, ...)
 make install_espanso_packages  # Copy espanso/ packages to ~/.config/espanso/packages/

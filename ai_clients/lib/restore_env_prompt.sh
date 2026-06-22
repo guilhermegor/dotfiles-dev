@@ -9,7 +9,7 @@
 #
 # Dual-mode: sourced by ai_clients/main.sh (which calls prompt_restore_env
 # itself, gated by $DOTFILES_INIT_IN_PROGRESS) AND executed directly by
-# `make restore_env_prompt` / `make init` (runs the prompt on execution).
+# `make restore_env_prompt` / `make run` (runs the prompt on execution).
 
 _rep_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$_rep_dir/../.." && pwd)"

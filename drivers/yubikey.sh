@@ -222,6 +222,38 @@ configure_pam_guidance() {
     echo -e "${BLUE}Docs:${NC} https://developers.yubico.com/yubico-pam/"
 }
 
+# GNOME app-folder placement (Yubico Authenticator → Security) only takes effect
+# when ubuntu_workspace.sh re-runs organize_app_folders. Offer to do that now so
+# the user doesn't have to remember `make ubuntu_workspace` separately. Defaults
+# to yes on an interactive run; skipped (with guidance) when non-interactive so
+# automation never triggers a full workspace reconfigure unattended.
+offer_workspace_reorg() {
+    local workspace_script
+    workspace_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/distro_config/ubuntu_workspace.sh"
+    if [ ! -f "$workspace_script" ]; then
+        print_status "warning" "ubuntu_workspace.sh not found — skipping app-folder reorg"
+        return 0
+    fi
+
+    if [ ! -t 0 ]; then
+        print_status "info" "Non-interactive run — skipping GNOME app-folder reorg."
+        print_status "info" "Apply placement later with: make ubuntu_workspace"
+        return 0
+    fi
+
+    local answer
+    read -r -p "Run the GNOME workspace setup now to place Yubico Authenticator in Security? [Y/n] " answer
+    case "$answer" in
+        [nN]*)
+            print_status "info" "Skipped. Apply later with: make ubuntu_workspace"
+            return 0
+            ;;
+    esac
+
+    print_status "config" "Running ubuntu_workspace.sh (reorganises dock + app folders)..."
+    run_or_echo bash "$workspace_script"
+}
+
 verify_installation() {
     print_status "info" "Verifying installation..."
     local verification_passed=true
@@ -271,9 +303,9 @@ display_summary() {
     echo -e "  If ${CYAN}gpg --card-status${NC} fails while pcscd runs, add ${CYAN}disable-ccid${NC} to"
     echo -e "  ${CYAN}~/.gnupg/scdaemon.conf${NC} (use GnuPG's own driver), then ${CYAN}gpgconf --kill scdaemon${NC}."
     echo
-    echo -e "${BLUE}Note:${NC} Yubico Authenticator was installed as a Flatpak and is NOT placed in a"
-    echo -e "  GNOME app-folder (this is a drivers/ script, not the install_lib registry)."
-    echo -e "  Ask if you want a registry entry so it lands in a folder automatically."
+    echo -e "${BLUE}Note:${NC} Yubico Authenticator is placed in the GNOME ${GREEN}Security${NC} folder by"
+    echo -e "  ubuntu_workspace.sh. If you skipped the reorg prompt above, apply it with"
+    echo -e "  ${CYAN}make ubuntu_workspace${NC}."
 }
 
 # --- Main Execution ---
@@ -288,6 +320,7 @@ main() {
     configure_yubikey_interfaces
     configure_pam_guidance
     verify_installation || true
+    offer_workspace_reorg
 
     print_status "success" "YubiKey setup completed"
     display_summary

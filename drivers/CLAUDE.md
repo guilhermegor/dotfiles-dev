@@ -12,6 +12,7 @@ Per-device hardware driver and configuration scripts.
 | `setup_keyboard.sh` | Keyboard layout and repeat rate |
 | `bluetooth_adapter.sh` | Bluetooth adapter setup |
 | `tplink_wifi_adapter.sh` | TP-Link USB Wi-Fi adapter driver install |
+| `yubikey.sh` | YubiKey — ykman, pcscd, Yubico Authenticator, GPG/SSH, PAM (install-only) |
 
 ## Conventions
 

@@ -505,6 +505,7 @@ organize_app_folders() {
         'duplicity.desktop' 'grsync.desktop' 'luckybackup.desktop'
         'veracrypt.desktop' 'keepassxc.desktop' 'seahorse.desktop' 'gnome-seahorse.desktop'
         'gufw.desktop' 'firewall-config.desktop' 'ufw.desktop'
+        'com.yubico.yubioath.desktop' 'gscriptor.desktop'
     )
     
     for app in "${security_app_names[@]}"; do

@@ -143,6 +143,69 @@ reload_udev_rules() {
     print_status "success" "udev rules reloaded"
 }
 
+# A YubiKey's USB product id is a firmware-reported bitmask of the enabled
+# interfaces (a hub cannot alter it): the low hex digit is OTP(1) | FIDO(2) |
+# CCID(4). CCID is the smart-card interface that OATH (Authenticator), PIV and
+# OpenPGP all ride on, so three of the four use cases need it. 1050:0402 is
+# FIDO-only (CCID off); 1050:0407 is OTP+FIDO+CCID (all on). Detect a limited
+# key and offer to enable everything via ykman.
+configure_yubikey_interfaces() {
+    print_status "section" "YUBIKEY USB INTERFACES (CCID)"
+
+    local pid
+    pid="$(lsusb | grep -oiE "${YUBICO_VENDOR_ID}:04[0-9a-f]{2}" | head -n1 | cut -d: -f2)"
+    if [ -z "$pid" ]; then
+        print_status "warning" "No YubiKey on the bus — skipping interface check"
+        print_status "info" "After plugging it in, run: ykman config usb --enable-all"
+        return 0
+    fi
+
+    case "${pid: -1}" in
+        4|5|6|7)
+            print_status "success" "CCID (smart card) already enabled (PID ${YUBICO_VENDOR_ID}:$pid)"
+            return 0
+            ;;
+        1|2|3)
+            print_status "warning" "Key is in limited mode (PID ${YUBICO_VENDOR_ID}:$pid) — CCID is DISABLED"
+            print_status "info" "OATH 2FA, GPG/SSH and PIV need CCID; only FIDO/U2F works right now."
+            ;;
+        *)
+            print_status "warning" "Unrecognised YubiKey PID ${YUBICO_VENDOR_ID}:$pid — check 'ykman info' manually"
+            return 0
+            ;;
+    esac
+
+    if ! command_exists ykman; then
+        print_status "warning" "ykman not installed — cannot enable interfaces automatically"
+        print_status "info" "Install it without sudo: pipx install yubikey-manager"
+        print_status "info" "Then run: ykman config usb --enable-all   (and replug the key)"
+        return 0
+    fi
+
+    if [ ! -t 0 ]; then
+        print_status "info" "Non-interactive run — not changing interfaces automatically."
+        print_status "info" "Run manually: ykman config usb --enable-all"
+        return 0
+    fi
+
+    local answer
+    read -r -p "Enable all USB interfaces (OTP+FIDO+CCID) now? [Y/n] " answer
+    case "$answer" in
+        [nN]*)
+            print_status "info" "Left unchanged. Run later: ykman config usb --enable-all"
+            return 0
+            ;;
+    esac
+
+    print_status "config" "Enabling all USB interfaces (touch the key if it blinks)..."
+    if run_or_echo ykman config usb --enable-all --force; then
+        print_status "success" "Interfaces enabled — UNPLUG and REPLUG the key to apply"
+        print_status "info" "Verify: lsusb | grep ${YUBICO_VENDOR_ID}  → expect ...:0407"
+    else
+        print_status "warning" "ykman config failed — try manually: ykman config usb --enable-all"
+    fi
+}
+
 # PAM is install-only. Wiring pam_yubico into /etc/pam.d incorrectly locks you
 # out of login and sudo, so we print the steps instead of editing anything.
 configure_pam_guidance() {
@@ -222,6 +285,7 @@ main() {
     enable_pcscd
     install_yubico_authenticator
     reload_udev_rules
+    configure_yubikey_interfaces
     configure_pam_guidance
     verify_installation || true
 

@@ -101,7 +101,7 @@ starship_undo_original:  ## Roll back Starship/Bash setup to the original config
 
 ##@ Hardware Drivers
 
-.PHONY: setup_bluetooth setup_keyboard setup_mouse setup_wifi setup_all_drivers
+.PHONY: setup_bluetooth setup_keyboard setup_mouse setup_wifi setup_yubikey setup_all_drivers
 
 setup_bluetooth:  ## Setup Bluetooth adapter
 	@echo "Setting up Bluetooth adapter..."
@@ -118,6 +118,10 @@ setup_mouse:  ## Configure mouse (MX Master + xbindkeys workspace buttons)
 setup_wifi:  ## Setup TP-Link USB WiFi adapter driver
 	@echo "Setting up TP-Link WiFi adapter..."
 	@bash drivers/tplink_wifi_adapter.sh
+
+setup_yubikey:  ## Install YubiKey software (ykman, pcscd, Authenticator, GPG/SSH, PAM)
+	@echo "Setting up YubiKey software..."
+	@bash drivers/yubikey.sh
 
 setup_all_drivers: setup_bluetooth setup_keyboard setup_mouse setup_wifi  ## Setup all hardware drivers
 	@echo "All drivers configured successfully!"

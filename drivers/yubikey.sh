@@ -33,7 +33,8 @@ APT_PACKAGES=(
     gnupg                  # gpg itself (usually present; pinned for completeness)
     yubikey-manager        # ykman CLI — configure FIDO2/PIV/OATH/firmware
     yubikey-personalization # ykpersonalize + 69-yubikey.rules udev rules
-    libpam-yubico          # pam_yubico.so — login/sudo 2FA (install only)
+    libpam-u2f             # pam_u2f.so + pamu2fcfg — FIDO login/sudo 2FA (install only)
+    libpam-yubico          # pam_yubico.so — challenge-response 2FA, 5-Series (install only)
 )
 
 # --- Helpers ---
@@ -143,12 +144,23 @@ reload_udev_rules() {
     print_status "success" "udev rules reloaded"
 }
 
-# A YubiKey's USB product id is a firmware-reported bitmask of the enabled
-# interfaces (a hub cannot alter it): the low hex digit is OTP(1) | FIDO(2) |
-# CCID(4). CCID is the smart-card interface that OATH (Authenticator), PIV and
-# OpenPGP all ride on, so three of the four use cases need it. 1050:0402 is
-# FIDO-only (CCID off); 1050:0407 is OTP+FIDO+CCID (all on). Detect a limited
-# key and offer to enable everything via ykman.
+# Is the connected key a FIDO-only "Security Key Series" device? That line has
+# NO OATH (TOTP), PIV, OpenPGP or OTP applet — only FIDO2/U2F — so the CCID and
+# challenge-response steps below do not apply to it. ykman info reports the
+# model name and works over the FIDO interface, so it answers this even on a
+# key with CCID disabled. Returns 0 (true) when the model is a Security Key.
+is_security_key_series() {
+    command_exists ykman || return 1
+    ykman info 2>/dev/null | grep -qiE 'Device type:.*Security Key'
+}
+
+# A 5-Series YubiKey's USB product id is a firmware-reported bitmask of the
+# enabled interfaces (a hub cannot alter it): the low hex digit is
+# OTP(1) | FIDO(2) | CCID(4). CCID is the smart-card interface that OATH
+# (Authenticator), PIV and OpenPGP all ride on. 1050:0402 is FIDO-only (CCID
+# off); 1050:0407 is OTP+FIDO+CCID (all on). A Security Key Series device shows
+# the same FIDO-only PID but CANNOT enable CCID — it has no such applet — so we
+# detect the model first and skip the enable offer for it.
 configure_yubikey_interfaces() {
     print_status "section" "YUBIKEY USB INTERFACES (CCID)"
 
@@ -156,7 +168,14 @@ configure_yubikey_interfaces() {
     pid="$(lsusb | grep -oiE "${YUBICO_VENDOR_ID}:04[0-9a-f]{2}" | head -n1 | cut -d: -f2)"
     if [ -z "$pid" ]; then
         print_status "warning" "No YubiKey on the bus — skipping interface check"
-        print_status "info" "After plugging it in, run: ykman config usb --enable-all"
+        return 0
+    fi
+
+    if is_security_key_series; then
+        print_status "info" "Detected a Security Key Series device (FIDO-only)."
+        print_status "info" "This key has no OATH/PIV/OpenPGP/OTP applet, so CCID cannot be enabled."
+        print_status "info" "Use it as a FIDO2 passkey / security key (e.g. Google, GitHub, Microsoft)."
+        print_status "info" "TOTP codes and GPG/SSH smart-card need a YubiKey 5 Series instead."
         return 0
     fi
 
@@ -206,20 +225,25 @@ configure_yubikey_interfaces() {
     fi
 }
 
-# PAM is install-only. Wiring pam_yubico into /etc/pam.d incorrectly locks you
+# PAM is install-only. Wiring a PAM module into /etc/pam.d incorrectly locks you
 # out of login and sudo, so we print the steps instead of editing anything.
+# pam-u2f (FIDO) is led with first because it works on EVERY YubiKey including
+# the FIDO-only Security Key Series; challenge-response is offered only as a
+# 5-Series alternative since the OTP slot it needs does not exist on a Security
+# Key.
 configure_pam_guidance() {
-    print_status "section" "LOGIN / SUDO 2FA (libpam-yubico) — MANUAL STEP"
+    print_status "section" "LOGIN / SUDO 2FA — MANUAL STEP"
     print_status "warning" "PAM is NOT auto-configured — a mistake here can lock you out of login and sudo."
     echo -e "${YELLOW}Configure it only with a root shell open as a safety net:${NC}"
     echo -e "  1. Open a separate ${CYAN}sudo -s${NC} root shell and keep it open until you've verified login."
-    echo -e "  2. Register the key (challenge-response, offline):"
-    echo -e "       ${CYAN}ykman otp chalresp --generate 2${NC}        # program slot 2"
-    echo -e "       ${CYAN}pamu2fcfg > ~/.config/Yubico/u2f_keys${NC}  # for FIDO/U2F-based PAM"
-    echo -e "  3. Add ${CYAN}auth required pam_yubico.so mode=challenge-response${NC} to the"
-    echo -e "     relevant file in ${CYAN}/etc/pam.d/${NC} (e.g. sudo, login, or common-auth)."
+    echo -e "  2. ${GREEN}FIDO/U2F (works on every YubiKey, incl. Security Key Series):${NC}"
+    echo -e "       ${CYAN}sudo apt-get install -y libpam-u2f${NC}"
+    echo -e "       ${CYAN}mkdir -p ~/.config/Yubico && pamu2fcfg > ~/.config/Yubico/u2f_keys${NC}"
+    echo -e "       add ${CYAN}auth required pam_u2f.so${NC} to a file in ${CYAN}/etc/pam.d/${NC} (e.g. sudo)."
+    echo -e "  3. ${BLUE}Alternative — challenge-response (YubiKey 5 Series only, has an OTP slot):${NC}"
+    echo -e "       ${CYAN}ykman otp chalresp --generate 2${NC}   then ${CYAN}pam_yubico.so mode=challenge-response${NC}"
     echo -e "  4. Test ${CYAN}sudo true${NC} in a NEW terminal before closing the root shell."
-    echo -e "${BLUE}Docs:${NC} https://developers.yubico.com/yubico-pam/"
+    echo -e "${BLUE}Docs:${NC} https://developers.yubico.com/pam-u2f/"
 }
 
 # GNOME app-folder placement (Yubico Authenticator → Security) only takes effect

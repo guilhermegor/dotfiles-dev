@@ -47,6 +47,8 @@
     "supabase-postgres-best-practices@claude-plugins-official": true,
     "senior-prompt-engineer@claude-plugins-official": true,
     "clean-code@claude-plugins-official": true,
+    "context-mode@context-mode": true,
+    "claude-mem@claude-mem": true,
     "ponytail@ponytail": true
   },
   "hooks": {

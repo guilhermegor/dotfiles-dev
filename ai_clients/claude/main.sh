@@ -35,6 +35,7 @@ run_marketplaces() {
     register_marketplace "claude-hud"              "jarrodwatts/claude-hud"
     register_marketplace "context-mode"            "mksglu/context-mode"
     register_marketplace "claude-mem"              "thedotmack/claude-mem"
+    register_marketplace "ponytail"                "DietrichGebert/ponytail"
 }
 
 run_plugins() {
@@ -72,6 +73,8 @@ run_plugins() {
     bootstrap_plugin "context-mode@context-mode" "context-mode" "context-mode" "mksglu/context-mode"
     # claude-mem — standalone GitHub repo, bootstrapped automatically
     bootstrap_plugin "claude-mem@claude-mem" "claude-mem" "claude-mem" "thedotmack/claude-mem"
+    # ponytail — lazy senior dev mode; standalone GitHub repo, bootstrapped automatically
+    bootstrap_plugin "ponytail@ponytail" "ponytail" "ponytail" "DietrichGebert/ponytail"
 }
 
 STEPS=(

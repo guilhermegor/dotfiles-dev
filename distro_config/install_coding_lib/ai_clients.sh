@@ -950,6 +950,49 @@ install_rtk() {
     print_status "config" "Usage: rtk <command> (e.g. rtk git status, rtk tree)"
 }
 
+# ============================================================================
+# FASTER-WHISPER (local speech-to-text)
+# ============================================================================
+
+install_faster_whisper() {
+    print_status "section" "FASTER-WHISPER (SPEECH-TO-TEXT)"
+
+    # faster-whisper is a Python *library* (CTranslate2 backend, ~4x faster than
+    # openai-whisper) with no CLI of its own. whisper-ctranslate2 is the
+    # maintained command-line frontend built directly on it, so installing it
+    # yields both the engine and a usable `whisper-ctranslate2` command. Audio is
+    # decoded via PyAV (bundled ffmpeg), so no system ffmpeg package is required.
+    if command_exists whisper-ctranslate2; then
+        print_status "info" "whisper-ctranslate2 already installed"
+        return 0
+    fi
+
+    if ! command_exists pipx; then
+        print_status "error" "pipx not found — run install_pipx first"
+        return 1
+    fi
+
+    # ctranslate2 ships no wheels for Python 3.14; pin to the pyenv 3.12.8 that
+    # install_pyenv provisions so the isolated venv is built on a supported
+    # interpreter regardless of the system default.
+    local python_bin="$HOME/.pyenv/versions/3.12.8/bin/python"
+    if [ ! -x "$python_bin" ]; then
+        print_status "error" "Python 3.12.8 not found at $python_bin — run install_pyenv first"
+        return 1
+    fi
+
+    print_status "info" "Installing whisper-ctranslate2 (faster-whisper CLI) via pipx..."
+    if run_or_echo pipx install --python "$python_bin" whisper-ctranslate2 &>> "$LOG_FILE"; then
+        print_status "success" "faster-whisper installed (command: whisper-ctranslate2)"
+        # --device auto probes CUDA and fails without libcublas; cpu is the
+        # portable default. Drop --device for GPU once CUDA libs are present.
+        print_status "config" "Usage: whisper-ctranslate2 audio.m4a --language pt --model small --device cpu --compute_type int8"
+    else
+        print_status "error" "whisper-ctranslate2 installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
 INSTALL_REGISTRY+=(
     "install_ollama:Ollama AI Platform::"
     "install_claude_code:Claude Code::"
@@ -957,4 +1000,5 @@ INSTALL_REGISTRY+=(
     "install_qwen:Qwen Code::"
     "install_claudestatus:claudestatus (Claude Usage Dashboard)::"
     "install_rtk:RTK (Rust Token Killer)::"
+    "install_faster_whisper:faster-whisper (Speech-to-Text CLI)::"
 )

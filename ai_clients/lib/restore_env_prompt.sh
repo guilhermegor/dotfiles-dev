@@ -23,15 +23,18 @@ if ! declare -F print_status >/dev/null 2>&1; then
     source "$REPO_ROOT/lib/common.sh"
 fi
 
-# Ask whether to restore .env files; on yes, delegate to the installed
-# restore-env.sh binary, falling back to the in-repo storage/restore_env.sh.
-# The default adapts to the repo-root .env (the file downstream installs read):
-# present → default no (don't clobber an existing config); absent → default yes
-# (a fresh setup needs values before installs run). Bare Enter takes the default.
-# Never aborts the caller — returns instead.
+# Ask whether to restore .env files, then (on yes) a second time to confirm before
+# anything is replaced; only then delegate to the installed restore-env.sh binary,
+# falling back to the in-repo storage/restore_env.sh. Both prompts' defaults adapt to
+# the repo-root .env (the file downstream installs read): present → default no (don't
+# clobber an existing config); absent → default yes (a fresh setup needs values before
+# installs run). Bare Enter takes the default. Never aborts the caller — returns instead.
 prompt_restore_env() {
-    local reply
-    if [[ -f "$REPO_ROOT/.env" ]]; then
+    local reply confirm
+    local env_exists=0
+    [[ -f "$REPO_ROOT/.env" ]] && env_exists=1
+
+    if [[ $env_exists -eq 1 ]]; then
         read -rp "Restore .env files from an external drive? [y/N]: " reply
         reply="${reply:-n}"
     else
@@ -41,6 +44,24 @@ prompt_restore_env() {
     fi
 
     if [[ ! "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        print_status "info" "Skipping .env restore."
+        return 0
+    fi
+
+    # Second guard before a restore that could clobber an existing config. The default
+    # tracks the risk: an existing .env means an overwrite is possible (default no); none
+    # present means there is nothing to lose (default yes). Per-file conflicts are then
+    # resolved individually by the restore script (overwrite / back up first / skip).
+    if [[ $env_exists -eq 1 ]]; then
+        print_status "warning" "A .env already exists at $REPO_ROOT and may be replaced."
+        read -rp "Are you sure you want to replace existing .env file(s)? [y/N]: " confirm
+        confirm="${confirm:-n}"
+    else
+        read -rp "Are you sure you want to restore .env file(s)? [Y/n]: " confirm
+        confirm="${confirm:-y}"
+    fi
+
+    if [[ ! "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]; then
         print_status "info" "Skipping .env restore."
         return 0
     fi

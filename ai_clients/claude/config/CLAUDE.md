@@ -35,6 +35,36 @@ files) and has repeatedly produced wrong "this is empty / does not exist" claims
   the path should exist, verify with `Read`/`Glob` before concluding absence. A
   negative from a lossy channel is not evidence.
 
+## Author Claude artifacts in dotfiles-dev, never only in live `~/.claude/`
+
+`~/.claude/` is a **machine-local, non-symlinked** directory. Anything created
+directly there (a slash command, skill, agent, hook, rule, global CLAUDE.md edit,
+settings) is **lost on the next OS/distro install** — it is not version-controlled
+and the installer will not recreate it.
+
+So when a Claude artifact needs to be created or edited, author it in the
+**version-controlled source-of-truth** under `~/github/dotfiles-dev/ai_clients/claude/`,
+then let the installer (`make ai_clients`) propagate it into `~/.claude/`:
+
+| Artifact | Source-of-truth path (edit here) | Installs to |
+|---|---|---|
+| Slash command | `ai_clients/claude/commands/<name>.md` | `~/.claude/commands/` |
+| Skill | `ai_clients/claude/skills/<name>.md` | `~/.claude/skills/` |
+| Subagent | `ai_clients/claude/agents/<name>.md` | `~/.claude/agents/` |
+| Language rule | `ai_clients/claude/rules/<lang>.md` | `~/.claude/rules/` |
+| Global CLAUDE.md rule | `ai_clients/claude/config/CLAUDE.md` | `~/.claude/CLAUDE.md` |
+| Hook / settings | `ai_clients/claude/lib/*.sh` (+ `settings.local.json`) | `~/.claude/` |
+
+Rules:
+- **Never** write a durable Claude artifact only to `~/.claude/`. Put it in
+  `dotfiles-dev` first; treat the live copy as a generated install target.
+- After editing the source, either run the installer or `cp` the file into place so
+  the change is active now **and** reproducible on a fresh machine.
+- This rule is itself an example: it lives in `config/CLAUDE.md` (source), not in the
+  live `~/.claude/CLAUDE.md`.
+- Session-scoped or project-scoped artifacts (a repo's own `.claude/`, a project
+  memory file) are exempt — they belong to their project, not the global toolchain.
+
 # Global Programming Preferences
 
 > **Priority rule:** These are personal defaults. Whenever a project-level CLAUDE.md (or any
@@ -359,6 +389,25 @@ Later, apply the captured lessons to the BlueprintX templates at
 `~/github/blueprintx/templates/` so future scaffolds inherit them instead of
 rediscovering them. Full convention: `~/.claude/memory/lessons/README.md`. This is
 **global — it applies to every project**, not one repo.
+
+## dotfiles-dev toolchain lessons — capture before moving on (standing instruction)
+
+When work in **any project** yields a generalizable improvement to the **Claude / dotfiles
+toolchain** — a reusable slash command, skill, agent, rule, hook, global `CLAUDE.md` rule, or
+installer change, *not* a project-specific business rule — capture it **before moving on**:
+
+1. Save it in the global store `~/.claude/memory/lessons-dotfiles/` as **one file per lesson**
+   (kebab-case), in the format `# Title` then `Area / Lesson / Why / Apply to (dotfiles-dev) /
+   PR / Origin`, and add it to that store's `README.md` index.
+2. Mirror it in the originating repo's `docs/dotfiles-dev-lessons.md`, kept **git-ignored** and
+   **excluded from the docs site** (never ships).
+
+Later, apply the captured lessons to the dotfiles-dev source at
+`~/github/dotfiles-dev/ai_clients/claude/` (per the "Author Claude artifacts in dotfiles-dev"
+rule above), each landing via its own dotfiles-dev PR. This is the toolchain analogue of the
+BlueprintX "Scaffolding lessons" instruction — that one feeds templates, this one feeds the
+dotfiles-dev toolchain. Full convention: `~/.claude/memory/lessons-dotfiles/README.md`.
+**Global — it applies to every project**, not one repo.
 
 ## Compaction
 

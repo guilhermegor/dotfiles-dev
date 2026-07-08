@@ -101,11 +101,19 @@ find_template() {
 }
 
 extract_body_file() {
-    # Echo the path passed to --body-file/-F, if present.
-    printf '%s' "$1" \
-        | grep -oE -- '(--body-file[[:space:]=]+|-F[[:space:]]+)[^[:space:]"'"'"']+' \
-        | head -n1 \
-        | sed -E 's/^(--body-file[[:space:]=]+|-F[[:space:]]+)//'
+    # Echo the path passed to --body-file/-F, if present. The value may be
+    # bare, "double-quoted", or 'single-quoted' (and a quoted path may contain
+    # spaces) — capture the quoted token whole, then strip the surrounding
+    # quotes, so a quoted path is not silently dropped (which would make the
+    # guard fall back to the inline command and wrongly report every section
+    # missing).
+    local re val
+    re='(--body-file[[:space:]=]+|-F[[:space:]]+)("[^"]+"|'\''[^'\'']+'\''|[^[:space:]]+)'
+    [[ "$1" =~ $re ]] || return 0
+    val="${BASH_REMATCH[2]}"
+    val="${val#[\"\']}"   # strip a leading quote, if any
+    val="${val%[\"\']}"   # strip a trailing quote, if any
+    printf '%s' "$val"
 }
 
 main "$@"

@@ -390,6 +390,25 @@ Later, apply the captured lessons to the BlueprintX templates at
 rediscovering them. Full convention: `~/.claude/memory/lessons/README.md`. This is
 **global — it applies to every project**, not one repo.
 
+## dotfiles-dev toolchain lessons — capture before moving on (standing instruction)
+
+When work in **any project** yields a generalizable improvement to the **Claude / dotfiles
+toolchain** — a reusable slash command, skill, agent, rule, hook, global `CLAUDE.md` rule, or
+installer change, *not* a project-specific business rule — capture it **before moving on**:
+
+1. Save it in the global store `~/.claude/memory/lessons-dotfiles/` as **one file per lesson**
+   (kebab-case), in the format `# Title` then `Area / Lesson / Why / Apply to (dotfiles-dev) /
+   PR / Origin`, and add it to that store's `README.md` index.
+2. Mirror it in the originating repo's `docs/dotfiles-dev-lessons.md`, kept **git-ignored** and
+   **excluded from the docs site** (never ships).
+
+Later, apply the captured lessons to the dotfiles-dev source at
+`~/github/dotfiles-dev/ai_clients/claude/` (per the "Author Claude artifacts in dotfiles-dev"
+rule above), each landing via its own dotfiles-dev PR. This is the toolchain analogue of the
+BlueprintX "Scaffolding lessons" instruction — that one feeds templates, this one feeds the
+dotfiles-dev toolchain. Full convention: `~/.claude/memory/lessons-dotfiles/README.md`.
+**Global — it applies to every project**, not one repo.
+
 ## Compaction
 
 When the context window is compacted, apply this priority order:

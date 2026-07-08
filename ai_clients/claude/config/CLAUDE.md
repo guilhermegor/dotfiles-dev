@@ -409,6 +409,33 @@ BlueprintX "Scaffolding lessons" instruction — that one feeds templates, this 
 dotfiles-dev toolchain. Full convention: `~/.claude/memory/lessons-dotfiles/README.md`.
 **Global — it applies to every project**, not one repo.
 
+### Which store? Route by where the fix lands, not by the topic
+
+The two "capture before moving on" instructions above feed **different** backport
+targets with **different** inheritance mechanisms. Pick the store by the **artifact
+the fix ultimately edits**, never by what the lesson is *about*:
+
+- Fix edits a **scaffolding template** under `~/github/blueprintx/templates/` (changes
+  what a *generated project* contains — source seams, `pyproject.toml`, `.gitignore`,
+  CI, `Makefile`, `.pre-commit-config.yaml`, `mkdocs.yml`, docs, a baked-in convention)
+  → **BlueprintX store** `~/.claude/memory/lessons/`.
+- Fix edits the **Claude/dotfiles toolchain** under
+  `~/github/dotfiles-dev/ai_clients/claude/` (a slash command, skill, agent, rule,
+  hook, global `CLAUDE.md` rule, `settings*.json`, or installer — changes how *Claude
+  itself* behaves across every project) → **dotfiles-dev store**
+  `~/.claude/memory/lessons-dotfiles/`.
+
+**Decision test** — ask *"how does a fresh environment inherit this fix?"*: via
+**scaffolding a new project** → BlueprintX; via **reinstalling the Claude toolchain
+(`make ai_clients`)**, surviving across all projects → dotfiles-dev.
+
+**Route by landing site, not subject.** A lesson *about* the dotfiles toolchain whose
+fix lands in a **template** (e.g. "scaffold ships a git-ignored lessons mirror") is a
+**BlueprintX** lesson; a hook that helps *capture* scaffold lessons is a **dotfiles-dev**
+lesson — it lands in `ai_clients/claude/`. If one finding genuinely requires changes in
+**both** a template and the toolchain, write **two** lessons, one per store,
+cross-referencing. Misrouting parks a fix in a queue that never applies it.
+
 ## Compaction
 
 When the context window is compacted, apply this priority order:

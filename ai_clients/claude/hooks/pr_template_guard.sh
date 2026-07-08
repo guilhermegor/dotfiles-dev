@@ -101,19 +101,31 @@ find_template() {
 }
 
 extract_body_file() {
-    # Echo the path passed to --body-file/-F, if present. The value may be
-    # bare, "double-quoted", or 'single-quoted' (and a quoted path may contain
-    # spaces) — capture the quoted token whole, then strip the surrounding
-    # quotes, so a quoted path is not silently dropped (which would make the
-    # guard fall back to the inline command and wrongly report every section
-    # missing).
-    local re val
+    # Echo the path passed to --body-file/-F, if present. Scraping the flag out
+    # of a raw shell command string has two fragilities, both handled here:
+    #   * the value may be bare, "double-quoted", or 'single-quoted' (a quoted
+    #     path may even contain spaces) — capture the quoted token whole, then
+    #     strip the surrounding quotes;
+    #   * the literal "--body-file"/"-F " may ALSO appear inside another
+    #     argument (e.g. a --title that mentions it), so taking the first match
+    #     grabs the wrong token. Disambiguate with the one invariant a real
+    #     body-file value always satisfies: it names a readable file on disk.
+    # Walk every candidate left-to-right and return the first readable one; if
+    # none is readable the caller falls back to scanning the inline command.
+    # ponytail: readability is the disambiguator, not a shell parse — a title
+    # that names a path which happens to exist could still fool it; acceptable
+    # ceiling, upgrade to real argv parsing only if that ever bites.
+    local s="$1" re val matched
     re='(--body-file[[:space:]=]+|-F[[:space:]]+)("[^"]+"|'\''[^'\'']+'\''|[^[:space:]]+)'
-    [[ "$1" =~ $re ]] || return 0
-    val="${BASH_REMATCH[2]}"
-    val="${val#[\"\']}"   # strip a leading quote, if any
-    val="${val%[\"\']}"   # strip a trailing quote, if any
-    printf '%s' "$val"
+    while [[ "$s" =~ $re ]]; do
+        val="${BASH_REMATCH[2]}"
+        matched="${BASH_REMATCH[0]}"
+        val="${val#[\"\']}"   # strip a leading quote, if any
+        val="${val%[\"\']}"   # strip a trailing quote, if any
+        [[ -r "$val" ]] && { printf '%s' "$val"; return 0; }
+        s="${s#*"$matched"}"  # advance past this candidate, keep looking
+    done
+    return 0
 }
 
 main "$@"

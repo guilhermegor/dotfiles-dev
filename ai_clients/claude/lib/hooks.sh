@@ -34,5 +34,6 @@ install_hooks() {
 
     copy_hook_file "session_start_context.sh" "$hooks_dir"
     copy_hook_file "pr_template_guard.sh" "$hooks_dir"
+    copy_hook_file "commit_title_length_guard.sh" "$hooks_dir"
     copy_hook_file "lesson_capture_checkpoint.sh" "$hooks_dir"
 }

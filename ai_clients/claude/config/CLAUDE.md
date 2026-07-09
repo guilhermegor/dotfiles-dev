@@ -37,33 +37,17 @@ files) and has repeatedly produced wrong "this is empty / does not exist" claims
 
 ## Author Claude artifacts in dotfiles-dev, never only in live `~/.claude/`
 
-`~/.claude/` is a **machine-local, non-symlinked** directory. Anything created
-directly there (a slash command, skill, agent, hook, rule, global CLAUDE.md edit,
-settings) is **lost on the next OS/distro install** — it is not version-controlled
-and the installer will not recreate it.
+Durable Claude artifacts (commands, skills, agents, rules, hooks, global
+`CLAUDE.md`, settings) must be authored in the version-controlled source under
+`~/github/dotfiles-dev/ai_clients/claude/`, then deployed with `make ai_clients`
+(or `cp` into place). Never write them only to `~/.claude/` — it is machine-local
+and non-symlinked, so direct edits are lost on the next OS/distro install.
 
-So when a Claude artifact needs to be created or edited, author it in the
-**version-controlled source-of-truth** under `~/github/dotfiles-dev/ai_clients/claude/`,
-then let the installer (`make ai_clients`) propagate it into `~/.claude/`:
-
-| Artifact | Source-of-truth path (edit here) | Installs to |
-|---|---|---|
-| Slash command | `ai_clients/claude/commands/<name>.md` | `~/.claude/commands/` |
-| Skill | `ai_clients/claude/skills/<name>.md` | `~/.claude/skills/` |
-| Subagent | `ai_clients/claude/agents/<name>.md` | `~/.claude/agents/` |
-| Language rule | `ai_clients/claude/rules/<lang>.md` | `~/.claude/rules/` |
-| Global CLAUDE.md rule | `ai_clients/claude/config/CLAUDE.md` | `~/.claude/CLAUDE.md` |
-| Hook / settings | `ai_clients/claude/lib/*.sh` (+ `settings.local.json`) | `~/.claude/` |
-
-Rules:
-- **Never** write a durable Claude artifact only to `~/.claude/`. Put it in
-  `dotfiles-dev` first; treat the live copy as a generated install target.
-- After editing the source, either run the installer or `cp` the file into place so
-  the change is active now **and** reproducible on a fresh machine.
-- This rule is itself an example: it lives in `config/CLAUDE.md` (source), not in the
-  live `~/.claude/CLAUDE.md`.
-- Session-scoped or project-scoped artifacts (a repo's own `.claude/`, a project
-  memory file) are exempt — they belong to their project, not the global toolchain.
+Enforced by the `claude_artifact_source_guard.sh` PreToolUse hook: a direct
+Write/Edit into `~/.claude/{commands,skills,agents,rules,hooks}/` or `CLAUDE.md`
+is blocked and redirected to its source. Exempt (written live on purpose):
+project-scoped `.claude/`, project memory, `tasks/`, `plans/`, `settings*.json`.
+Full source-path table: `ai_clients/CLAUDE.md`.
 
 # Global Programming Preferences
 
@@ -71,153 +55,13 @@ Rules:
 > instruction inside the active repository) conflicts with anything here, the project context
 > takes precedence. Treat this file as a fallback, not a mandate.
 
-## Core Philosophy
-
-- **Simplicity first:** make every change as small and targeted as possible —
-  touch the minimum code needed to achieve the goal. Complexity is a debt paid
-  by every future reader.
-- **Separation of concerns:** each module, class, or function owns exactly one
-  responsibility. I/O, business logic, and presentation must not be tangled.
-- **Don't repeat yourself (DRY):** every piece of knowledge has a single,
-  authoritative representation. Duplication is a bug waiting to diverge.
-- **Composition over inheritance:** Inject collaborators; avoid deep class hierarchies.
-- **Explicit over implicit:** no hidden side effects, no magic conventions.
-- **Fail fast:** raise meaningful, descriptive errors early.
-- **Root cause over symptom — even when it is more work:** always default to the
-  fix that resolves the problem at its source (the tool, the config, the data, the
-  design), and present that as the primary recommendation, regardless of how much
-  more total labour it is than a workaround, suppression, or exemption. Never nudge
-  toward the lighter option, and never editorialise thoroughness as a "tax",
-  "busywork", or "churn". Effort is not the decision criterion — correctness and
-  durability are. Assume "do it properly and completely" unless told otherwise.
-  (This does not license scope creep: keep the *change* minimal per *Simplicity
-  first*, but make it a real fix, not a patch over the symptom.)
-- **Reproducibility:** prefer automated, deterministic solutions over manual steps.
-- Keep functions/methods small and single-purpose (SRP).
-- Immutability by default; mutate only at well-defined boundaries.
-
-## Code Style (All Languages)
-
-- Meaningful names: variables, functions, and files must convey intent.
-- No abbreviations unless they are universally known (`url`, `id`, `db`).
-- Consistent indentation per language convention; never mix tabs and spaces.
-- Max line length: 88–100 chars depending on language.
-- Delete dead code — don't comment it out.
-- Never import unused libraries or modules — remove any import that is not
-  referenced in the file.
-- No magic numbers; use named constants or enums.
-- **Early returns / guard clauses:** validate preconditions and return (or raise) at the top
-  of a function instead of nesting logic inside `if/elif/else` chains. Happy path last,
-  edge cases first.
-
-```
-# Avoid
-def process(data):
-    if data is not None:
-        if data.is_valid():
-            if data.value > 0:
-                return transform(data)
-
-# Prefer
-def process(data):
-    if data is None:
-        raise ValueError("data must not be None")
-    if not data.is_valid():
-        raise ValueError("data failed validation")
-    if data.value <= 0:
-        raise ValueError("value must be positive")
-    return transform(data)
-```
-
-## Module Structure
-
-### One Class Per File
-
-Each source file must contain exactly **one public class**.
-
-- Public classes: one per file, named after the file (`user_service.<extension_language>` → `UserService`).
-- Private/shared base classes: allowed in their own file with a leading underscore prefix
-  (`_base_ingestion.<extension_language>`). Must not appear in the same file as a public class.
-- Utility functions with no shared state or lifecycle: write them as module-level functions,
-  not wrapped in a utility class.
-
-**Why:** Single-class files make `git blame` accurate, keep test files focused, and eliminate
-the implicit coupling that arises when two classes share a module boundary.
-
-## Design Patterns
-
-### Prefer always
-
-- Strategy pattern over long if/else or switch chains.
-- Dependency injection over hard-coded instantiation.
-- Interfaces / Protocols / Contracts over concrete coupling.
-- Pipeline / chain-of-responsibility for data transformation.
-- **Class vs function — the three triggers:** reach for a function by default.
-  A class is only warranted when **at least one** of these holds:
-  1. **State + lifecycle** — instance fields, `init/dispose`, scoped lifetime.
-  2. **Interface conformance** — concrete implementation of a domain port.
-  3. **Dependency injection** — collaborators wired at construction.
-
-  A class that satisfies none of the three is a module in disguise — collapse
-  it to a module of functions or a frozen object of functions.
-
-  | Pattern | Shape |
-  |---|---|
-  | Pure transformation (`formatSecondsToMinutes`) | function |
-  | Pure reducer (`(state, action) => state`) | function |
-  | Stateless facade over a vendor API (`showMessage = { success, error }`) | frozen object of functions |
-  | Top-level use case with no dependencies | function |
-  | Worker / connection / session manager (owns a resource + lifecycle) | class |
-  | Adapter implementing a domain port | class |
-  | Service / use case needing injected collaborators | class |
-
-  **Anti-patterns (always collapse):**
-  - **Class as namespace** — every method `static`, no instance state → module of functions.
-  - **Anemic class** — only getters/setters, no behavior → `type` / `interface` / dataclass.
-  - **Singleton wrapping a stateless function** (`Slugifier.getInstance().slugify(x)`) → `slugify(x)`.
-
-  ```python
-  # Avoid — no state, no port, no DI → class adds nothing
-  class StringUtils:
-      @staticmethod
-      def slugify(text: str) -> str: ...
-
-  # Prefer — just a function in utils/text.py
-  def slugify(text: str) -> str: ...
-  ```
-
-  ```typescript
-  // Correct use of a class — implements a port and owns a Worker instance
-  class TimerWorkerManager implements ITimerWorker {
-    private worker: Worker;
-    constructor() { this.worker = new Worker(...); }
-    postMessage(input: TimerWorkerInput): void { this.worker.postMessage(input); }
-    terminate(): void { this.worker.terminate(); }
-  }
-  ```
-
-### Avoid
-
-- God objects / classes with more than one responsibility.
-- Inheritance chains deeper than 2 levels.
-- Global mutable state.
-- Callback hell; prefer async/await or promise chains.
-- Deeply nested `if/elif/else` — flatten with guard clauses and early returns.
-
-## Architecture
-
-- Separate I/O from business logic: pure functions in the core, side effects at the edges.
-- Layer your data: raw → validated → transformed → stored (bronze/silver/gold).
-- Configuration via environment variables or config files — never hard-coded credentials.
-- Schema-validate all external inputs before processing.
-
-## Testing
-
-- Unit test pure functions; integration test I/O boundaries.
-- Mock at the boundary (network, filesystem, DB), not inside business logic.
-- Naming: `test_<unit>_<scenario>_<expected_outcome>`.
-- Each test asserts one behavior.
-- Tests must be deterministic: no random seeds without explicit fixtures.
+Language-agnostic coding conventions — Core Philosophy, Code Style, Module
+Structure, Design Patterns, Architecture, Testing, Documentation, the
+always/never-do checklists, and Numeric Precision — live in
+`ai_clients/claude/rules/common.md`. It auto-loads (via `paths:` frontmatter)
+whenever a source file is touched, so it stays out of the always-on context.
+Per-language rules (`python.md`, `bash.md`, …) layer on top. Only genuinely
+cross-cutting, non-file-scoped rules remain below.
 
 ## Version Control
 
@@ -227,214 +71,27 @@ the implicit coupling that arises when two classes share a module boundary.
 - `.gitignore` before first commit.
 - **Never `git commit` or `git push` without an explicit user request** — this applies universally, not just after spec/plan docs. Staging (`git add`) is fine, but always stop and confirm before committing or pushing. Pre-commit hooks are slow and pushes are irreversible from the user's perspective.
 
-## Documentation
-
-- Docstrings/comments explain **why**, not **what** (the code shows what).
-- Public APIs must have documented parameters, return types, and exceptions.
-- Keep README up to date with: setup, run, test, and deploy instructions.
-
-## What Claude Must Always Do
-
-1. Show complete, runnable code — no `...` placeholders unless a snippet is explicitly requested.
-2. Include type annotations / signatures on all public functions.
-3. Use composition patterns; never propose deep inheritance as a solution.
-4. Prefer `pyproject.toml` / lock files over ad-hoc dependency lists.
-5. Validate external data at ingestion, before any transformation.
-6. Use guard clauses / early returns to handle edge cases first; keep the happy path unindented.
-
-## Numeric Precision
-
-- **Never use `float` for values where precision matters** (money, measurements,
-  aggregations, comparisons). IEEE 754 binary floats cannot represent most decimal
-  fractions exactly — errors accumulate silently.
-- **Use the language-native decimal library instead:**
-  - Python → `from decimal import Decimal`
-  - JavaScript/TypeScript → [`decimal.js`](https://github.com/MikeMcl/decimal.js)
-    or [`big.js`](https://github.com/MikeMcl/big.js)
-  - Java/Kotlin → `java.math.BigDecimal`
-  - Go → `github.com/shopspring/decimal`
-  - Rust → `rust_decimal` crate
-- Initialise `Decimal` from **strings**, not floats: `Decimal("0.1")` not
-  `Decimal(0.1)` — constructing from a float inherits the float's imprecision.
-- **Prefer truncation (`ROUND_DOWN`) over rounding up or down** when discarding
-  excess digits. Truncation is deterministic and never inflates a value —
-  rounding introduces a directional bias that compounds across bulk operations
-  (e.g. summing thousands of prices). Only use `ROUND_HALF_UP` / `ROUND_HALF_EVEN`
-  when the domain explicitly demands it (e.g. tax, regulatory reporting).
-- **Always ask the developer for the required precision of each `Decimal` field**
-  before writing the code. Propose a sensible default based on the domain first,
-  then wait for explicit confirmation:
-  - Money / prices → suggest 2 decimal places (`0.01`)
-  - Exchange rates / unit prices → suggest 4 decimal places (`0.0001`)
-  - Percentages / ratios → suggest 4 decimal places (`0.0001`)
-  - Quantities / weights → suggest 3 decimal places (`0.001`)
-  - Scientific measurements → suggest 10 decimal places (`0.0000000001`)
-
-  Example prompt to the developer:
-  > "I'll use `Decimal` with **2 decimal places, truncation** for `price`.
-  > Does that match your requirements, or do you need a different precision
-  > or rounding mode?"
-
-  Never assume; never hardcode a precision without this confirmation step.
-
-## What Claude Must Never Do
-
-- Use bare `catch` / `except` without re-raising or logging.
-- Omit error handling for I/O operations.
-- Use `print` / `console.log` for operational logging — use a proper logger.
-- Suggest storing secrets in source code or environment variables committed to git.
-- Write synchronous code where the language/framework supports async natively.
-- Use `float` for monetary values, precise measurements, or any calculation
-  where cumulative rounding errors are unacceptable — use `Decimal` instead.
-
 ## Tutoring — resume before replacing
 
-When the user asks Claude to "resume tutoring", "continue tutoring",
-"pick up where we left off", or anything semantically equivalent —
-**including in plain natural language, not only via `/tutoring on`** —
-Claude MUST treat in-progress work as the source of truth and look for
-it before generating any new curriculum.
+When the user asks to resume/continue tutoring or "pick up where we left off"
+(in plain language, not only via `/tutoring on`), find in-progress work before
+generating any new curriculum. The `s:tutoring-resume` skill holds the mandatory
+discovery sequence (project memory file → active plan → fresh only after explicit
+confirmation).
 
-Mandatory discovery sequence, in order:
+## Lessons — capture and apply
 
-1. **Project memory file.** Compute the encoded project memory path:
-   `pwd | sed 's|/|-|g'` → `~/.claude/projects/<encoded>/memory/`.
-   If `tutoring_session.md` exists there, read it and resume from the
-   step marked `[>]`. Do not rewrite it from scratch and do not invent
-   a new step list.
-2. **Active plan file.** If `tutoring_session.md` is missing or empty,
-   scan `~/.claude/plans/*.md` for any plan whose body references the
-   current working directory, the repo name, or the project's
-   `CLAUDE.md` topic. If a match is found, use **its** task/step list as
-   the curriculum and resume from the first unchecked item. Linking back
-   to that plan in `tutoring_session.md` is fine; replacing its content
-   with an invented parallel list is not.
-3. **Only if both checks fail** may a fresh curriculum be generated, and
-   only after explicit user confirmation ("yes, start from scratch").
+Two lesson systems, both with detailed how-to in the `s:capturing-lessons` skill
+(load it the moment you decide something is worth capturing):
 
-This rule overrides any default tendency to begin with a clean slate.
-It applies regardless of which slash command (or none) triggered the
-session, and regardless of the model handling the conversation.
-
-**Why:** prior tutoring sessions encode the user's chosen step
-ordering, completed work, accumulated feedback, and recurring-issue
-notes. Inventing a new step list silently throws all of that away and
-forces re-work. The `/tutoring on` command's step 2b implements this
-check too; this section makes the same discipline mandatory for the
-natural-language path.
-
-## Self-Improvement Loop
-
-### Session start
-
-At the start of every session, read `~/.claude/tasks/lessons.md` (if it
-exists) and surface any entries whose **Scope** matches the current working
-directory or is `global`. Apply those rules immediately — do not wait to be
-reminded.
-
-### After a user correction
-
-Whenever the user corrects a mistake (wrong approach, wrong assumption, style
-violation, misunderstood requirement, etc.), immediately append an entry to
-`~/.claude/tasks/lessons.md` using the template below. Create the file and
-its parent directory if they do not exist.
-
-**Entry template:**
-
-```markdown
-## YYYY-MM-DD — <short description of the mistake>
-
-- **Project:** <absolute path of current working directory, or "global" if
-  the user says it applies across all projects>
-- **Mistake:** <one sentence — what I did wrong>
-- **Correction:** <what the user said or did to fix it>
-- **Rule:** <an imperative rule that prevents this mistake — "Never…" or
-  "Always…">
-- **Why:** <one sentence explaining the underlying reason>
-```
-
-**Scope decision:**
-- Default scope is the current project (use its absolute path).
-- Escalate to `global` only when the user explicitly says the lesson applies
-  everywhere (e.g. "don't do that in any project").
-
-### Iteration discipline
-
-- After writing a lesson, re-read the last five entries for the current
-  project and check whether any of them have now been violated again. If so,
-  add a `**Recurrence:** <date> — still happening` line to the original entry
-  and tighten the rule wording.
-- If the same mistake recurs three or more times, promote it to a top-level
-  rule in the project's `CLAUDE.md` (or the global one if scoped globally) and
-  mark the lessons.md entry `**Promoted:** YYYY-MM-DD`.
-- Never delete or archive lessons — accumulate them so pattern trends are
-  visible over time.
-
-## Scaffolding lessons — capture before moving on (standing instruction)
-
-When work in **any BlueprintX-scaffolded repo** (`mvc-*`, `ddd-*`, `react-*`, and any
-future tier) yields a **generalizable** change — a reusable seam, tooling, convention,
-or guardrail, *not* a project-specific business rule — capture it **before moving on**:
-
-1. Save it in the global store `~/.claude/memory/lessons/` as **one file per lesson**
-   (kebab-case), in the format `# Title` then `Tier / Lesson / Why / Scaffold into /
-   Origin`, and add it to that store's `README.md` index. Tier is one of
-   `language-common`, `python-common`, `language-specific (<lang>)`, or a scaffolding
-   tier (`mvc-*`, `ddd-*`, `react-*`, …).
-2. Mirror it in the originating repo's `docs/blueprintx-lessons.md`, kept
-   **git-ignored** and **excluded from the docs site** (untracked whenever the repo has
-   a remote, so the internal note never ships).
-
-Later, apply the captured lessons to the BlueprintX templates at
-`~/github/blueprintx/templates/` so future scaffolds inherit them instead of
-rediscovering them. Full convention: `~/.claude/memory/lessons/README.md`. This is
-**global — it applies to every project**, not one repo.
-
-## dotfiles-dev toolchain lessons — capture before moving on (standing instruction)
-
-When work in **any project** yields a generalizable improvement to the **Claude / dotfiles
-toolchain** — a reusable slash command, skill, agent, rule, hook, global `CLAUDE.md` rule, or
-installer change, *not* a project-specific business rule — capture it **before moving on**:
-
-1. Save it in the global store `~/.claude/memory/lessons-dotfiles/` as **one file per lesson**
-   (kebab-case), in the format `# Title` then `Area / Lesson / Why / Apply to (dotfiles-dev) /
-   PR / Origin`, and add it to that store's `README.md` index.
-2. Mirror it in the originating repo's `docs/dotfiles-dev-lessons.md`, kept **git-ignored** and
-   **excluded from the docs site** (never ships).
-
-Later, apply the captured lessons to the dotfiles-dev source at
-`~/github/dotfiles-dev/ai_clients/claude/` (per the "Author Claude artifacts in dotfiles-dev"
-rule above), each landing via its own dotfiles-dev PR. This is the toolchain analogue of the
-BlueprintX "Scaffolding lessons" instruction — that one feeds templates, this one feeds the
-dotfiles-dev toolchain. Full convention: `~/.claude/memory/lessons-dotfiles/README.md`.
-**Global — it applies to every project**, not one repo.
-
-### Which store? Route by where the fix lands, not by the topic
-
-The two "capture before moving on" instructions above feed **different** backport
-targets with **different** inheritance mechanisms. Pick the store by the **artifact
-the fix ultimately edits**, never by what the lesson is *about*:
-
-- Fix edits a **scaffolding template** under `~/github/blueprintx/templates/` (changes
-  what a *generated project* contains — source seams, `pyproject.toml`, `.gitignore`,
-  CI, `Makefile`, `.pre-commit-config.yaml`, `mkdocs.yml`, docs, a baked-in convention)
-  → **BlueprintX store** `~/.claude/memory/lessons/`.
-- Fix edits the **Claude/dotfiles toolchain** under
-  `~/github/dotfiles-dev/ai_clients/claude/` (a slash command, skill, agent, rule,
-  hook, global `CLAUDE.md` rule, `settings*.json`, or installer — changes how *Claude
-  itself* behaves across every project) → **dotfiles-dev store**
-  `~/.claude/memory/lessons-dotfiles/`.
-
-**Decision test** — ask *"how does a fresh environment inherit this fix?"*: via
-**scaffolding a new project** → BlueprintX; via **reinstalling the Claude toolchain
-(`make ai_clients`)**, surviving across all projects → dotfiles-dev.
-
-**Route by landing site, not subject.** A lesson *about* the dotfiles toolchain whose
-fix lands in a **template** (e.g. "scaffold ships a git-ignored lessons mirror") is a
-**BlueprintX** lesson; a hook that helps *capture* scaffold lessons is a **dotfiles-dev**
-lesson — it lands in `ai_clients/claude/`. If one finding genuinely requires changes in
-**both** a template and the toolchain, write **two** lessons, one per store,
-cross-referencing. Misrouting parks a fix in a queue that never applies it.
+- **Corrections log** (`~/.claude/tasks/lessons.md`) — when the user corrects a
+  mistake, append an entry before moving on. Surfaced each session by the
+  `session_start_context.sh` hook; read and apply entries scoped to the cwd or `global`.
+- **Generalizable improvements** — when work yields a reusable seam/tooling/convention/
+  guardrail (not a project-specific rule), **capture it before moving on** into the right
+  backport store, routed by *where the fix lands*: a scaffolding template →
+  BlueprintX store `~/.claude/memory/lessons/`; the Claude/dotfiles toolchain →
+  dotfiles-dev store `~/.claude/memory/lessons-dotfiles/`.
 
 ## Compaction
 

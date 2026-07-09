@@ -25,6 +25,13 @@ copy_rule_file() {
     print_status "success" "Installed $1 → $dest"
 }
 
+# ── Language-common ───────────────────────────────────────────────────────────
+
+install_common_rules() {
+    local rules_dir="$1"
+    copy_rule_file "common.md" "$rules_dir"
+}
+
 # ── Python ────────────────────────────────────────────────────────────────────
 
 install_python_rules() {
@@ -54,6 +61,7 @@ install_rules() {
     local rules_dir="$CLAUDE_DIR/rules"
     mkdir -p "$rules_dir"
 
+    install_common_rules "$rules_dir"
     install_python_rules "$rules_dir"
     install_javascript_rules "$rules_dir"
     install_bash_rules "$rules_dir"

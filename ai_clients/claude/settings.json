@@ -77,6 +77,23 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/commit_title_length_guard.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/commit_secret_guard.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/protected_branch_guard.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/claude_artifact_source_guard.sh\""
           }
         ]
       }

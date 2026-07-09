@@ -29,6 +29,12 @@ emit_cross_project_context() {
 		printf '%s\n' "[cross-project-context] Global scaffolding-lessons store (backport queue, NOT auto-loaded): $lessons_store/README.md — read it before planning any BlueprintX template work."
 	fi
 
+	# Always (when present): the per-project corrections log. Surfaced here (not in CLAUDE.md)
+	# so the always-on prompt stays lean; read it and apply entries scoped to this cwd or global.
+	if [ -f "$claude_dir/tasks/lessons.md" ]; then
+		printf '%s\n' "[cross-project-context] Corrections log (NOT auto-loaded): $claude_dir/tasks/lessons.md — read it and immediately apply any entry whose Scope matches this working directory or is 'global'. Append a new entry whenever the user corrects a mistake (see the s:capturing-lessons skill)."
+	fi
+
 	# BlueprintX template repo OR a scaffolded project → point at proving-ground memory.
 	local is_blueprintx=0
 	shopt -s nullglob

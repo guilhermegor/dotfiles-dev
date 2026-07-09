@@ -37,33 +37,17 @@ files) and has repeatedly produced wrong "this is empty / does not exist" claims
 
 ## Author Claude artifacts in dotfiles-dev, never only in live `~/.claude/`
 
-`~/.claude/` is a **machine-local, non-symlinked** directory. Anything created
-directly there (a slash command, skill, agent, hook, rule, global CLAUDE.md edit,
-settings) is **lost on the next OS/distro install** — it is not version-controlled
-and the installer will not recreate it.
+Durable Claude artifacts (commands, skills, agents, rules, hooks, global
+`CLAUDE.md`, settings) must be authored in the version-controlled source under
+`~/github/dotfiles-dev/ai_clients/claude/`, then deployed with `make ai_clients`
+(or `cp` into place). Never write them only to `~/.claude/` — it is machine-local
+and non-symlinked, so direct edits are lost on the next OS/distro install.
 
-So when a Claude artifact needs to be created or edited, author it in the
-**version-controlled source-of-truth** under `~/github/dotfiles-dev/ai_clients/claude/`,
-then let the installer (`make ai_clients`) propagate it into `~/.claude/`:
-
-| Artifact | Source-of-truth path (edit here) | Installs to |
-|---|---|---|
-| Slash command | `ai_clients/claude/commands/<name>.md` | `~/.claude/commands/` |
-| Skill | `ai_clients/claude/skills/<name>.md` | `~/.claude/skills/` |
-| Subagent | `ai_clients/claude/agents/<name>.md` | `~/.claude/agents/` |
-| Language rule | `ai_clients/claude/rules/<lang>.md` | `~/.claude/rules/` |
-| Global CLAUDE.md rule | `ai_clients/claude/config/CLAUDE.md` | `~/.claude/CLAUDE.md` |
-| Hook / settings | `ai_clients/claude/lib/*.sh` (+ `settings.local.json`) | `~/.claude/` |
-
-Rules:
-- **Never** write a durable Claude artifact only to `~/.claude/`. Put it in
-  `dotfiles-dev` first; treat the live copy as a generated install target.
-- After editing the source, either run the installer or `cp` the file into place so
-  the change is active now **and** reproducible on a fresh machine.
-- This rule is itself an example: it lives in `config/CLAUDE.md` (source), not in the
-  live `~/.claude/CLAUDE.md`.
-- Session-scoped or project-scoped artifacts (a repo's own `.claude/`, a project
-  memory file) are exempt — they belong to their project, not the global toolchain.
+Enforced by the `claude_artifact_source_guard.sh` PreToolUse hook: a direct
+Write/Edit into `~/.claude/{commands,skills,agents,rules,hooks}/` or `CLAUDE.md`
+is blocked and redirected to its source. Exempt (written live on purpose):
+project-scoped `.claude/`, project memory, `tasks/`, `plans/`, `settings*.json`.
+Full source-path table: `ai_clients/CLAUDE.md`.
 
 # Global Programming Preferences
 

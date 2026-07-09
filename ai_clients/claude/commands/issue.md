@@ -1,15 +1,55 @@
 ---
 name: c:issue
 allowed-tools: Bash(rtk gh issue*), Bash(rtk gh project*), Bash(rtk gh repo*), Bash(rtk git*), AskUserQuestion, Read, Grep
-description: Create a GitHub issue (assigned to you), add it to the repo's kanban, and open a linked recommended-name branch
-argument-hint: "<description of the work> [--label <name>] [--project <name|number>]"
+description: Create or resume a GitHub issue (assigned to you), add it to the repo's kanban, and open a linked recommended-name branch
+argument-hint: "<description | #number | issue-url> [--new] [--label <name>] [--project <name|number>]"
 ---
 
-You are creating a new work item end to end: a GitHub issue, its kanban card, and a linked
+You are taking a work item end to end: a GitHub issue, its kanban card, and a linked
 branch — the authoring half of a Linear-style flow. The runtime transitions (Ready → In
 progress → Done) are handled by GitHub Projects' own workflows, NOT by this command. Follow
-these steps exactly. `$ARGUMENTS` holds the work description (plus optional `--label` /
-`--project`).
+these steps exactly. `$ARGUMENTS` holds an issue reference *or* a work description (plus
+optional `--new` / `--label` / `--project`).
+
+The issue may already exist. **Step 0 decides**; everything after it is either *create* or
+*resume*.
+
+## 0. Resolve the target issue
+
+Run step 2 (repo context) first — you need `<owner>/<repo>` to look anything up.
+
+If `$ARGUMENTS` is empty, ask the user what the work is and treat the answer as the description.
+If `--new` was passed, skip straight to the create path (step 1).
+
+Classify the reference:
+
+| `$ARGUMENTS` looks like | Action |
+|---|---|
+| `#42`, `42` | `rtk gh issue view 42 --repo <owner>/<repo> --json number,title,url,state` |
+| a URL ending `/issues/42` | same, using the owner/repo **from the URL** |
+| anything else | search (below) |
+
+**Search path.** Treat the text as a query, not a title:
+
+`rtk gh issue list --repo <owner>/<repo> --state all --search "<text>" --json number,title,url,state --limit 10`
+
+Then:
+
+- **Exactly one hit, and its title clearly covers the request** → confirm with AskUserQuestion
+  ("Resume `#<N> <title>`?" / "No — create a new issue"). Never adopt an existing issue silently.
+- **Two or more plausible hits** → AskUserQuestion listing the top 3 as
+  `#<N> — <title> (<state>)`, plus a final **"None of these — create a new issue"** option.
+  Order by relevance as returned; prefer `open` over `closed` when scores are close.
+- **Zero hits** → say so in one line and fall through to the create path (step 1).
+
+Once resolved to an existing `<N>`:
+
+- If its state is `closed`, ask whether to reopen (`rtk gh issue reopen <N>`) or create a new
+  issue instead. Do not reopen without an answer.
+- Skip step 3 entirely. Keep the issue's existing title/body; derive the **slug** from its title
+  and the **type** from its `<type>:` prefix (default `feat` if it has none) for the branch name.
+- Continue at step 4 — the card and branch steps are idempotent: `item-add` on an issue already
+  on the board is a no-op, and step 6 checks for an existing linked branch first.
 
 ## 1. Derive title, type, and slug
 
@@ -24,6 +64,8 @@ Run: `rtk gh repo view --json name,owner,defaultBranchRef`
 Extract `name` (repo), `owner.login`, and `defaultBranchRef.name` (base branch).
 
 ## 3. Create the issue
+
+*(Create path only — skip if step 0 resolved an existing issue.)*
 
 Build the body from this template (the **Documentação** section is mandatory — it is a standing
 requirement, keep it verbatim):
@@ -82,8 +124,11 @@ Record the project's number and node id.
 ## 5. Add the card and set its status
 
 Add the issue to the board: `rtk gh project item-add <project-number> --owner <owner> --url <issue-url>`
+(Safe to re-run — an issue already on the board is not duplicated.)
 
-Then choose the status. **Ask the user** (AskUserQuestion) which bucket the card starts in, and
+Then choose the status. **On the resume path**, first read the card's current status from
+`item-list --format json`; if it is already past `Ready` (e.g. `In progress`), report it and
+leave it alone rather than resetting it. **Ask the user** (AskUserQuestion) which bucket the card starts in, and
 **explain the design in the prompt** so the choice is deliberate, not arbitrary:
 
 - **`Ready`** — all **three** upstream questions are answered: **why** (*discovery* — the
@@ -109,14 +154,21 @@ Resolve the field + option ids and set it:
 
 ## 6. Open the linked branch
 
-Create a branch linked to the issue (this is the recommended-name step — it makes the future PR
-auto-associate with the issue):
+First check whether the issue already has one:
 
-`rtk gh issue develop <N> --repo <owner>/<repo> --name <type>/<N>-<slug> --base <base> --checkout`
+`rtk gh issue develop <N> --repo <owner>/<repo> --list`
+
+- **A linked branch exists** → check it out (`rtk git checkout <branch>`, fetching first if it is
+  only on the remote). Do not create a second branch.
+- **None** → create one linked to the issue (this is the recommended-name step — it makes the
+  future PR auto-associate with the issue):
+
+  `rtk gh issue develop <N> --repo <owner>/<repo> --name <type>/<N>-<slug> --base <base> --checkout`
 
 ## 7. Report
 
 Output, concisely:
+- Mode: `created` or `resumed`
 - Issue: `#<N>` + URL
 - Board: `<project> → <status>`
 - Branch: `<type>/<N>-<slug>` (checked out)

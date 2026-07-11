@@ -46,7 +46,7 @@ Each category file (e.g. `install_lib/browsers.sh`, `install_coding_lib/editors.
 |-------|----------|---------|
 | `func` | yes | The `install_<name>` function defined above in the same file |
 | `label` | yes | Human-readable menu label |
-| `gnome_folder` | no | One of `Sistema`, `Seguranca`, `Utilitarios`, `Media`, `Sharing`, `IRPF`, `DEV`, `Ereader`, `Office`, `OrgPessoal`, `AmbienteVirtual`, or empty (no folder) |
+| `gnome_folder` | no | One of `Sistema`, `Seguranca`, `Utilitarios`, `Media`, `Sharing`, `IRPF`, `DEV`, `Ereader`, `Office`, `OrgPessoal`, `Social`, `AmbienteVirtual`, or empty (no folder) |
 | `desktop_file` | no | Explicit `.desktop` filename. If empty, derived as `${func#install_}.desktop` |
 
 `ubuntu_workspace.sh` reads the registry at startup and merges the `desktop_file` of every entry whose `gnome_folder` matches into the corresponding folder array, so install registrations are the single source of truth for app placement.
@@ -154,7 +154,8 @@ Existing folders and their purpose:
 | `DEV` | DEV | IDEs, terminals, DB clients, Docker |
 | `Ereader` | Ereader | E-book readers |
 | `Office` | Office | LibreOffice suite |
-| `OrgPessoal` | Personal Organization | Calendars, tasks, email, productivity |
+| `OrgPessoal` | Personal Organization | Calendars, tasks, productivity |
+| `Social` | Social | Messaging and email (Slack, Telegram, Thunderbird) |
 | `AmbienteVirtual` | Operating System | VMs and virtualisation |
 
 For **pre-installed system apps** (e.g. `gnome-control-center.desktop`, `mission-center.desktop`) that no install function manages, append them to the static `<id>_app_names` arrays inside `organize_app_folders()`. The registry merge runs alongside the static arrays — both contribute to the same folder.

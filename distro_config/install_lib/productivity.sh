@@ -403,6 +403,26 @@ install_miro() {
 }
 
 # ============================================================================
+# MESSAGING
+# ============================================================================
+
+install_telegram() {
+    print_status "section" "TELEGRAM"
+
+    if command_exists telegram-desktop || flatpak list 2>/dev/null | grep -q "org.telegram.desktop"; then
+        print_status "info" "Telegram already installed"
+        return 0
+    fi
+
+    setup_flatpak
+
+    print_status "info" "Installing Telegram via Flatpak..."
+    run_or_echo flatpak install -y flathub org.telegram.desktop
+    print_status "success" "Telegram installed"
+    print_status "config" "Launch: flatpak run org.telegram.desktop"
+}
+
+# ============================================================================
 # EMAIL / NEWS
 # ============================================================================
 
@@ -580,7 +600,8 @@ install_espanso() {
 # ============================================================================
 
 INSTALL_REGISTRY+=(
-    "install_thunderbird:Thunderbird Email Client:OrgPessoal:thunderbird.desktop"
+    "install_telegram:Telegram:Social:org.telegram.desktop.desktop"
+    "install_thunderbird:Thunderbird Email Client:Social:thunderbird.desktop"
     "install_newsflash:NewsFlash RSS Reader:Newsletter:io.gitlab.news_flash.NewsFlash.desktop"
     "install_google_calendar:Google Calendar (PWA):OrgPessoal:google-calendar.desktop"
     "install_notion_calendar:Notion Calendar (PWA):OrgPessoal:notion-calendar.desktop"

@@ -942,7 +942,7 @@ INSTALL_REGISTRY+=(
     "install_rofi:Rofi Launcher:Utilitarios:rofi.desktop"
     "install_pinta:Pinta Image Editor:Utilitarios:com.github.PintaProject.Pinta.desktop"
     "install_veracrypt_appimage:VeraCrypt AppImage::"
-    "install_slack:Slack::com.slack.Slack.desktop"
+    "install_slack:Slack:Social:com.slack.Slack.desktop"
     "install_snap_apps:Snap Applications::"
     "install_flatpak_apps:Flatpak Applications::"
     "install_vitals:Vitals System Monitor::"

@@ -797,7 +797,6 @@ organize_app_folders() {
         'linear.desktop'
         'cursor.desktop' 'com.cursor.Cursor.desktop' 'cursor-app.desktop'
         'notepadqq.desktop' 'com.notepadqq.Notepadqq.desktop'
-        'slack.desktop' 'com.slack.Slack.desktop' 'slack_slack.desktop' 'slack-desktop.desktop'
         'pgadmin4.desktop' 'pgadmin4_pgadmin4.desktop' 'org.pgadmin.pgAdmin4.desktop'
     )
 
@@ -1015,8 +1014,6 @@ EOF
         'google-calendar.desktop'
         'notion-calendar.desktop'
         'google-tasks.desktop'
-        'thunderbird.desktop' 'thunderbird_thunderbird.desktop'
-        'org.mozilla.Thunderbird.desktop' 'mozilla-thunderbird.desktop'
     )
 
     for app in "${org_pessoal_app_names[@]}"; do
@@ -1024,22 +1021,6 @@ EOF
             org_pessoal_apps+=("'$result'")
         fi
     done
-
-    shopt -s nullglob
-    for desktop_file in /usr/share/applications/*thunderbird*.desktop \
-                        /var/lib/snapd/desktop/applications/*thunderbird*.desktop \
-                        /var/lib/flatpak/exports/share/applications/*thunderbird*.desktop \
-                        /var/lib/flatpak/exports/share/applications/*Thunderbird*.desktop \
-                        "$HOME/.local/share/applications"/*thunderbird*.desktop; do
-        if [ -f "$desktop_file" ]; then
-            local basename
-            basename=$(basename "$desktop_file")
-            if [[ ! " ${org_pessoal_apps[*]} " == *" '$basename' "* ]]; then
-                org_pessoal_apps+=("'$basename'")
-            fi
-        fi
-    done
-    shopt -u nullglob
 
     _merge_registry_into_folder "OrgPessoal" org_pessoal_apps
     mapfile -t org_pessoal_apps < <(printf '%s\n' "${org_pessoal_apps[@]}" | sort -u)
@@ -1202,10 +1183,64 @@ EOF
         print_status "warning" "No Newsletter apps found"
     fi
 
+    # ==================== COMMUNICATION FOLDER ====================
+    print_status "info" "Creating Social folder..."
+    local social_apps=()
+
+    local social_app_names=(
+        'slack.desktop' 'com.slack.Slack.desktop' 'slack_slack.desktop' 'slack-desktop.desktop'
+        'org.telegram.desktop.desktop' 'telegram-desktop.desktop' 'telegramdesktop.desktop'
+        'thunderbird.desktop' 'thunderbird_thunderbird.desktop'
+        'org.mozilla.Thunderbird.desktop' 'mozilla-thunderbird.desktop'
+    )
+
+    for app in "${social_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            if [[ ! " ${social_apps[*]} " == *" '$result' "* ]]; then
+                social_apps+=("'$result'")
+            fi
+        fi
+    done
+
+    shopt -s nullglob
+    for desktop_file in /usr/share/applications/*thunderbird*.desktop \
+                        /usr/share/applications/*telegram*.desktop \
+                        /var/lib/snapd/desktop/applications/*thunderbird*.desktop \
+                        /var/lib/snapd/desktop/applications/*telegram*.desktop \
+                        /var/lib/snapd/desktop/applications/*slack*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*thunderbird*.desktop \
+                        /var/lib/flatpak/exports/share/applications/*Thunderbird*.desktop \
+                        /var/lib/flatpak/exports/share/applications/org.telegram.desktop.desktop \
+                        "$HOME/.local/share/applications"/*thunderbird*.desktop \
+                        "$HOME/.local/share/applications"/*telegram*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            if [[ ! " ${social_apps[*]} " == *" '$basename' "* ]]; then
+                social_apps+=("'$basename'")
+            fi
+        fi
+    done
+    shopt -u nullglob
+
+    _merge_registry_into_folder "Social" social_apps
+    mapfile -t social_apps < <(printf '%s\n' "${social_apps[@]}" | sort -u)
+    if [ ${#social_apps[@]} -gt 0 ]; then
+        local social_apps_str
+        social_apps_str=$(IFS=,; echo "${social_apps[*]}")
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Social/ name 'Social'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Social/ apps "[${social_apps_str}]"
+        folder_ids+=("'Social'")
+        print_status "success" "Social folder created with ${#social_apps[@]} apps"
+        print_status "config" "  Apps: ${social_apps_str}"
+    else
+        print_status "warning" "No Social apps found"
+    fi
+
     # ==================== UPDATE FOLDER LIST ====================
     local ordered_folder_ids=()
 
-    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'Media'" "'OrgPessoal'" "'AmbienteVirtual'" "'Browsers'" "'Newsletter'"; do
+    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'Media'" "'OrgPessoal'" "'Social'" "'AmbienteVirtual'" "'Browsers'" "'Newsletter'"; do
         for created_folder in "${folder_ids[@]}"; do
             if [ "$created_folder" = "$folder" ]; then
                 ordered_folder_ids+=("$folder")

@@ -3,10 +3,10 @@
 # does not trace back to a tracked issue, and point the author at /issue.
 #
 # Why this exists: the house rule is "an issue (and a kanban card) exists BEFORE any
-# implementation" — it is what keeps the backlog the plan of record, the PR's `Closes #N` link
-# honest, and the board moving on its own. Today that rule is enforced only by remembering to run
-# /issue first, and the moment a branch is cut without one, the card, the `Closes #N` and the
-# release notes all silently lose the trace. Prose is advisory; a PreToolUse guard is binding.
+# implementation" — it is what keeps the backlog the plan of record, the PR's closing link honest,
+# and the board moving on its own. Today that rule is enforced only by remembering to run /issue
+# first, and the moment a branch is cut without one, the card, the close link and the release notes
+# all silently lose the trace. Prose is advisory; a PreToolUse guard is binding.
 #
 # Branch creation is the right interception point: it is the first observable tool call of any
 # implementation. Its sibling — protected_branch_guard.sh — catches the other end of the same
@@ -14,9 +14,25 @@
 # Write/Edit guard: gating file edits would fire on scratchpads, notes and read-modify
 # exploration, which is user-hostile.
 #
+# Tracker-agnostic. The tracker is resolved PER REPO from a LOCAL, git-ignored map
+# (~/.claude/issue-trackers.conf) so a repo you have restricted rights on — e.g. one hosted on
+# GitHub but tracking issues in Linear — needs ZERO in-repo files to select its tracker. Supported:
+#   * github — verified via `gh` (always authenticated in this setup);
+#   * linear — a structural ref check (branch carries a TEAM-123 id), upgraded to a real existence
+#     lookup ONLY when LINEAR_API_KEY is set. A PreToolUse hook is a standalone bash process and
+#     CANNOT reach the Linear MCP server (MCP is a Claude-side client, absent here), so the token +
+#     GraphQL API is the only automated Linear existence path — and it is optional;
+#   * none — guard off for this repo.
+#
+# Decision, once a tracker and a branch ref are known:
+#   * no ref in the branch name              -> BLOCK (nothing to trace)
+#   * tracker says the issue EXISTS          -> allow
+#   * tracker AUTHORITATIVELY says NOT FOUND -> BLOCK (a phantom closing link)
+#   * tracker cannot answer (no creds / net) -> allow (unknown != absent)
+#
 # Hook I/O contract (same as the other guards): silent on stdout, speaks through exit code +
-# stderr, no lib/common.sh. It fails OPEN — not a git repo, no GitHub remote, no gh CLI, or any
-# answer the tracker cannot give confidently exits 0 and lets the branch be created.
+# stderr, no lib/common.sh. It fails OPEN — not a git repo, tracker "none", or any answer the
+# tracker cannot give confidently exits 0 and lets the branch be created.
 
 set -u
 
@@ -26,8 +42,13 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   ALLOW_UNTRACKED_BRANCH=1 git checkout -b scratch/poke-at-it
 ESCAPE_HATCH='ALLOW_UNTRACKED_BRANCH=1'
 
+# Local, git-ignored, OUTSIDE any project repo: selecting a repo's tracker never edits the repo.
+# Lines: "<origin-url-or-dir-name substring>  <github|linear|none>". First match wins. The file
+# documents its own format in a header comment; a missing file just means "auto-detect".
+TRACKER_MAP="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/issue-trackers.conf"
+
 main() {
-    local payload tool command branch issue
+    local payload tool command branch tracker ref status
 
     payload="$(cat)"
     tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
@@ -41,14 +62,18 @@ main() {
     branch="$(extract_new_branch "$command")" || exit 0   # not a branch-creating command
     [[ -n "$branch" ]] || exit 0
 
-    has_github_remote || exit 0      # no tracker to check against → nothing to enforce
+    tracker="$(resolve_tracker)"
+    [[ "$tracker" == "none" ]] && exit 0      # no board for this repo → nothing to enforce
 
-    issue="$(issue_ref_in "$branch")"
-    if [[ -n "$issue" ]] && issue_exists "$issue"; then
-        exit 0
-    fi
+    ref="$(ref_in_branch "$tracker" "$branch")"
+    [[ -n "$ref" ]] || block_no_ref "$branch" "$tracker"
 
-    block "$branch" "$issue"
+    status="$(issue_status "$tracker" "$ref")"
+    case "$status" in
+        exists | unknown) exit 0 ;;                     # verified, or cannot verify → allow
+        absent) block_absent "$branch" "$ref" "$tracker" ;;
+        *) exit 0 ;;                                     # defensive: unknown state → allow
+    esac
 }
 
 extract_new_branch() {
@@ -70,13 +95,41 @@ extract_new_branch() {
     printf '%s' "$val"
 }
 
-has_github_remote() {
-    local url
-    url="$(git remote get-url origin 2>/dev/null)" || return 1
-    [[ "$url" == *github.com* ]]
+resolve_tracker() {
+    # Emit github | linear | none for the current repo. Order: env override, then the local
+    # git-ignored map, then auto-detect (a GitHub remote → github, else none — there is no remote
+    # signal for Linear, so a GitHub-hosted / Linear-tracked repo MUST name itself in the map).
+    local override url root name key val
+    override="${CLAUDE_ISSUE_TRACKER:-}"
+    [[ -n "$override" ]] && { printf '%s' "$override"; return; }
+
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || { printf 'none'; return; }
+    url="$(git remote get-url origin 2>/dev/null || true)"
+    name="$(basename "$root")"
+
+    if [[ -r "$TRACKER_MAP" ]]; then
+        while read -r key val _; do
+            [[ -z "$key" || "$key" == \#* ]] && continue
+            if [[ -n "$url" && "$url" == *"$key"* ]] || [[ "$name" == "$key" ]]; then
+                printf '%s' "$val"
+                return
+            fi
+        done < "$TRACKER_MAP"
+    fi
+
+    [[ "$url" == *github.com* ]] && { printf 'github'; return; }
+    printf 'none'
 }
 
-issue_ref_in() {
+ref_in_branch() {
+    local tracker="$1" branch="$2"
+    case "$tracker" in
+        github) github_ref_in "$branch" ;;
+        linear) linear_ref_in "$branch" ;;
+    esac
+}
+
+github_ref_in() {
     # Emit the issue number carried by the branch name, if any. Covers the shapes /issue produces
     # and the ones people type by hand: feat/short-desc-42, 42-short-desc, fix/42-short-desc.
     local branch="$1"
@@ -84,34 +137,97 @@ issue_ref_in() {
     printf '%s' "${BASH_REMATCH[2]}"
 }
 
-issue_exists() {
-    # True only when the tracker confirms the issue. Any other failure (offline, unauthenticated,
-    # rate-limited) is "unknown", not "absent" — and unknown must not block a valid branch.
-    local number="$1" err
-    command -v gh >/dev/null 2>&1 || return 0
-
-    err="$(gh issue view "$number" --json number 2>&1 >/dev/null)" && return 0
-
-    printf '%s' "$err" | grep -qiE 'could not resolve|not found|no issue' && return 1
-    return 0   # gh failed for some other reason → cannot verify → let it through
+linear_ref_in() {
+    # Emit "<TEAMKEY> <number>" for a Linear-style ref in the branch (dit-456 → "DIT 456"), or
+    # nothing. The `type/` prefix convention (feat/, fix/) shields against matching the prefix,
+    # which is followed by `/`, not `-<digit>`.
+    local branch="$1"
+    [[ "$branch" =~ ([A-Za-z][A-Za-z0-9]*)-([0-9]+) ]] || return 0
+    printf '%s %s' "${BASH_REMATCH[1]^^}" "${BASH_REMATCH[2]}"
 }
 
-block() {
-    local branch="$1" issue="$2"
+issue_status() {
+    # Tri-state: exists | absent | unknown. "unknown" must never block (unknown != absent).
+    local tracker="$1" ref="$2"
+    case "$tracker" in
+        github) github_status "$ref" ;;
+        linear) linear_status "$ref" ;;
+        *) printf 'unknown' ;;
+    esac
+}
+
+github_status() {
+    local number="$1" out rc
+    command -v gh >/dev/null 2>&1 || { printf 'unknown'; return; }
+
+    out="$(gh issue view "$number" --json number 2>&1)"
+    rc=$?
+    (( rc == 0 )) && { printf 'exists'; return; }
+
+    # Only an authoritative "no such issue" is absent; any other gh failure (offline,
+    # unauthenticated, rate-limited) is unknown.
+    printf '%s' "$out" | grep -qiE 'could not resolve|not found|no issues? found' \
+        && { printf 'absent'; return; }
+    printf 'unknown'
+}
+
+linear_status() {
+    # Structural refs are all we can confirm without a token, so no key → unknown (the branch
+    # carried a ref; we simply cannot verify it, and unknown fails open). With a token, ask the
+    # GraphQL API: a 200 with an empty node set is an authoritative not-found.
+    local ref="$1" team num body resp nodes
+    [[ -n "${LINEAR_API_KEY:-}" ]] || { printf 'unknown'; return; }
+    command -v curl >/dev/null 2>&1 || { printf 'unknown'; return; }
+
+    team="${ref%% *}"
+    num="${ref##* }"
+    body="$(jq -n --arg k "$team" --argjson n "$num" \
+        '{query:"query($k:String!,$n:Float!){issues(filter:{team:{key:{eq:$k}},number:{eq:$n}}){nodes{identifier}}}",variables:{k:$k,n:$n}}' \
+        2>/dev/null)" || { printf 'unknown'; return; }
+
+    resp="$(curl -sS --max-time 8 -X POST https://api.linear.app/graphql \
+        -H "Authorization: $LINEAR_API_KEY" -H 'Content-Type: application/json' \
+        --data "$body" 2>/dev/null)" || { printf 'unknown'; return; }
+
+    # Any GraphQL error means we did not get an authoritative answer.
+    printf '%s' "$resp" | jq -e '.errors' >/dev/null 2>&1 && { printf 'unknown'; return; }
+    nodes="$(printf '%s' "$resp" | jq -r '.data.issues.nodes | length' 2>/dev/null)" \
+        || { printf 'unknown'; return; }
+
+    (( nodes > 0 )) && { printf 'exists'; return; }
+    printf 'absent'
+}
+
+block_no_ref() {
+    local branch="$1" tracker="$2"
     {
-        echo "BLOCKED: branch '${branch}' does not trace back to a tracked issue."
+        echo "BLOCKED: branch '${branch}' carries no tracked-issue reference."
         echo
-        if [[ -n "$issue" ]]; then
-            echo "The name carries #${issue}, but no such issue exists in this repo."
-        else
-            echo "The name carries no issue number."
-        fi
+        case "$tracker" in
+            github) echo "Expected an issue number in the name (feat/thing-123, 123-thing)." ;;
+            linear) echo "Expected a Linear issue id in the name (feat/dit-456-thing)." ;;
+        esac
         echo
-        echo "Every implementation starts from an issue on the board — that is what keeps the"
-        echo "backlog the plan of record, the PR's 'Closes #N' honest, and the kanban card moving."
+        echo "Every implementation starts from an issue on the board — that keeps the backlog the"
+        echo "plan of record, the PR's closing link honest, and the kanban card moving."
         echo
-        echo "Run /issue: it opens the issue, adds it to the kanban, and hands back the branch"
-        echo "name to use here. For a genuine throwaway branch, re-run with:"
+        echo "Run /issue to open one, or re-run with:  ${ESCAPE_HATCH} <your command>"
+    } >&2
+    exit 2
+}
+
+block_absent() {
+    local branch="$1" ref="$2" tracker="$3" pretty
+    case "$tracker" in
+        github) pretty="#${ref}" ;;
+        linear) pretty="${ref% *}-${ref#* }" ;;   # "DIT 456" → "DIT-456"
+        *) pretty="$ref" ;;
+    esac
+    {
+        echo "BLOCKED: branch '${branch}' cites ${pretty}, but the tracker has no such issue."
+        echo
+        echo "A branch that closes a phantom issue produces a dead closing link and an untracked"
+        echo "change. Point it at a real issue, run /issue to create one, or re-run with:"
         echo
         echo "  ${ESCAPE_HATCH} <your command>"
     } >&2

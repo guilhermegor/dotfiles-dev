@@ -227,6 +227,24 @@ design/
 `dashboard`, `ecommerce`). The brand book is per-brand (one file, no
 purpose suffix); language and system docs are per-purpose.
 
+### Upstream of the design family: `s:shape-up`
+
+`s:shape-up` (Shape Up / Basecamp) sits **before** the design tiers, not inside
+them. It answers *what are we building and how big is the budget* — appetite,
+persona, breadboard, rabbit holes, no-gos, demoable scopes. It deliberately
+produces **no layout**: a breadboard shows places, affordances and connections
+only.
+
+The seam is sharp and the two never overlap:
+
+| | Answers | Produces |
+|---|---|---|
+| `s:shape-up` | what + how big | appetite, breadboard, no-gos, scopes |
+| `a:design-language` / `a:design-system` | what it looks like | tokens, type, components |
+
+Shaping stops exactly where design-language begins. When a shaped scope needs UI,
+`s:shape-up` hands off to the relevant design tier.
+
 ### Do-not list (architecture invariants)
 
 - Agents never invoke each other. Reuse is always via on-disk artifacts

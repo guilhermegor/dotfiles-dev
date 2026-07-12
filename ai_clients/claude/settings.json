@@ -296,6 +296,10 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/branch_requires_issue_guard.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/release_dispatch_guard.sh\""
           }
         ]
       },

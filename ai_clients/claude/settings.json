@@ -315,6 +315,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/push_pr_head_guard.sh\""
+          },
+          {
+            "type": "command",
             "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/lesson_capture_checkpoint.sh\""
           }
         ]

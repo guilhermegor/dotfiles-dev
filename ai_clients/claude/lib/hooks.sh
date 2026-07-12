@@ -40,6 +40,7 @@ install_hooks() {
     copy_hook_file "protected_branch_guard.sh" "$hooks_dir"
     copy_hook_file "branch_requires_issue_guard.sh" "$hooks_dir"
     copy_hook_file "destructive_command_guard.sh" "$hooks_dir"
+    copy_hook_file "push_pr_head_guard.sh" "$hooks_dir"
     copy_hook_file "claude_artifact_source_guard.sh" "$hooks_dir"
     copy_hook_file "lesson_capture_checkpoint.sh" "$hooks_dir"
 }

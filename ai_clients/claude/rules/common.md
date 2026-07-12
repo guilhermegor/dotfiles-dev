@@ -113,7 +113,31 @@ the implicit coupling that arises when two classes share a module boundary.
 
 ### Prefer always
 
-- Strategy pattern over long if/else or switch chains.
+- Strategy pattern over if/else or switch chains — **including short 2–3 way ones**. When a
+  branch's only job is to *select a value* by a key, replace it with a **dict dispatch**, and
+  derive the set of valid keys from that same dict so the two cannot drift.
+
+  ```python
+  # Avoid — an else block, plus a second copy of the valid names living elsewhere
+  if strategy == "linear":
+      wait = base * attempt
+  elif strategy == "constant":
+      wait = base
+  else:                       # exponential
+      wait = base * factor ** (attempt - 1)
+
+  # Prefer — the dict IS the branch, and the key-set is derived from it
+  _STRATEGY_WAITS = {
+      "exponential": lambda base, factor, attempt: base * factor ** (attempt - 1),
+      "linear":      lambda base, factor, attempt: base * attempt,
+      "constant":    lambda base, factor, attempt: base,
+  }
+  _STRATEGIES = frozenset(_STRATEGY_WAITS)   # single source of the valid names
+  wait = _STRATEGY_WAITS[strategy](base, factor, attempt)
+  ```
+
+  Adding a behaviour is then adding a key, not a branch. Where a branch only picks between
+  "compute" and "return early", use a guard clause instead of an `else:` block.
 - Dependency injection over hard-coded instantiation.
 - Interfaces / Protocols / Contracts over concrete coupling.
 - Pipeline / chain-of-responsibility for data transformation.

@@ -35,6 +35,7 @@ install_hooks() {
     copy_hook_file "session_start_context.sh" "$hooks_dir"
     copy_hook_file "pr_template_guard.sh" "$hooks_dir"
     copy_hook_file "commit_title_length_guard.sh" "$hooks_dir"
+    copy_hook_file "commit_body_wrap.sh" "$hooks_dir"
     copy_hook_file "commit_secret_guard.sh" "$hooks_dir"
     copy_hook_file "protected_branch_guard.sh" "$hooks_dir"
     copy_hook_file "destructive_command_guard.sh" "$hooks_dir"

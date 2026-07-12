@@ -99,6 +99,12 @@ class Scraper:
 - Use `dataclasses.dataclass` for simple value objects.
 - Use Pydantic v2 `BaseModel` for any data that crosses a boundary (API, scraper, DB).
 - Use `functools.singledispatch` or strategy pattern instead of `isinstance` chains.
+- **Dict of callables over `if/elif/else` when branching on a *value*** (a mode, a strategy
+  name, a file format). `singledispatch` dispatches on a *type*; a plain dict dispatches on a
+  value, and doubles as the validity set via `frozenset(_TABLE)` — one source of truth for the
+  valid keys instead of a branch chain plus a divergent `{"a", "b"}` literal somewhere else.
+  Applies to a 3-way chain, not just a long one. See the worked example in `common.md`
+  (Design Patterns → Prefer always).
 - Never use multiple inheritance; use `Protocol` for structural typing.
 - **Prefer module-level functions over utility classes:** if helpers share no state and need
   no lifecycle, write them as plain functions in a module — not as a class with `@staticmethod`
@@ -149,6 +155,27 @@ def to_br_format(dt: date) -> str:
 - ETL sequence: extract → validate (Pydantic) → transform (pure functions) → load.
 - DAG ids: `snake_case` with data-source prefix (e.g., `anbima_funds_daily`).
 - Always persist raw responses before transforming.
+
+### Internet-ingested DataFrames carry their provenance
+
+A DataFrame built by **ingesting data from the internet** — reading a downloaded file
+(CSV/XLSX/JSON/ZIP/…) or scraping HTML — must declare two provenance columns beside the
+source columns:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `url` | `str` | the exact source URL the rows came from |
+| `updated_at` | tz-aware `datetime` (UTC) | when it was **fetched**, not when the source published it |
+
+Without them, a stored frame cannot answer "where did this row come from, and how stale is
+it?" — and the answer is unrecoverable once the download script has moved on.
+
+Scope: **ingested-from-the-internet frames only.** A frame derived in memory or read back from
+your own database is out of scope — do not bolt these columns onto every DataFrame.
+
+Apply it with a shared stamping helper rather than inline column assignment, and stamp
+**after** schema/contract validation: these are provenance, not source data, and they must not
+have to satisfy the source's contract.
 
 ## Numerical / Quant
 

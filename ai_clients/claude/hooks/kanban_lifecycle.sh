@@ -55,6 +55,7 @@ main() {
 
     read -r project_number project_node status_field option_id \
         < <(board_config "$owner" "$repo" "$target") || exit 0
+    [[ "$project_number" == "AMBIGUOUS" ]] && { warn_ambiguous "$repo"; exit 0; }
     [[ -n "$project_number" && -n "$option_id" ]] || exit 0
 
     item_id="$(card_item_id "$project_number" "$owner" "$issue")" || exit 0
@@ -122,7 +123,10 @@ board_config() {
         fi
     fi
 
-    line="$(discover_board "$owner" "$repo")" || return 1   # writes the cache as a side effect
+    local rc
+    line="$(discover_board "$owner" "$repo")"; rc=$?   # writes the cache as a side effect
+    (( rc == 2 )) && { printf 'AMBIGUOUS\n'; return 0; }   # >1 same-named board — let main warn
+    (( rc == 0 )) || return 1
     opt="$(printf '%s' "$line" | jq -r --arg t "$target" '.options[$t] // empty' 2>/dev/null)"
     [[ -n "$opt" ]] || return 1
     printf '%s %s %s %s\n' \
@@ -134,13 +138,22 @@ board_config() {
 
 discover_board() {
     # Find the `<repo> kanban` project, resolve its Status field + option ids, cache the result, and
-    # echo it as one JSON object. Returns 1 when no such board exists.
-    local owner="$1" repo="$2" projects num node fields field_id options config
+    # echo it as one JSON object. Returns: 0 + config on success, 1 when no such board exists, and
+    # 2 when MORE THAN ONE board carries that title (refuse to guess — the caller surfaces this).
+    local owner="$1" repo="$2" projects matches count num node fields field_id options config
     projects="$(gh project list --owner "$owner" --format json 2>/dev/null)" || return 1
 
-    read -r num node < <(printf '%s' "$projects" \
-        | jq -r --arg t "$repo kanban" '.projects[] | select(.title==$t) | "\(.number) \(.id)"' \
-        | head -n1)
+    matches="$(printf '%s' "$projects" \
+        | jq -r --arg t "$repo kanban" '.projects[] | select(.title==$t) | "\(.number) \(.id)"')"
+    count="$(printf '%s\n' "$matches" | grep -c .)"
+    (( count == 0 )) && return 1
+    if (( count > 1 )); then
+        # A silent head -n1 pick here would move a random board's card. Refuse instead — issue.md
+        # now prevents duplicate-titled boards, so this is the safety net for one already out there.
+        return 2
+    fi
+
+    read -r num node <<< "$matches"
     [[ -n "$num" && -n "$node" ]] || return 1
 
     fields="$(gh project field-list "$num" --owner "$owner" --format json 2>/dev/null)" || return 1
@@ -178,6 +191,15 @@ announce() {
         hookSpecificOutput: {
             hookEventName: "PostToolUse",
             additionalContext: ("kanban_lifecycle: moved issue #\($n)'"'"'s card to \"\($col)\".")
+        }
+    }' 2>/dev/null || true
+}
+
+warn_ambiguous() {
+    jq -n --arg repo "$1" '{
+        hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext: ("kanban_lifecycle: more than one project is titled \"\($repo) kanban\" — did NOT move any card, to avoid touching the wrong board. Delete the duplicate(s) with `gh project delete <number> --owner <owner>`, then the card will move on the next action.")
         }
     }' 2>/dev/null || true
 }

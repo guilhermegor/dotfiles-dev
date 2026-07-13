@@ -16,7 +16,10 @@ completion — never deleted.
 - [x] `permission-allowlist-cannot-see-past-the-first-token` → already in `destructive_command_guard.sh` (#41)
 - [x] `hook-config-outside-repo-and-no-mcp` → made `branch_requires_issue_guard.sh` tracker-agnostic (#43)
 - [x] `release-only-when-shipped-package-changes` → `skills/release.md` + `hooks/release_dispatch_guard.sh` (#45, closed #44)
-- [x] `issue-command-drives-kanban-lifecycle` → `hooks/kanban_lifecycle.sh` + `commands/issue.md` (#46)
+- [x] `issue-command-drives-kanban-lifecycle` → `hooks/kanban_lifecycle.sh` + `commands/issue.md` (#47, closed #46)
+- [x] `github-project-workflows-off-and-unreadable` → `commands/issue.md` (enable-workflows step +
+      duplicate-board guard) + `hooks/kanban_lifecycle.sh` (refuse on >1 same-titled board) (#48,
+      the #47 fallout: merging #47 stranded #46's card because native Done workflows ship disabled)
 
 ## Remaining
 

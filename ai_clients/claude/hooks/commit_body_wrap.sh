@@ -81,52 +81,115 @@ extract_message_file() {
 }
 
 reflow_body() {
-    # Emit the message with every over-long body line split at word boundaries. Never joins lines,
-    # so it can only shorten a line, never restructure a paragraph — and it is idempotent.
+    # Emit the message reflowed PARAGRAPH by paragraph (via Python's textwrap), not line by line:
+    # a paragraph whose lines are all already <= the limit is left byte-for-byte unchanged (so a
+    # hand-wrapped body is never disturbed), and a paragraph that has any over-long line is refilled
+    # as a whole — which is what stops the old per-line splitter from spilling a single orphan word
+    # onto its own line. A widow-control pass pulls a lone trailing word back up when it fits.
     #
     # Left untouched: the subject (line 1), fenced and indented code, trailer lines
-    # (Co-Authored-By:, Signed-off-by:, …), and any single token longer than the limit (a URL or a
-    # long path is left over-length rather than corrupted by a break).
-    awk -v max="$BODY_MAX_LENGTH" '
-        function wrap(line,   lead, rest, marker, cont, prefix, words, n, i, cur, cand) {
-            match(line, /^[[:space:]]*/)
-            lead = substr(line, 1, RLENGTH)
-            rest = substr(line, RLENGTH + 1)
+    # (Co-Authored-By:, Signed-off-by:, …), blank-line separators, and any single token longer than
+    # the limit (a URL/path is kept whole and over-length rather than broken).
+    #
+    # python3 is a hook prerequisite; if it is somehow absent we fail open and emit the body
+    # unchanged (the commit proceeds; gitlint remains the backstop).
+    command -v python3 >/dev/null 2>&1 || { cat "$1"; return; }
+    MSG_FILE="$1" BODY_MAX_LENGTH="$BODY_MAX_LENGTH" python3 - <<'PY' 2>/dev/null || cat "$1"
+import os, re, sys, textwrap
 
-            # A bullet / numbered marker is kept on the first line; continuation lines are indented
-            # to sit under its text, so the list structure survives the wrap.
-            marker = ""
-            if (match(rest, /^([-*+]|[0-9]+[.)])[[:space:]]+/)) {
-                marker = substr(rest, 1, RLENGTH)
-                rest = substr(rest, RLENGTH + 1)
-            }
-            cont = lead
-            for (i = 0; i < length(marker); i++) cont = cont " "
+MAX = int(os.environ.get("BODY_MAX_LENGTH", "72"))
+with open(os.environ["MSG_FILE"], encoding="utf-8") as fh:
+    lines = fh.read().split("\n")
 
-            prefix = lead marker
-            n = split(rest, words, /[ \t]+/)
-            cur = ""
-            for (i = 1; i <= n; i++) {
-                if (words[i] == "") continue
-                cand = (cur == "" ? prefix words[i] : cur " " words[i])
-                if (cur != "" && length(cand) > max) {
-                    print cur
-                    cur = cont words[i]     # an over-long lone token stays whole on its own line
-                } else {
-                    cur = cand
-                }
-            }
-            if (cur != "") print cur
-        }
+TRAILER = re.compile(r"^[A-Za-z][A-Za-z-]*:\s")
+MARKER = re.compile(r"^(\s*)([-*+]|\d+[.)])(\s+)")
 
-        NR == 1                         { print; next }   # subject: the author owns its length
-        /^[[:space:]]*(```|~~~)/        { fence = !fence; print; next }
-        fence                           { print; next }
-        length($0) <= max               { print; next }
-        /^(\t|[[:space:]]{4,})/         { print; next }   # indented code block
-        /^[A-Za-z][A-Za-z-]*:[[:space:]]/ { print; next } # trailer line
-                                        { wrap($0) }
-    ' "$1"
+
+def leading_ws(s):
+    return s[: len(s) - len(s.lstrip())]
+
+
+def is_special(s):
+    # A line that must pass through verbatim and never be folded into a paragraph.
+    stripped = s.strip()
+    if stripped == "":
+        return True
+    if stripped.startswith("```") or stripped.startswith("~~~"):
+        return True
+    if s.startswith("\t") or s.startswith("    "):  # indented code (4+ spaces)
+        return True
+    return bool(TRAILER.match(s))
+
+
+def widow_control(wrapped, cont_indent):
+    # If the last line holds a single word, pull the previous line's last word down beside it,
+    # provided the merged line still fits. Otherwise leave it (a lone long token is acceptable).
+    if len(wrapped) < 2:
+        return wrapped
+    last = wrapped[-1][len(cont_indent):] if wrapped[-1].startswith(cont_indent) else wrapped[-1].lstrip()
+    if " " in last.strip() or last.strip() == "":
+        return wrapped
+    prev = wrapped[-2]
+    pw = prev.split()
+    if len(pw) < 2:
+        return wrapped
+    merged = cont_indent + pw[-1] + " " + last.strip()
+    if len(merged) > MAX:
+        return wrapped
+    wrapped[-2] = leading_ws(prev) + " ".join(pw[:-1])
+    wrapped[-1] = merged
+    return wrapped
+
+
+out = []
+i = 0
+n = len(lines)
+if n:                       # subject: the author owns its length
+    out.append(lines[0])
+    i = 1
+
+in_fence = False
+while i < n:
+    line = lines[i]
+    stripped = line.strip()
+
+    if stripped.startswith("```") or stripped.startswith("~~~"):
+        in_fence = not in_fence
+        out.append(line); i += 1; continue
+    if in_fence or is_special(line):
+        out.append(line); i += 1; continue
+
+    m = MARKER.match(line)
+    if m:                                       # list item + its indented continuation lines
+        first_prefix = m.group(0)
+        cont_indent = " " * len(first_prefix)
+        block = [line]
+        text = line[m.end():].strip()
+        i += 1
+        while i < n and not is_special(lines[i]) and not MARKER.match(lines[i]) \
+                and len(leading_ws(lines[i])) > len(m.group(1)):
+            block.append(lines[i]); text += " " + lines[i].strip(); i += 1
+    else:                                       # plain paragraph
+        indent = leading_ws(line)
+        first_prefix = cont_indent = indent
+        block = [line]
+        text = stripped
+        i += 1
+        while i < n and not is_special(lines[i]) and not MARKER.match(lines[i]):
+            block.append(lines[i]); text += " " + lines[i].strip(); i += 1
+
+    if all(len(b) <= MAX for b in block):       # already compliant → leave it exactly as written
+        out.extend(block)
+        continue
+
+    wrapped = textwrap.wrap(
+        text, width=MAX, initial_indent=first_prefix, subsequent_indent=cont_indent,
+        break_long_words=False, break_on_hyphens=False,
+    )
+    out.extend(widow_control(wrapped, cont_indent) if wrapped else block)
+
+sys.stdout.write("\n".join(out))
+PY
 }
 
 announce() {

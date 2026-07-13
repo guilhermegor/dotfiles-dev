@@ -100,6 +100,10 @@ Capture the issue number `<N>` and URL from the output.
 List the owner's projects: `rtk gh project list --owner <owner> --format json`.
 Match the project whose title equals **`<repo> kanban`** (e.g. `filings-cvm kanban`).
 
+- **If more than one project has that exact title → stop and ask the user which to use** (list
+  them as `#<number> — items:<count>`). Never pick one silently: the lifecycle hook matches boards
+  by title too, so two same-named boards make every card move non-deterministic. Offer to delete
+  the extras once the user names the keeper (`rtk gh project delete <number> --owner <owner>`).
 - If `--project <name|number>` was passed, use that instead.
 - **If no match is found and none was passed → ask the user** (AskUserQuestion) how to proceed.
   Offer: (a) **create** a new project named `<repo> kanban` (recommended), (b) create one under a
@@ -125,6 +129,21 @@ Match the project whose title equals **`<repo> kanban`** (e.g. `filings-cvm kanb
     ] }) { projectV2Field { ... on ProjectV2SingleSelectField { options { name } } } }
   }' -F fieldId="<status-field-id>"
   ```
+
+  **Then tell the user to enable the Done workflows — the API cannot.** A `gh`-created board ships
+  its built-in workflows **disabled**, and the GraphQL API exposes no mutation to enable them (only
+  `deleteProjectV2Workflow`). So the "card → Done on merge" automation this command relies on is
+  **off until a human flips it** in the Projects UI. After creating the board, print this and wait
+  for the user to confirm they have done it:
+
+  > Open `https://github.com/users/<owner>/projects/<number>/workflows` and enable, each with
+  > **Set value → Status → Done**:
+  > - **Item closed**
+  > - **Pull request merged**
+  >
+  > Do **not** enable **Pull request linked to issue** — the `kanban_lifecycle` hook already moves
+  > the card to *In review* when the PR opens, and enabling this native workflow would fire at the
+  > same moment and race it (it defaults to *In progress*, dragging the card backwards).
 
 Record the project's number and node id.
 

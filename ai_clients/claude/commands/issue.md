@@ -6,10 +6,17 @@ argument-hint: "<description | #number | issue-url> [--new] [--label <name>] [--
 ---
 
 You are taking a work item end to end: a GitHub issue, its kanban card, and a linked
-branch — the authoring half of a Linear-style flow. The runtime transitions (Ready → In
-progress → Done) are handled by GitHub Projects' own workflows, NOT by this command. Follow
-these steps exactly. `$ARGUMENTS` holds an issue reference *or* a work description (plus
-optional `--new` / `--label` / `--project`).
+branch — the authoring half of a Linear-style flow. This command only sets the card's
+*starting* column (step 5); the runtime transitions are then automatic and NOT set here:
+
+- **In progress** (on branch open) and **In review** (on PR open) are driven by the
+  `kanban_lifecycle.sh` PostToolUse hook — GitHub Projects' native workflows cannot trigger
+  on those events.
+- **Done** is driven by GitHub Projects' own "item closed / PR merged → Done" workflow (the
+  `Closes #N` link in step 7 feeds it).
+
+Follow these steps exactly. `$ARGUMENTS` holds an issue reference *or* a work description
+(plus optional `--new` / `--label` / `--project`).
 
 The issue may already exist. **Step 0 decides**; everything after it is either *create* or
 *resume*.

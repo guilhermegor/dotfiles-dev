@@ -15,17 +15,12 @@ completion — never deleted.
 - [x] `verify-pr-head-after-push-not-lag` → `hooks/push_pr_head_guard.sh` (#42)
 - [x] `permission-allowlist-cannot-see-past-the-first-token` → already in `destructive_command_guard.sh` (#41)
 - [x] `hook-config-outside-repo-and-no-mcp` → made `branch_requires_issue_guard.sh` tracker-agnostic (#43)
-- [x] `release-only-when-shipped-package-changes` → `skills/release.md` + `hooks/release_dispatch_guard.sh` (#44, this branch)
+- [x] `release-only-when-shipped-package-changes` → `skills/release.md` + `hooks/release_dispatch_guard.sh` (#45, closed #44)
+- [x] `issue-command-drives-kanban-lifecycle` → `hooks/kanban_lifecycle.sh` + `commands/issue.md` (#46)
 
 ## Remaining
 
-- [ ] `issue-command-drives-kanban-lifecycle` (extends `issue-authoring-command`)
-  - **Branch:** `feat/issue-kanban-lifecycle` (open an issue first — the live branch guard requires it)
-  - **Build:**
-    - Extend `commands/issue.md` to emit the branch↔issue link and set the card **In progress** on branch open.
-    - PostToolUse hooks: branch created → **In progress**; `gh pr create` → **In review** (piggyback on `pr_template_guard`); `gh pr merge` → **Done** + close issue.
-    - Discover per-repo project id / Status field id / option ids via `gh project field-list` (or cache per-repo); never hard-code one board's ids.
-    - Match the **verb**, then resolve issue/branch/card via `gh` — do not scrape a CLI flag from the raw command string (`hook-command-string-scraping-fragile`).
+- (none — all backlog items landed)
 
 ## Notes for whoever picks this up
 
@@ -39,3 +34,12 @@ completion — never deleted.
   repos you may have restricted rights on).
 - After a remaining item lands, tick its box here and flip its lesson file's `PR: pending` →
   the merged PR number.
+- **`kanban_lifecycle.sh` is a hybrid, not the literal lesson.** GitHub Projects' native
+  workflows already do "PR merged / issue closed → Done", so the hook fills only the two
+  transitions native workflows cannot trigger: branch open → **In progress**, PR open →
+  **In review**. Done stays native. Building a hook for Done would race the native automation.
+- Board ids are discovered live (`gh project field-list`) and cached per-repo in a **local,
+  git-ignored** `~/.claude/kanban-boards/<owner>-<repo>.json` — same seam as the tracker map, so
+  a repo needs zero in-repo board metadata. A repo with no `<repo> kanban` project no-ops (which
+  also skips Linear/none repos). A stale cache self-heals: a failed move refreshes and retries.
+- All backlog items are done — this ledger is kept as the permanent record (never deleted).

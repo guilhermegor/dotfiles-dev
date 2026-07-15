@@ -93,6 +93,14 @@ Two lesson systems, both with detailed how-to in the `s:capturing-lessons` skill
   BlueprintX store `~/.claude/memory/lessons/`; the Claude/dotfiles toolchain →
   dotfiles-dev store `~/.claude/memory/lessons-dotfiles/`.
 
+Before ending a session, run **`/wrap-up`** (skill `s:wrap-up`). It runs the deterministic
+capture audit (`session_capture_audit.sh`) and **fixes** what it finds — the missing lesson,
+its index/mirror entries, the unfiled issue, the checkpoint — while the session is still live.
+The `SessionEnd` hook runs the same audit but can only **report forward**: it writes unresolved
+gaps to a handoff file that `session_start_context.sh` surfaces next session. It never blocks the
+exit. The highest-value check is the one nobody remembers: when a session **changes a standing
+rule**, grep the tracked docs for the OLD rule — a tracked doc outranks memory next session.
+
 ## Compaction
 
 When the context window is compacted, apply this priority order:

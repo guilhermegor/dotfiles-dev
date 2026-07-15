@@ -45,4 +45,5 @@ install_hooks() {
     copy_hook_file "kanban_lifecycle.sh" "$hooks_dir"
     copy_hook_file "claude_artifact_source_guard.sh" "$hooks_dir"
     copy_hook_file "lesson_capture_checkpoint.sh" "$hooks_dir"
+    copy_hook_file "session_capture_audit.sh" "$hooks_dir"
 }

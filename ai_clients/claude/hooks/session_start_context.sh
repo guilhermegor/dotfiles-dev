@@ -35,6 +35,19 @@ emit_cross_project_context() {
 		printf '%s\n' "[cross-project-context] Corrections log (NOT auto-loaded): $claude_dir/tasks/lessons.md — read it and immediately apply any entry whose Scope matches this working directory or is 'global'. Append a new entry whenever the user corrects a mistake (see the s:capturing-lessons skill)."
 	fi
 
+	# When present: the capture-audit handoff written by session_capture_audit.sh at
+	# the LAST session's end (it can only report forward — the session was over). Surface
+	# the unresolved gaps as the first thing this session sees, then clear the file so it
+	# fires once. The fixer is /wrap-up, run live.
+	local slug handoff
+	slug="$(printf '%s' "$cwd" | tr '/' '-')"
+	handoff="$claude_dir/session-audit/$slug.md"
+	if [ -f "$handoff" ]; then
+		printf '%s\n' "[session-capture-audit] Unresolved capture gaps from your last session in this repo (run /wrap-up to resolve):"
+		cat "$handoff"
+		rm -f "$handoff" 2>/dev/null || true
+	fi
+
 	# BlueprintX template repo OR a scaffolded project → point at proving-ground memory.
 	local is_blueprintx=0
 	shopt -s nullglob

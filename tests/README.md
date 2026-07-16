@@ -22,6 +22,9 @@ act -W .github/workflows/tests.yml
 | File | Unit under test |
 |------|-----------------|
 | `restore_env_prompt.bats` | `ai_clients/lib/restore_env_prompt.sh` — the restore-`.env` prompt dispatch |
+| `destructive_command_guard.bats` | `ai_clients/claude/hooks/destructive_command_guard.sh` — pipe-to-shell / unscoped-delete / history-rewrite blocks |
+| `protected_branch_guard.bats` | `ai_clients/claude/hooks/protected_branch_guard.sh` — refspec-aware push guard on protected branches (deletes of other refs allowed; heredoc bodies ignored) |
+| `branch_requires_issue_guard.bats` | `ai_clients/claude/hooks/branch_requires_issue_guard.sh` — branch-creation → tracked-issue guard (per-segment match; no false positive from a chained `-c` or a heredoc body) |
 
 ## How the mocking works
 

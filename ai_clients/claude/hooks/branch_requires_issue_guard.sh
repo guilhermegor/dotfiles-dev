@@ -76,23 +76,59 @@ main() {
     esac
 }
 
+strip_heredoc_bodies() {
+    # Drop heredoc bodies so a git verb written inside one (an issue/PR body) is not read as a
+    # command. Copy of the helper in protected_branch_guard.sh — hooks are intentionally
+    # self-contained (like the jq payload boilerplate every guard repeats); keep the two in sync.
+    local line delim="" trimmed in_body=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if (( in_body )); then
+            trimmed="${line#"${line%%[!$'\t']*}"}"
+            [[ "$trimmed" == "$delim" ]] && in_body=0
+            continue
+        fi
+        if [[ "$line" =~ \<\<-?[[:space:]]*[\"\'\\]?([[:alnum:]_]+) ]]; then
+            delim="${BASH_REMATCH[1]}"
+            in_body=1
+        fi
+        printf '%s\n' "$line"
+    done
+}
+
+segment_commands() {
+    # One shell command segment per line: break on && || ; | and existing newlines, so the branch
+    # regex below can anchor to a segment START and never span two commands.
+    sed -E 's/(\|\||&&|[;|])/\n/g'
+}
+
 extract_new_branch() {
     # Emit the branch name from `git checkout -b|-B <name>` / `git switch -c|-C <name>`, or return 1
-    # when the command creates no branch. ponytail: a regex over the raw string, not a shell parse —
-    # a name built from shell expansion is rejected below and fails open, which is the safe miss.
-    local s=" $1" re
-    re='[[:space:]](rtk[[:space:]]+)?git[[:space:]]+(checkout|switch)[[:space:]]+(.*[[:space:]]+)?(-b|-B|-c|-C)[[:space:]]+("[^"]*"|'\''[^'\'']*'\''|[^[:space:]]+)'
-    [[ "$s" =~ $re ]] || return 1
+    # when the command creates no branch. Match per COMMAND SEGMENT, each anchored to the segment
+    # start, so an unrelated `-c` in a chained/piped command (`grep -c 'labels:'`) and a git verb
+    # mentioned inside a heredoc body are never mistaken for a branch creation (issue #54).
+    # ponytail: a regex over segments, not a full shell parse — a name built from shell expansion is
+    # rejected below and fails open (the safe miss). Residual: a git verb inside a multi-line QUOTED
+    # string (not a heredoc) can still be its own segment; add a quote-aware splitter only if it bites.
+    local cmd seg val re
+    cmd="$(printf '%s\n' "$1" | strip_heredoc_bodies)"
+    re='^(rtk[[:space:]]+)?git[[:space:]]+(checkout|switch)([[:space:]]+[^[:space:]]+)*[[:space:]]+(-b|-B|-c|-C)[[:space:]]+("[^"]*"|'\''[^'\'']*'\''|[^[:space:]]+)'
 
-    local val="${BASH_REMATCH[5]}"
-    val="${val#[\"\']}"
-    val="${val%[\"\']}"
+    while IFS= read -r seg || [[ -n "$seg" ]]; do
+        seg="${seg#"${seg%%[![:space:]]*}"}"      # ltrim so the regex anchor sees the command start
+        [[ "$seg" =~ $re ]] || continue
 
-    case "$val" in
-        *'$'* | *'`'*) return 1 ;;   # dynamic name — cannot resolve statically
-    esac
+        val="${BASH_REMATCH[5]}"
+        val="${val#[\"\']}"
+        val="${val%[\"\']}"
+        case "$val" in
+            *'$'* | *'`'*) continue ;;            # dynamic name — cannot resolve statically
+        esac
 
-    printf '%s' "$val"
+        printf '%s' "$val"
+        return 0
+    done < <(printf '%s' "$cmd" | segment_commands)
+
+    return 1
 }
 
 resolve_tracker() {

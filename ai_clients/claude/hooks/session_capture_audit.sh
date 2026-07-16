@@ -27,12 +27,14 @@ set -uo pipefail
 
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
-# Both generalizable-lessons stores, each as "dir|mirror-basename|kind".
+# Both generalizable-lessons stores, each as "dir|mirror-basename|kind|target-repo".
 # kind=blueprintx also gets the Tier-line presence check (tier is an OPEN field:
 # an unknown tier value is a no-op, never a rejection — only a MISSING line flags).
+# target-repo is the store's backport target: a lesson that ORIGINATED in that repo
+# needs no mirror there (the mirror would be redundant), so the mirror check skips it.
 LESSON_STORES=(
-	"$CLAUDE_DIR/memory/lessons|blueprintx-lessons|blueprintx"
-	"$CLAUDE_DIR/memory/lessons-dotfiles|dotfiles-dev-lessons|dotfiles"
+	"$CLAUDE_DIR/memory/lessons|blueprintx-lessons|blueprintx|blueprintx"
+	"$CLAUDE_DIR/memory/lessons-dotfiles|dotfiles-dev-lessons|dotfiles|dotfiles-dev"
 )
 
 resolve_cwd() {
@@ -84,9 +86,9 @@ check_git() {
 }
 
 check_lessons() {
-	local entry store mirror_base kind readme file name
+	local entry store mirror_base kind target_repo readme file name
 	for entry in "${LESSON_STORES[@]}"; do
-		IFS='|' read -r store mirror_base kind <<<"$entry"
+		IFS='|' read -r store mirror_base kind target_repo <<<"$entry"
 		readme="$store/README.md"
 		[ -d "$store" ] || continue
 		[ -f "$readme" ] || { add_gap "[lessons] $store has lesson files but no README index"; continue; }
@@ -101,8 +103,10 @@ check_lessons() {
 				add_gap "[lessons] '$name' is not in the $(basename "$store") README index (a lost lesson)"
 
 			# BlueprintX tier is an OPEN field: flag only a MISSING Tier line, never
-			# an unrecognized value — a new tier must be a no-op for this tool.
-			if [ "$kind" = "blueprintx" ] && ! grep -qE '^\s*[-*]\s*\*\*Tier:\*\*' "$file"; then
+			# an unrecognized value — a new tier must be a no-op for this tool. The
+			# leading bullet is optional: the store uses both "- **Tier:**" and a bare
+			# "**Tier:**", and demanding the bullet was a false positive.
+			if [ "$kind" = "blueprintx" ] && ! grep -qE '^[[:space:]]*([-*][[:space:]]+)?\*\*Tier:\*\*' "$file"; then
 				add_gap "[lessons] '$name' has no **Tier:** line"
 			fi
 		done
@@ -113,18 +117,22 @@ check_mirrors() {
 	# Triple-check part 2: a lesson whose Origin names THIS repo must also live in
 	# this repo's git-ignored mirror. We can only verify the current repo's mirror
 	# (the mirror is per-origin-repo); other repos' mirrors are out of reach here.
-	local cwd="$1" repo entry store mirror_base kind mirror file name
+	local cwd="$1" repo entry store mirror_base kind target_repo mirror file name
 	repo="$(basename "$cwd")"
 	for entry in "${LESSON_STORES[@]}"; do
-		IFS='|' read -r store mirror_base kind <<<"$entry"
+		IFS='|' read -r store mirror_base kind target_repo <<<"$entry"
 		[ -d "$store" ] || continue
+		# When this repo IS the store's backport target, the same-repo mirror is
+		# redundant by convention and deliberately absent — never flag it.
+		[ "$repo" = "$target_repo" ] && continue
 		mirror="$cwd/docs/$mirror_base.md"
 		for file in "$store"/*.md; do
 			[ -e "$file" ] || continue
 			name="$(basename "$file")"
 			[ "$name" = "README.md" ] && continue
-			# Only lessons that originated in THIS repo are expected in its mirror.
-			grep -qiE "^\s*[-*]\s*\*\*Origin:\*\*.*\b${repo}\b" "$file" || continue
+			# Only lessons that originated in THIS repo are expected in its mirror
+			# (bullet optional: the stores use both "- **Origin:**" and bare form).
+			grep -qiE "^[[:space:]]*([-*][[:space:]]+)?\*\*Origin:\*\*.*\b${repo}\b" "$file" || continue
 			if [ ! -f "$mirror" ]; then
 				add_gap "[lessons] '$name' originated here but docs/$mirror_base.md mirror is missing"
 			elif ! grep -qF "$name" "$mirror"; then

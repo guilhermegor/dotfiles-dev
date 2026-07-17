@@ -20,3 +20,8 @@
 .nfs*
 
 # End of https://www.toptal.com/developers/gitignore/api/dotenv,linux
+
+# Git-ignored, per-repo mirrors of the global lesson stores (~/.claude/memory/lessons*).
+# Local records only — the source of truth is the global store; excluded from any docs site.
+docs/blueprintx-lessons.md
+docs/dotfiles-dev-lessons.md

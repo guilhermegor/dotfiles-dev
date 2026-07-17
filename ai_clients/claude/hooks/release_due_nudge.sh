@@ -1,0 +1,154 @@
+#!/bin/bash
+# PostToolUse (Bash matcher) hook: after syncing `main`, nudge when a release is DUE — the release
+# that gets FORGOTTEN.
+#
+# Why this exists, and why it is separate from release_dispatch_guard.sh: the guard is a PreToolUse
+# on the release *dispatch*, so it only fires once you are ALREADY publishing. It stops the WRONG
+# release (a byte-identical wheel); it cannot stop the MISSING one — if a feat: landed in the shipped
+# package and nobody remembered to publish, no tool call happens and nothing warns. A hook also
+# CANNOT fire on "a PR was merged" (that is a GitHub event, not a tool call). So the closest
+# actionable moment to the merge is the next `main` sync — this hook.
+#
+# It reads the SAME shipped-paths source as the guard and the s:release skill (.claude/release.conf,
+# default src/ + pyproject.toml): if the three lists diverge they contradict each other — the
+# explicit trap of the release-only-when-shipped-package-changes lesson. The suggested version here
+# is OFFLINE and ADVISORY only; the authoritative next-version-across-both-indices computation stays
+# in the skill (it needs the network). This hook just points at the gap.
+#
+# Hook I/O contract: PostToolUse, so the tool already ran — this never blocks. It fails OPEN
+# everywhere (no jq, not a main sync, not on main, no tags, not a publishable repo, any error) by
+# exiting 0 silently; when a release is due (or clearly not) it emits an additionalContext note.
+# Never exits non-zero.
+
+set -u
+
+command -v jq >/dev/null 2>&1 || exit 0
+
+main() {
+    local payload tool command root branch last_tag signal next
+    local -a paths
+
+    payload="$(cat)"
+    tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
+    [[ "$tool" == "Bash" ]] || exit 0
+
+    command="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
+    [[ -n "$command" ]] || exit 0
+
+    is_main_sync "$command" || exit 0
+
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+
+    # Only nudge once we are actually ON main/master — a `git pull` on a feature branch, or a
+    # `checkout -b`, matches the verb but is not a main sync. The current-branch check filters those
+    # instead of brittle-parsing the command's arguments.
+    branch="$(git symbolic-ref --short HEAD 2>/dev/null)" || exit 0
+    [[ "$branch" == "main" || "$branch" == "master" ]] || exit 0
+
+    # "Publishable repo" gate: a package to release has an explicit release.conf or a pyproject.toml.
+    # Without either, this repo ships no wheel (dotfiles-dev itself is one) — stay silent.
+    [[ -r "$root/.claude/release.conf" || -e "$root/pyproject.toml" ]] || exit 0
+
+    last_tag="$(git describe --tags --abbrev=0 2>/dev/null)" || exit 0   # no tags → nothing to diff
+
+    mapfile -t paths < <(shipped_paths "$root")
+    if shipped_diff_empty "$last_tag" "${paths[@]}"; then
+        announce_none
+        exit 0
+    fi
+
+    signal="$(highest_signal "$last_tag")"
+    next="$(next_version "$last_tag" "$signal")" || { announce_none; exit 0; }
+    announce_due "$next" "$signal"
+}
+
+is_main_sync() {
+    # A sync of `main`: `git pull`, or `git checkout|switch` (both optionally rtk-prefixed). The
+    # on-main check in main() confirms this actually landed us on main/master.
+    local cmd="$1"
+    printf '%s' "$cmd" \
+        | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+(pull|checkout|switch)([[:space:]]|$)'
+}
+
+shipped_paths() {
+    # One path/glob per line: the repo's .claude/release.conf if present, else the Python default.
+    # IDENTICAL to release_dispatch_guard.sh's shipped_paths — the guard, this nudge, and the skill
+    # MUST read the same list or they contradict each other.
+    local root="$1" conf="$1/.claude/release.conf"
+    if [[ -r "$conf" ]]; then
+        grep -vE '^[[:space:]]*(#|$)' "$conf"
+        return
+    fi
+    printf '%s\n' "src/" "pyproject.toml"
+}
+
+shipped_diff_empty() {
+    local last_tag="$1"; shift
+    local out
+    out="$(git diff --name-only "$last_tag"..HEAD -- "$@" 2>/dev/null)" || return 1
+    [[ -z "$out" ]]
+}
+
+highest_signal() {
+    # breaking > feat > fix > none, over commit subjects+bodies since the tag.
+    local last_tag="$1" log
+    log="$(git log "$last_tag"..HEAD --format='%s%n%b' 2>/dev/null)" || { printf 'none'; return; }
+    printf '%s' "$log" | grep -Eq 'BREAKING[ -]CHANGE|^[a-z]+(\([^)]*\))?!:' && { printf 'breaking'; return; }
+    printf '%s' "$log" | grep -Eq '^feat(\([^)]*\))?:' && { printf 'feat'; return; }
+    printf '%s' "$log" | grep -Eq '^fix(\([^)]*\))?:' && { printf 'fix'; return; }
+    printf 'none'
+}
+
+next_version() {
+    # Suggested next version from the last tag + highest commit signal, honouring the decision table
+    # of the release-only-when-shipped-package-changes lesson:
+    #   pre-1.0 (major==0): breaking → MINOR; feat/fix → PATCH
+    #   >=1.0:              breaking → MAJOR; feat → MINOR; fix → PATCH
+    # Returns 1 for signal "none" (nothing to release) or an unparseable tag.
+    local last_tag="$1" signal="$2" sv major minor patch
+    # `<<<` (not process substitution): semver prints no trailing newline, and `read` from a
+    # newline-less stream returns non-zero at EOF even after assigning — a herestring adds the
+    # delimiter so the exit code is honest.
+    sv="$(semver "$last_tag")" || return 1
+    read -r major minor patch <<< "$sv"
+    case "$signal" in
+        breaking)
+            if (( major == 0 )); then minor=$((minor + 1)); patch=0
+            else major=$((major + 1)); minor=0; patch=0; fi ;;
+        feat)
+            if (( major == 0 )); then patch=$((patch + 1))
+            else minor=$((minor + 1)); patch=0; fi ;;
+        fix)
+            patch=$((patch + 1)) ;;
+        *)  return 1 ;;
+    esac
+    printf '%s.%s.%s' "$major" "$minor" "$patch"
+}
+
+semver() {
+    # Emit "MAJOR MINOR PATCH" from vX.Y.Z / X.Y.Z (pre-release/build suffix ignored); fail if the
+    # core three numbers are not present.
+    local v="${1#v}"
+    [[ "$v" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]] || return 1
+    printf '%s %s %s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+}
+
+announce_due() {
+    jq -n --arg v "$1" --arg s "$2" '{
+        hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext: ("RELEASE DUE: \($v) (\($s)) — the shipped artifact changed since the last tag but has not been released. Run the s:release skill to publish (it owns the authoritative version across both PyPI indices; \($v) here is an offline hint).")
+        }
+    }' 2>/dev/null || true
+}
+
+announce_none() {
+    jq -n '{
+        hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext: "NO RELEASE NEEDED (ci/docs only) — no shipped-artifact change since the last tag."
+        }
+    }' 2>/dev/null || true
+}
+
+main "$@"

@@ -24,6 +24,7 @@ source "$SCRIPT_DIR/lib/rules.sh"
 source "$SCRIPT_DIR/lib/mcp_servers.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 source "$SCRIPT_DIR/lib/claude_mem.sh"
+source "$SCRIPT_DIR/lib/prune.sh"
 
 # ── Step registry ─────────────────────────────────────────────────────────────
 # Each entry: "key|label|function_or_block"
@@ -90,6 +91,7 @@ STEPS=(
     "plugins|Promote plugins to user scope"
     "mcp_servers|Install MCP servers"
     "claude_mem|Configure claude-mem mode"
+    "prune|Prune orphaned artifacts (asks before removing)"
 )
 
 dispatch_step() {
@@ -107,6 +109,7 @@ dispatch_step() {
         plugins)        print_status "section" "PROMOTING PLUGINS TO USER SCOPE" && run_plugins ;;
         mcp_servers)    install_mcp_servers ;;
         claude_mem)     configure_claude_mem ;;
+        prune)          prune_orphans ;;
         *) print_status "error" "Unknown step: $key"; return 1 ;;
     esac
 }

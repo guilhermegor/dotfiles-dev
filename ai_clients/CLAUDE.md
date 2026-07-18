@@ -97,10 +97,21 @@ argument-hint: [hint]
 
 | | |
 |---|---|
-| **Source** | `ai_clients/claude/skills/<name>.md` |
-| **Installs to** | `~/.claude/skills/<name>.md` |
+| **Source** | `ai_clients/claude/skills/<name>.md` (flat) |
+| **Installs to** | `~/.claude/skills/<name>/SKILL.md` (directory — **not** a flat `.md`) |
 | **Lib script** | `lib/skills.sh` → `install_skills()` |
 | **Invoked** | Loaded by Claude's Skill tool mid-task (not user-invoked) |
+
+> **The install layout is not cosmetic.** Claude Code's skill loader only
+> discovers `skills/<name>/SKILL.md`. A flat `skills/<name>.md` copies fine,
+> shows up in `ls`, and is silently never loaded — the failure is invisible
+> except as an absence in the session's available-skills list. Commands are
+> the opposite (flat `commands/<name>.md` is correct); do not generalise one
+> convention onto the other.
+>
+> The invocation name comes from the **path**, not the frontmatter `name`
+> field — `commands/act.md` with `name: c:act` still surfaces as `/act`. The
+> `s:` / `c:` prefixes are an organisational convention only.
 
 **Required frontmatter fields:**
 
@@ -255,6 +266,31 @@ Shaping stops exactly where design-language begins. When a shaped scope needs UI
   are the system tier's concern.
 - The markdown frontmatter is the canonical source of truth for tokens.
   JSON / CSS exports are pure derivations emitted by `s:design-token-export`.
+
+## Pruning orphaned artifacts
+
+The `install_*` steps only copy — they never delete. Anything removed or renamed
+in source therefore stays behind in `~/.claude/` forever, and a leftover in a
+loadable layout is a *live* artifact: a renamed command shipped both the old and
+new name for months before this was caught.
+
+`lib/prune.sh` → `prune_orphans()` is the delete path, exposed as the `prune`
+step. It diffs each artifact type against its source directory and removes only
+what has no source counterpart, **always asking first**. Source is authoritative
+and every removal is recoverable from git history.
+
+```bash
+./ai_clients/claude/main.sh prune
+```
+
+Artifact types are registered in the `PRUNE_TARGETS` map as
+`<src subdir>:<ext>:<dest subdir>:<layout>` — add a row there when adding a new
+artifact type, or its orphans go unnoticed.
+
+Note the division of labour with `install_skills()`: prune removes **name**
+orphans (no source counterpart), while `install_skills()` separately sweeps
+**layout** orphans (flat `skills/*.md`, which are never loadable regardless of
+whether a source file of that name exists). Neither one subsumes the other.
 
 ## Deployment
 

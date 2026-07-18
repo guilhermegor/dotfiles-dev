@@ -39,6 +39,7 @@ ai_clients/claude/lib/          ← one file per step:
     rules.sh                    ← installs language rules (python.md, …)
     mcp_servers.sh              ← installs MCP servers
     integrations.sh             ← runs /terminal-setup, /install-github-app, /install-slack-app
+    prune.sh                    ← removes ~/.claude artifacts absent from source (asks first)
 ```
 
 `STEPS` array in `ai_clients/claude/main.sh` uses `"key|label"` pairs. `dispatch_step "$key"` routes each key to its lib function. To add a new step: add an entry to `STEPS`, add a `case` branch in `dispatch_step`, and create the lib function.

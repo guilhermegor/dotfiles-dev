@@ -1,7 +1,10 @@
 #!/bin/bash
-# Installs personal skill files into ~/.claude/skills/.
+# Installs personal skill files into ~/.claude/skills/<name>/SKILL.md.
 # Skills are markdown files loaded by Claude's Skill tool mid-task,
 # distinct from slash commands which are user-invoked.
+#
+# Source stays flat (skills/<name>.md); only the install target is a directory,
+# because that is the only layout Claude Code's skill loader discovers.
 
 install_skills() {
     print_status "section" "INSTALLING USER SKILLS"
@@ -16,17 +19,27 @@ install_skills() {
 
     mkdir -p "$skills_dst"
 
+    # Sweep the pre-<name>/SKILL.md layout: flat *.md at the skills root are never
+    # loadable, so any left here are dead copies from an older install. Root-level
+    # only — the glob cannot reach the <name>/SKILL.md directories below.
+    local stale
+    stale=$(find "$skills_dst" -maxdepth 1 -type f -name '*.md' -delete -print | wc -l)
+    (( stale > 0 )) && print_status "info" "Removed $stale stale flat skill file(s)"
+
     local installed=0
 
     for skill_file in "$skills_src"/*.md; do
         [[ -e "$skill_file" ]] || continue  # glob matched nothing
 
-        local filename
-        filename="$(basename "$skill_file")"
-        local dst="$skills_dst/$filename"
+        local slug
+        slug="$(basename "$skill_file" .md)"
+        # Claude Code discovers skills as <name>/SKILL.md — a flat <name>.md is
+        # copied successfully but never loaded.
+        local dst="$skills_dst/$slug/SKILL.md"
 
+        mkdir -p "$skills_dst/$slug"
         cp "$skill_file" "$dst"
-        print_status "success" "Installed skill: $filename → $dst"
+        print_status "success" "Installed skill: $slug → $dst"
         (( ++installed ))
     done
 

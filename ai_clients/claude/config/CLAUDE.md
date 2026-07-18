@@ -45,9 +45,14 @@ and non-symlinked, so direct edits are lost on the next OS/distro install.
 
 Enforced by the `claude_artifact_source_guard.sh` PreToolUse hook: a direct
 Write/Edit into `~/.claude/{commands,skills,agents,rules,hooks}/` or `CLAUDE.md`
-is blocked and redirected to its source. Exempt (written live on purpose):
+is blocked and redirected to its source. Not blocked by the hook:
 project-scoped `.claude/`, project memory, `tasks/`, `plans/`, `settings*.json`.
-Full source-path table: `ai_clients/CLAUDE.md`.
+⚠️ **Not-blocked ≠ write-it-live.** `settings*.json` is unblocked only because it
+also carries machine-local keys — **durable** settings (permissions `allow`/`deny`/
+`ask`, model, hooks, plugins) are still authored in
+`ai_clients/claude/settings.json` and deployed; `configure_settings` deep-merges
+(`jq '. * $base'`), so source wins and live-only keys survive. Full source-path
+table: `ai_clients/CLAUDE.md`.
 
 # Global Programming Preferences
 

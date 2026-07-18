@@ -69,7 +69,6 @@ cross-cutting, non-file-scoped rules remain below.
 - Atomic commits: one logical change per commit.
 - Never commit secrets, credentials, or local config files.
 - `.gitignore` before first commit.
-- **Never `git commit` or `git push` without an explicit user request** — this applies universally, not just after spec/plan docs. Staging (`git add`) is fine, but always stop and confirm before committing or pushing. Pre-commit hooks are slow and pushes are irreversible from the user's perspective.
 
 ## Tutoring — resume before replacing
 

@@ -12,6 +12,34 @@ Only `ai_clients/claude/` is wired up today. New clients follow the same
 pattern: add `ai_clients/<name>/main.sh` and it is auto-discovered by
 `ai_clients/main.sh`.
 
+## Permissions model (`claude/settings.json`)
+
+`defaultMode` is `default` — the `allow`/`ask`/`deny` lists are matched by string
+prefix and are the whole truth (no `auto`-mode classifier; uncovered commands
+prompt, `deny` always wins). The buckets follow one rule: read-only / reversible →
+`allow` (no prompt); outward-facing or irreversible-ish (`git push`, `gh pr merge`,
+`sudo`, installs) → `ask` (harness prompts); secrets + `rm -rf ~|/` + `chmod -R 777`
+→ `deny` (hard block). The contents are self-documenting in the file; the three
+non-obvious points below are **not**, and a future audit must not relitigate them
+(dotfiles-dev#68):
+
+1. **Dual-list every git/gh entry in bare AND `rtk` form.** The `rtk hook claude`
+   PreToolUse hook rewrites `git …` → `rtk git …` at execution, but the model is
+   told to *write* the `rtk` prefix, so the `rtk`-form entry is the one that
+   matches; the bare form is a fallback. A wrong-form entry fails **silently** — it
+   just keeps prompting — so add both forms.
+
+2. **Keep `deny` thin — `destructive_command_guard.sh` covers the irreversible ops
+   more precisely.** Do NOT pad `deny` with `git push --force` / `git reset --hard`
+   / `git clean`: the guard blocks force-push *unless* `--force-with-lease`, and
+   `reset --hard`/`clean` only when the tree is dirty. A blanket `deny` is a string
+   prefix — `deny git push --force` also kills the safe `--force-with-lease` — so it
+   is strictly worse than the guard.
+
+3. **No prose "never commit/push" rule** (in this doc or the global CLAUDE.md). That
+   was a probabilistic instruction; it is replaced by `commit`→`allow`,
+   `push`→`ask`. Re-adding it duplicates the gate and brings back the friction.
+
 ## The restore-`.env` prompt
 
 `ai_clients/lib/restore_env_prompt.sh` defines `prompt_restore_env()`, which

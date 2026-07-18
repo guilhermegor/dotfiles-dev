@@ -22,7 +22,7 @@ Do not infer the path. Wait for explicit confirmation before reading the file.
 
 Before reviewing, read the shared standards document:
 
-    Read ~/.claude/skills/py-standards.md
+    Read ~/.claude/skills/py-standards/SKILL.md
 
 Use every rule in that document as a checklist item for the review.
 

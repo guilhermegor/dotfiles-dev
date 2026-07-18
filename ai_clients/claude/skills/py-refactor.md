@@ -27,7 +27,7 @@ Do not infer the path. Wait for explicit confirmation before reading the file.
 
 Before writing any code, read the shared standards document:
 
-    Read ~/.claude/skills/py-standards.md
+    Read ~/.claude/skills/py-standards/SKILL.md
 
 Apply every rule in that document to the refactored code.
 

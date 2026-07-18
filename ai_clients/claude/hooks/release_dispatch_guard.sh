@@ -111,9 +111,12 @@ bump_axis() {
 semver() {
     # Emit "MAJOR MINOR PATCH" from vX.Y.Z / X.Y.Z (pre-release/build suffix ignored); fail if the
     # core three numbers are not present.
+    # The trailing \n is load-bearing: every caller is `read`, and `read` from a newline-less
+    # stream returns non-zero at EOF *even after assigning the vars*, so a `read … || return`
+    # would fire falsely on success. Do not remove it (same trap as #53's release_due_nudge).
     local v="${1#v}"
     [[ "$v" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]] || return 1
-    printf '%s %s %s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+    printf '%s %s %s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
 }
 
 advise_if_overbump() {

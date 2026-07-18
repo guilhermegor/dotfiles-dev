@@ -29,7 +29,7 @@ Do not infer either. Wait for explicit confirmation before writing any code.
 
 Before writing any code, read the shared standards document:
 
-    Read ~/.claude/skills/py-standards.md
+    Read ~/.claude/skills/py-standards/SKILL.md
 
 Apply every rule in that document to the code you produce.
 

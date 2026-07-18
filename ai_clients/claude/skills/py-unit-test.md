@@ -40,7 +40,7 @@ State which dependencies were detected at the top of the generated test file as 
 
 Before writing any code, read the shared standards document:
 
-    Read ~/.claude/skills/py-standards.md
+    Read ~/.claude/skills/py-standards/SKILL.md
 
 Apply every rule in that document to the test code you produce. The sections
 below are additional standards specific to test files.

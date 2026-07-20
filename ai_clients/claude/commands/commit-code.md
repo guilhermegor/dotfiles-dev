@@ -90,9 +90,29 @@ and re-run until it prints `✓`. Only then proceed to step 5.
 
 1. If there are unstaged changes the user likely wants included, stage them with `git add` targeting specific files — never `git add -A` blindly. Ask the user if it is ambiguous which files to include.
 2. Show the composed message to the user for confirmation before running `git commit`.
-3. Run `git commit [--no-verify] -F /tmp/commit_msg.txt` — commit the exact file you validated in step 4a (never retype the message in a heredoc, which can silently reintroduce a too-long line). Include `--no-verify` only if the user requested it in step 0.
-4. Run `git push origin HEAD` to push the branch to the remote.
-5. Report the resulting commit hash, one-line summary, and push status.
+3. Capture HEAD **before** committing so step 5a can prove the commit landed:
+   ```bash
+   PRE_HEAD="$(git rev-parse HEAD 2>/dev/null || echo NONE)"
+   ```
+4. Run `git commit [--no-verify] -F /tmp/commit_msg.txt` — commit the exact file you validated in step 4a (never retype the message in a heredoc, which can silently reintroduce a too-long line). Include `--no-verify` only if the user requested it in step 0. **Show the commit's full output — never pipe it through `tail`/`head`/`grep`**, which scrolls the one line that matters (a rejected pre-commit hook: `gitlint`, `codespell`, a length guard) off-screen.
+5. Push only after 5a confirms the commit landed: `git push origin HEAD`.
+6. Report the resulting commit hash, one-line summary, and push status.
+
+## 5a. Verify HEAD moved before pushing (never trust the wrapper's "ok")
+
+A `git commit` can print full success — `ok 1 file changed`, every hook `Passed` — while **HEAD never moves**: the `rtk git` wrapper's `ok N files changed` is a summary of the *staged diff*, not proof of a commit, and the write can be dropped two independent ways — a pre-commit hook silently rejected it, or a sandboxed git-write was discarded on teardown. Pushing then ships a branch missing the "committed" work. Prove it moved:
+
+```bash
+POST_HEAD="$(git rev-parse HEAD 2>/dev/null || echo NONE)"
+if [[ "$POST_HEAD" == "$PRE_HEAD" ]]; then
+    echo "✗ HEAD did not move — the commit did NOT land. Do NOT push."
+else
+    echo "✓ HEAD moved: $PRE_HEAD → $POST_HEAD"
+    git log --oneline -1
+fi
+```
+
+If HEAD did **not** move: **stop — do not push.** Re-read the *full* commit output (a hook rejected it, or the sandboxed write was dropped — retry with the sandbox disabled), fix the cause, and re-run the commit until HEAD moves. Only a moved HEAD authorises step 5's push.
 
 ## 6. Tag (optional)
 

@@ -35,6 +35,34 @@ files) and has repeatedly produced wrong "this is empty / does not exist" claims
   the path should exist, verify with `Read`/`Glob` before concluding absence. A
   negative from a lossy channel is not evidence.
 
+### Git writes run under the sandbox — verify HEAD, never `| tail` a commit
+
+A `git commit`/`push`/`tag`/`branch -d/-D` run through the Bash tool executes in the
+**default sandbox** overlay. It can print full success — every pre-commit hook `Passed`,
+`[branch abc123] N files changed` — while **the ref update is discarded on teardown and HEAD
+never moves**. A push then ships a branch missing the "committed" work. The rtk proxy is
+orthogonal here: it only rewrites `git …` → `rtk git …`; the sandbox overlay, a Claude Code
+harness behaviour, is what drops the write. So **leaving git writes unproxied is not the fix**
+(evaluated for dotfiles-dev#79 — cosmetic, the proxy is not the persistence culprit).
+
+One symptom, **two** independent causes — check for both:
+
+1. **Sandbox overlay non-persistence** → run every git write with
+   `dangerouslyDisableSandbox: true`.
+2. **A pre-commit hook rejected the commit and `| tail`/`| grep` hid the failure line.** The
+   hook list is long, so a tailed commit shows only trailing `Passed` lines while the rejection
+   (`codespell`, `gitlint`, `ruff E501`) scrolled off — HEAD is unchanged because the commit
+   really failed.
+
+Robust practice:
+
+- Run git writes with `dangerouslyDisableSandbox: true`.
+- **Never pipe `git commit` through `tail`/`head`/`grep`.** Use full output, then in the same
+  call: `echo "===EXIT=$?===" ; git log --oneline -1`. A non-zero exit or an unmoved HEAD means
+  it did **not** land. If output must be trimmed, `grep -nE 'Failed|error|rejected'`, never `tail`.
+- **Ground truth when unsure:** `Read` `.git/refs/heads/<branch>` (or `.git/logs/HEAD`) directly
+  — a proxied `git log`/`rev-parse` can read the same overlay and lie.
+
 ## Author Claude artifacts in dotfiles-dev, never only in live `~/.claude/`
 
 Durable Claude artifacts (commands, skills, agents, rules, hooks, global

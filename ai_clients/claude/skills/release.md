@@ -131,7 +131,7 @@ Then verify — **all three, none is implied by another**:
 > - Tag: `<next>` present, release not a draft
 > - Skipped: `<none | what, and why>`
 
-## The three verification rules — they are NOT ecosystem-specific
+## The four verification rules — they are NOT ecosystem-specific
 
 Carry these into whichever arm runs. Each was learned from a release that looked fine:
 
@@ -139,6 +139,27 @@ Carry these into whichever arm runs. Each was learned from a release that looked
 2. **Verify the artifact AND the tag.** A draft release creates no tag.
 3. **A cached negative is "unknown", not "absent".** Retry before concluding something is
    unpublished — CDN lag denies versions that already exist.
+4. **A red run ≠ an unpublished artifact — the mirror image of rule 1.** The package **index**,
+   not the Actions run status, is the source of truth for *"did it publish?"*. A run can end red
+   because a *cosmetic post-publish step* (e.g. `Create GitHub Release`) failed **after** the
+   publish job already succeeded. This is likeliest exactly when the CI provider is degraded —
+   which is when the run status is least trustworthy. Read the index (for PyPI:
+   `pypi.org/pypi/<pkg>/json`) before concluding nothing shipped; then apply the remediation below.
+
+## When the run is red but the artifact already published
+
+Once the publish job succeeds the workflow is **no longer idempotent**, so the remediation is
+asymmetric — do not reach for the obvious "just run it again":
+
+- **Do NOT re-dispatch the whole workflow.** The index rejects the duplicate version → the run
+  goes red *again*, and you still have no tag.
+- **Re-run only the failed jobs:** `gh run rerun <id> --failed` reuses the good publish job and
+  retries just the broken step (e.g. `Create GitHub Release`).
+- **Fallback — create the tag/release by hand:** `gh release create <tag> --target <sha>`, then
+  confirm `gh release view <tag> --json isDraft` shows `isDraft=false` (a draft creates no tag).
+- **A missing tag is not cosmetic:** dynamic versioning and the *next* release's gate
+  (`git diff <tag>..HEAD`) both depend on it — a published-but-untagged release mis-scopes the
+  following release's diff.
 
 ## Do Not
 

@@ -35,6 +35,19 @@ are free, correctness is not.
 not proof. Retry before concluding a version is unpublished — `/simple/` and `pip` have both denied
 a version the JSON API was already serving.
 
+⚠️ **A red `release-pypi.yaml` run does NOT mean the wheel is unpublished — the index decides.**
+The `pypi` publish job can succeed while a later *cosmetic* step (`Create GitHub Release`) fails,
+turning the whole run red; reading the red X and re-dispatching is the wrong move. Once the publish
+job has succeeded the workflow is **no longer idempotent** — re-dispatching makes twine reject the
+duplicate version, so the run goes red *again* and you still have no tag. Instead:
+
+- **Read the index first:** `curl -s https://pypi.org/pypi/<pkg>/json | jq -r '.info.version'`. If
+  it already shows `<next>`, the wheel shipped — do not re-run the publish.
+- **Re-run only the broken step:** `gh run rerun <id> --failed` (reuses the good `pypi` job).
+- **Fallback — tag/release by hand:** `gh release create v<next> --target <sha>`, then confirm
+  `gh release view v<next> --json isDraft` shows `isDraft=false`. A missing tag is not cosmetic:
+  dynamic versioning and the next release's `git diff v<next>..HEAD` gate both depend on it.
+
 ## B. Publish — Test PyPI first, then PyPI, each verified
 
 Only after `s:release` has the user's explicit confirmation:
@@ -50,6 +63,10 @@ Then **verify by install** before promoting — never trust a single index read:
   failure** — both `/simple/` and the file host lag a fresh upload, so first-attempt-fail then
   success is normal. Ground truth is the workflow's publish log showing twine's `200 OK` plus a
   successful install on retry.
+- **Verify by observable state, never by tool chatter.** `pip install -q` *suppresses* the
+  `Successfully installed` line, so grepping for that text is a false-negative. Confirm the version
+  actually imports: `python -c "import <pkg>; print(<pkg>.__version__)"` — that is the proof, not
+  pip's stdout.
 
 Only once Test PyPI is install-verified:
 

@@ -65,6 +65,15 @@ main() {
     tracker="$(resolve_tracker)"
     [[ "$tracker" == "none" ]] && exit 0      # no board for this repo → nothing to enforce
 
+    # A GitHub-tracked repo whose branch carries a FOREIGN tracker id (Linear hm-848, Jira ABC-12)
+    # cannot be verified against GitHub — the id's digits are not an issue number. Fail OPEN rather
+    # than misreading them and blocking on a phantom GitHub issue (dotfiles-dev#77). The right
+    # long-term fix for such a repo is naming its real tracker in issue-trackers.conf; until then,
+    # do not false-block. (Linear/none trackers handle their own ids and never reach here.)
+    if [[ "$tracker" == "github" ]] && carries_foreign_tracker_id "$branch"; then
+        exit 0
+    fi
+
     ref="$(ref_in_branch "$tracker" "$branch")"
     [[ -n "$ref" ]] || block_no_ref "$branch" "$tracker"
 
@@ -163,6 +172,23 @@ ref_in_branch() {
         github) github_ref_in "$branch" ;;
         linear) linear_ref_in "$branch" ;;
     esac
+}
+
+carries_foreign_tracker_id() {
+    # True when the branch's LEADING slug token is a well-formed foreign tracker id —
+    # <letters>-<digits> (Linear hm-848, Jira ABC-12). Leading position is what separates a
+    # foreign id (hm-848-desc) from a GitHub number (42-desc) and from a trailing kebab number
+    # (short-desc-42), for which github_ref_in still finds the real issue number. `##*/` drops any
+    # type/ prefix (feat/, fix/), so feature/hm-848-x -> hm-848-x.
+    #
+    # Used only in github mode: such an id's digits are a Linear/Jira number, NOT a GitHub issue
+    # number, so extracting them and calling `gh issue view` false-blocks on a phantom issue
+    # (dotfiles-dev#77). A hook cannot reach Linear, so the id is UNKNOWN -> fail OPEN.
+    # ponytail: irreducible collision with a real word-number leading slug (oauth-2-x reads as
+    # foreign and is allowed) — accepted, because fail-open is this guard's declared safe direction
+    # ("better to miss than to false-block"); the alternative (false-close) is the bug being fixed.
+    local slug="${1##*/}"
+    [[ "$slug" =~ ^[A-Za-z]+-[0-9]+([-_.]|$) ]]
 }
 
 github_ref_in() {

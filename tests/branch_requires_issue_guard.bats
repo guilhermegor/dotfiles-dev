@@ -105,3 +105,34 @@ CMD
     run bash -c "jq -nc '{tool_name: \"Read\", tool_input: {command: \"git checkout -b feat/x\"}}' | '$GUARD'"
     [ "$status" -eq 0 ]
 }
+
+# --- #77: a foreign tracker id must fail OPEN, not false-block on a phantom GitHub issue --------
+# These are the crux tests. Under github tracking, a branch whose leading slug token is a Linear /
+# Jira id (hm-848, ABC-12) previously had its digits (848, 12) read as a GitHub issue number and
+# was BLOCKED as a phantom. It must now exit 0 — WITHOUT ever calling `gh` (the check runs before
+# ref extraction), so the test is deterministic and offline.
+
+@test "allows a Linear id branch (lowercase key) under github tracking" {
+    export CLAUDE_ISSUE_TRACKER=github
+    run run_guard "git checkout -b feature/hm-848-fix-thing"
+    [ "$status" -eq 0 ]
+}
+
+@test "allows a Jira id branch (uppercase key) under github tracking" {
+    export CLAUDE_ISSUE_TRACKER=github
+    run run_guard "git switch -c ABC-12-payment-bug"
+    [ "$status" -eq 0 ]
+}
+
+@test "allows a bare Linear id branch with no trailing description" {
+    export CLAUDE_ISSUE_TRACKER=github
+    run run_guard "git checkout -b feat/dit-456"
+    [ "$status" -eq 0 ]
+}
+
+# The foreign-id allow is deliberately narrow: the fail-open fires only for a LEADING
+# <letters>-<digits> slug token. The negative side is already locked by the no-ref BLOCK tests
+# above (scratch/poke-at-it, feat/no-number, wip) — a multi-token non-foreign slug still exits 2,
+# so it was NOT misread as foreign (that path exits 0). The gh-dependent "absent GitHub issue
+# still blocks" path needs a live repo context, which this offline suite deliberately avoids —
+# the same limitation the sibling guard suites accept.

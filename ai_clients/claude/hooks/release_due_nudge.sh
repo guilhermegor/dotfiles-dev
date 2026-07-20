@@ -137,7 +137,7 @@ announce_due() {
     jq -n --arg v "$1" --arg s "$2" '{
         hookSpecificOutput: {
             hookEventName: "PostToolUse",
-            additionalContext: ("RELEASE DUE: \($v) (\($s)) — the shipped artifact changed since the last tag but has not been released. Run the s:release skill to publish (it owns the authoritative version across both PyPI indices; \($v) here is an offline hint).")
+            additionalContext: ("RELEASE DUE: \($v) (\($s)) — the shipped artifact changed since the last tag but has not been released. Run the s:release skill to publish (it detects the ecosystem and gets the authoritative version floor from that arm; \($v) here is an offline hint).")
         }
     }' 2>/dev/null || true
 }

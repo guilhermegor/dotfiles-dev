@@ -18,9 +18,10 @@ forward to the next session.
 bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/session_capture_audit.sh"
 ```
 
-It prints two blocks: **mechanical gaps** (git / lesson-index / mirror — already decided for you)
-and a **judgment checklist** (superseded rules / issues-PRs / checkpoint / lesson routing — the
-script cannot decide these; you must). Work every line of both.
+It prints three blocks: **mechanical gaps** (git / lesson-index / mirror — already decided for
+you); a **completeness table** (both directions — see step 3); and a **judgment checklist**
+(superseded rules / issues-PRs / checkpoint / lesson routing — the script cannot decide these; you
+must). Work every line of all three.
 
 ## 2. Fix the mechanical gaps
 
@@ -38,7 +39,28 @@ script cannot decide these; you must). Work every line of both.
   layout/archetype like `mvc-*`, `ddd-*`, `library`) — and a **new/unknown tier is fine**, never
   reject one against a hardcoded list.
 
-## 3. Work the judgment checklist
+## 3. Resolve the completeness table (both directions)
+
+The audit prints a two-row table — never trust a single number, because a one-directional
+lessons→issues check hid an open issue (#75) that had no lesson at all:
+
+```
+lessons → issues : <N> in store, <M> reference an issue/PR, <K> unaccounted
+issues  → lessons: <I> open, <S> sourced by a lesson, <O> orphan
+```
+
+- **`! open issues with no lesson` (row 2 orphans)** — the dangerous side. For each, decide with
+  judgment: if it captures a generalizable finding, **write its lesson now** (file + README index +
+  mirror, routed by where the fix lands) so the rationale is not lost when the PR closes the issue;
+  if it is a plain feature/chore with no lesson, that is fine — leave it. These are candidates, not
+  automatic gaps: not every issue is lesson-born.
+- **`! lessons with no issue/PR reference` (row 1 unaccounted)** — a captured finding that was
+  never scheduled or linked. Add the issue/PR reference to the lesson's `**PR:**` line, or file the
+  issue via `/issue` if the work is still open.
+- Row 2 prints `skipped` at SessionEnd or without `gh` — that is by design (no network on exit).
+  Under `/wrap-up` it runs live; if it shows `skipped` here, note it rather than claiming clean.
+
+## 4. Work the judgment checklist
 
 - **Superseded rules — the highest-value check, and the one nobody remembers.** If this session
   **changed a standing rule**, the new rule got written (memory, lesson) but the **old rule keeps
@@ -57,7 +79,7 @@ script cannot decide these; you must). Work every line of both.
   `docs/dotfiles-dev-lessons.md`). Every lesson must exist in **all three** places: file, README
   index, repo mirror.
 
-## 4. Re-run and report
+## 5. Re-run and report
 
 Re-run the audit from step 1. Report, concisely:
 - What you **fixed** (lessons indexed/mirrored, checkpoint written, stale rule removed, …).

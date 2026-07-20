@@ -46,9 +46,17 @@ main() {
 
     # Inspect the --body-file contents if given, else the inline command string (an inline --body
     # embeds the section headers directly in the command text).
+    #
+    # A --body-file/-F flag that we cannot resolve to a readable file is NOT the same as "no
+    # body-file" (dotfiles-dev#78): falling back to scanning the command string then produces a
+    # verdict from the wrong source — it can false-PASS when the header texts happen to appear in
+    # e.g. --title, or block with a misleading "missing sections". A verdict from unresolved input
+    # is "unknown", not "approved": fail loud instead.
     bodyfile="$(extract_body_file "$command")"
     if [[ -n "$bodyfile" && -r "$bodyfile" ]]; then
         body_source="$(cat "$bodyfile")"
+    elif has_body_file_flag "$command"; then
+        block_unresolved_body_file "$command"
     else
         body_source="$command"
     fi
@@ -98,6 +106,35 @@ find_template() {
     local fallback="$HOME/.claude/projects/-home-guilhermegor-github-dotfiles-dev/memory/feedback_pr_template.md"
     [[ -r "$fallback" ]] && { printf '%s' "$fallback"; return 0; }
     return 0
+}
+
+# True if the command carries a --body-file/-F flag at all — regardless of whether its value
+# resolves to a readable file. Lets the caller tell "no body-file given" (scan inline command)
+# apart from "body-file given but unreadable" (fail loud). Mirrors the flag set in extract_body_file.
+has_body_file_flag() {
+    printf '%s' "$1" | grep -Eq -- '(--body-file[[:space:]=]|-F[[:space:]])'
+}
+
+block_unresolved_body_file() {
+    # A PreToolUse hook sees the command BEFORE shell expansion, so `--body-file "$SP/body.md"`
+    # arrives as the literal string `$SP/body.md` — unreadable. That unexpanded-variable case is
+    # the common real trigger (dotfiles-dev#78), so name it in the diagnostic.
+    {
+        echo "BLOCKED: the --body-file could not be read, so the PR body was never verified."
+        echo
+        echo "A --body-file/-F was passed but does not resolve to a readable file. A template"
+        echo "verdict derived from any other source (the command line, the --title) would be a"
+        echo "guess, not a check — so this fails loud instead of rescanning silently."
+        if printf '%s' "$1" | grep -Eq -- '(--body-file[[:space:]=]|-F[[:space:]])[^[:space:]]*[$`]'; then
+            echo
+            echo "The path contains an unexpanded shell variable or \$(…) — this hook sees the"
+            echo "command before the shell expands it. Pass a literal path, or inline the body"
+            echo "with --body \"\$(cat file.md)\" (the substituted text then reaches the hook)."
+        fi
+        echo
+        echo "Check the path exists and is readable, then re-run the SAME gh command."
+    } >&2
+    exit 2
 }
 
 extract_body_file() {

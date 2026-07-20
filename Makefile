@@ -268,7 +268,11 @@ editors_setup: vscode_setup ai_clients  ## Setup all code editors + AI clients
 
 ##@ Utilities
 
-.PHONY: banner check_status list_scripts clean patch_claudestatus git_hooks
+.PHONY: banner check_status list_scripts clean patch_claudestatus git_hooks test
+
+test:  ## Run the bats unit test suite (tests/) — local parity with CI
+	@command -v bats >/dev/null 2>&1 || { echo "bats not found — run 'make install_coding' (bats step) or 'brew install bats-core'"; exit 1; }
+	@bats tests/
 
 git_hooks:  ## Enable this repo's local git hooks (gitlint commit-msg lint)
 	@command -v gitlint >/dev/null 2>&1 || { echo "Installing gitlint..."; pipx install gitlint-core 2>/dev/null || python3 -m pip install --user gitlint-core; }

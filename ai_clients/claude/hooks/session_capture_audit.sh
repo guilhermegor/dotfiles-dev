@@ -142,8 +142,105 @@ check_mirrors() {
 	done
 }
 
+# owner/repo from the origin remote — parsed from the URL, NO network call, so it is
+# safe in the SessionEnd path. Empty when there is no GitHub origin.
+repo_slug() {
+	local cwd="$1" url
+	url="$(git -C "$cwd" remote get-url origin 2>/dev/null)" || return 1
+	[ -n "$url" ] || return 1
+	url="${url%.git}"
+	case "$url" in
+	*github.com[:/]*) printf '%s\n' "${url#*github.com}" | sed 's#^[:/]##' ;;
+	*) return 1 ;;
+	esac
+}
+
+# The lesson store whose backport target is this repo (dotfiles-dev → lessons-dotfiles).
+store_dir_for_repo() {
+	local repo="$1" entry store mirror_base kind target_repo
+	for entry in "${LESSON_STORES[@]}"; do
+		IFS='|' read -r store mirror_base kind target_repo <<<"$entry"
+		[ "$target_repo" = "$repo" ] && {
+			printf '%s\n' "$store"
+			return 0
+		}
+	done
+	return 1
+}
+
+# The both-directions completeness table (dotfiles-dev#81). A one-directional
+# lessons→issues audit proves only that no lesson lacks an index entry; it never sees
+# the B-side orphan — an OPEN ISSUE with no lesson, where the rationale is already lost
+# once the PR closes it. So print BOTH rows, never a single number.
+#
+# Direction split by cost, matching this script's contract:
+#   Row 1 (lessons → issues) is store-internal text — always computed, no network.
+#   Row 2 (issues → lessons) needs the live issue list, so it runs ONLY in report mode
+#   (under /wrap-up, interactive) and only when gh is present; at SessionEnd it is
+#   skipped so a network hang can never stall the exit. Fails OPEN.
+#
+# Orphans/unaccounted are JUDGMENT candidates, not add_gap()s: not every issue is
+# lesson-born and not every lesson maps to an issue, so a hard gap would cry wolf (and
+# fire at SessionEnd). They are surfaced for /wrap-up to resolve consciously.
+emit_completeness() {
+	local cwd="$1" mode="$2" repo store
+	repo="$(basename "$cwd")"
+	store="$(store_dir_for_repo "$repo")" || return 0
+	[ -d "$store" ] || return 0
+
+	printf '%s\n' "--- completeness (both directions, dotfiles-dev#81) ---"
+
+	# Row 1 — lessons → issues (store text; no network).
+	local total=0 tracked=0 file name
+	local -a unaccounted=()
+	for file in "$store"/*.md; do
+		[ -e "$file" ] || continue
+		name="$(basename "$file")"
+		[ "$name" = "README.md" ] && continue
+		total=$((total + 1))
+		if grep -qE "${repo}#[0-9]+" "$file"; then
+			tracked=$((tracked + 1))
+		else
+			unaccounted+=("$name")
+		fi
+	done
+	printf '  lessons → issues : %d in store, %d reference an issue/PR, %d unaccounted\n' \
+		"$total" "$tracked" "${#unaccounted[@]}"
+
+	# Row 2 — issues → lessons (live issue list; report mode + gh only, fails open).
+	local slug="" issues="" n sourced=0 icount=0
+	local -a orphans=()
+	if [ "$mode" = "report" ] && command -v gh >/dev/null 2>&1; then
+		slug="$(repo_slug "$cwd" 2>/dev/null || true)"
+	fi
+	if [ -n "$slug" ]; then
+		issues="$(gh issue list --repo "$slug" --state open --json number \
+			--jq '.[].number' 2>/dev/null || true)"
+		while IFS= read -r n; do
+			[ -n "$n" ] || continue
+			icount=$((icount + 1))
+			if grep -qE "${repo}#${n}([^0-9]|\$)" "$store"/*.md 2>/dev/null; then
+				sourced=$((sourced + 1))
+			else
+				orphans+=("#$n")
+			fi
+		done <<<"$issues"
+		printf '  issues  → lessons: %d open, %d sourced by a lesson, %d orphan\n' \
+			"$icount" "$sourced" "${#orphans[@]}"
+	else
+		printf '  issues  → lessons: skipped (needs gh + report mode; not run at SessionEnd)\n'
+	fi
+
+	if [ "${#orphans[@]}" -gt 0 ]; then
+		printf '  ! open issues with no lesson — write one or mark not-lesson-worthy: %s\n' "${orphans[*]}"
+	fi
+	if [ "${#unaccounted[@]}" -gt 0 ]; then
+		printf '  ! lessons with no issue/PR reference: %s\n' "${unaccounted[*]}"
+	fi
+}
+
 emit_report() {
-	local cwd="$1" repo date_str
+	local cwd="$1" mode="${2:-report}" repo date_str
 	repo="$(basename "$cwd")"
 	date_str="$(date +%Y-%m-%d)"
 
@@ -158,6 +255,10 @@ emit_report() {
 		done
 	fi
 
+	# Completeness in BOTH directions (dotfiles-dev#81) — printed between the decided
+	# gaps and the judgment checklist because its orphans are judgment, not gaps.
+	emit_completeness "$cwd" "$mode"
+
 	# Judgment-only checks: the script cannot decide these — it hands them to a
 	# human or to `/wrap-up`. The superseded-rule grep is the highest-value one and
 	# the one nobody remembers (a real audit found a revoked release rule still
@@ -165,6 +266,7 @@ emit_report() {
 	printf '%s\n' "--- verify manually or via /wrap-up (need judgment) ---"
 	printf '%s\n' "  - [ ] Superseded rules: did this session CHANGE a standing rule? grep tracked docs/README/ledgers for the OLD rule — a tracked doc outranks memory next session."
 	printf '%s\n' "  - [ ] Issues/PRs: every issue created this session is on the board and its card is in the right column; open PRs are accounted for."
+	printf '%s\n' "  - [ ] Completeness BOTH ways (above): resolve each 'orphan' open issue (write its lesson or mark it not-lesson-worthy) and each 'unaccounted' lesson (add its issue/PR reference) — a one-directional check hides the B-side orphan."
 	printf '%s\n' "  - [ ] Checkpoint: project memory has a resume point covering this session's work."
 	printf '%s\n' "  - [ ] Lessons: every generalizable finding is captured in the right store (BlueprintX vs dotfiles-dev) — routed by where the fix lands."
 }
@@ -182,7 +284,7 @@ write_handoff() {
 		return 0
 	fi
 	mkdir -p "$audit_dir" 2>/dev/null || return 0
-	emit_report "$cwd" >"$handoff" 2>/dev/null || true
+	emit_report "$cwd" "handoff" >"$handoff" 2>/dev/null || true
 }
 
 main() {

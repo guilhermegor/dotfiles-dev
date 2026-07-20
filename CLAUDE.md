@@ -17,9 +17,12 @@ make install_espanso_packages  # Copy espanso/ packages to ~/.config/espanso/pac
 make editors_setup         # VS Code + AI clients
 make check_status          # Show distribution info and executable scripts
 make clean                 # Remove *.log, *.tmp, *~ files
+make test                  # Run the bats unit test suite (tests/) — local parity with CI
 ```
 
-No build step, no test suite — scripts are run directly.
+No build step. Scripts are run directly. There is a bats unit-test suite under `tests/`
+(run with `make test`, or install bats via the `install_bats` step of `make install_coding`);
+CI runs the same suite plus shellcheck, actionlint, yamllint, and gitlint.
 
 ## ai_clients architecture
 

@@ -218,10 +218,54 @@ install_gitlint() {
     fi
 }
 
+install_bats() {
+    print_status "section" "BATS (BASH TEST FRAMEWORK)"
+
+    if command_exists bats; then
+        print_status "info" "bats already installed"
+        return 0
+    fi
+
+    if command_exists brew; then
+        print_status "info" "Installing bats via Homebrew..."
+        if run_or_echo brew install bats-core &>> "$LOG_FILE"; then
+            print_status "success" "bats installed via Homebrew"
+            return 0
+        fi
+        print_status "warning" "Homebrew install failed, falling back to vendored bats-core..."
+    fi
+
+    # No-sudo fallback: bats-core ships an install.sh that takes a prefix, so cloning and
+    # installing into ~/.local needs neither root nor an interactive apt password (apt would
+    # prompt in the harness). ~/.local/bin is expected on PATH (setup_env.sh handles that).
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    print_status "info" "Cloning bats-core from GitHub..."
+    if run_or_echo git clone --depth 1 https://github.com/bats-core/bats-core.git "$tmp_dir/bats-core" &>> "$LOG_FILE"; then
+        run_or_echo "$tmp_dir/bats-core/install.sh" "$HOME/.local" &>> "$LOG_FILE"
+    else
+        print_status "error" "Failed to clone bats-core from GitHub"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    rm -rf "$tmp_dir"
+
+    if command_exists bats; then
+        bats --version >> "$LOG_FILE"
+        print_status "success" "bats installed: $(bats --version 2>/dev/null)"
+    else
+        print_status "error" "bats install failed — ensure ~/.local/bin is on PATH; check $LOG_FILE"
+        return 1
+    fi
+}
+
 INSTALL_REGISTRY+=(
     "install_github_cli:GitHub CLI::"
     "install_act:act (Run GitHub Actions Locally)::"
     "install_gitleaks:Gitleaks (Secret Scanner)::"
     "install_shellcheck:shellcheck (Shell Script Linter)::"
     "install_gitlint:gitlint (Commit Message Linter)::"
+    "install_bats:bats (Bash Test Framework)::"
 )

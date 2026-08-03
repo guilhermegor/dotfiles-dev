@@ -224,6 +224,23 @@ EOF
     print_status "info" "Google Tasks: Chrome PWA for tasks.google.com"
 }
 
+install_google_keep() {
+    print_status "section" "GOOGLE KEEP (PWA)"
+
+    # Google has never shipped a desktop Keep client on any platform — web only.
+    install_chrome_pwa "Google Keep" "https://keep.google.com" "google-keep" \
+        "google_keep_app.png" "Office;Utility;" 512
+}
+
+install_instapaper() {
+    print_status "section" "INSTAPAPER (PWA)"
+
+    # Instapaper is mobile + web only; no desktop client has ever existed.
+    # Their largest published icon is 145px, so 128 is the nearest hicolor bucket.
+    install_chrome_pwa "Instapaper" "https://www.instapaper.com" "instapaper" \
+        "instapaper_app.png" "Office;News;Viewer;" 128
+}
+
 install_valor_digital() {
     print_status "section" "VALOR DIGITAL (VALOR ECONÔMICO)"
 
@@ -606,6 +623,8 @@ INSTALL_REGISTRY+=(
     "install_google_calendar:Google Calendar (PWA):OrgPessoal:google-calendar.desktop"
     "install_notion_calendar:Notion Calendar (PWA):OrgPessoal:notion-calendar.desktop"
     "install_google_tasks:Google Tasks (PWA):OrgPessoal:google-tasks.desktop"
+    "install_google_keep:Google Keep (PWA):OrgPessoal:google-keep.desktop"
+    "install_instapaper:Instapaper (PWA):OrgPessoal:instapaper.desktop"
     "install_valor_digital:Valor Digital (Valor Econômico):Newsletter:valor-digital.desktop"
     "install_linear:Linear (Project Management):DEV:linear.desktop"
     "install_miro:Miro Collaboration Tool:DEV:miro.desktop"

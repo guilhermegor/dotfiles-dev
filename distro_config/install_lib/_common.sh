@@ -211,6 +211,74 @@ setup_flatpak() {
 }
 
 # ============================================================================
+# CHROME PWA (shared by every --app= web wrapper)
+# ============================================================================
+
+# Wrap a website as a Chrome PWA with its own launcher entry.
+#   install_chrome_pwa <label> <url> <desktop-basename> <icon-asset> <categories> <icon-px>
+#
+# <icon-asset> is a filename under assets/; <icon-px> is the hicolor bucket it is
+# copied into (pick the nearest standard size at or below the asset's real height,
+# GNOME scales from there). The icon is copied out of the repo into the user's
+# icon theme so the launcher survives the repo being moved or deleted.
+install_chrome_pwa() {
+    local label="$1" url="$2" desktop_name="$3" icon_asset="$4" categories="$5" icon_px="$6"
+
+    if ! command_exists google-chrome; then
+        print_status "error" "Google Chrome not found. The $label PWA requires Chrome."
+        print_status "info" "Install Chrome first and re-run this step."
+        return 1
+    fi
+
+    local desktop_dir="$HOME/.local/share/applications"
+    local desktop_file="$desktop_dir/${desktop_name}.desktop"
+
+    local repo_root
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || return 1
+
+    local icon_src="$repo_root/assets/$icon_asset"
+    local icon_theme_dir="$HOME/.local/share/icons/hicolor/${icon_px}x${icon_px}/apps"
+    local icon_value="$desktop_name"
+
+    if [ -f "$desktop_file" ]; then
+        print_status "info" "$label desktop entry already exists, updating"
+    fi
+
+    print_status "info" "Creating $label desktop entry..."
+    run_or_echo mkdir -p "$desktop_dir"
+
+    if [ -f "$icon_src" ]; then
+        print_status "info" "Installing $label icon..."
+        run_or_echo mkdir -p "$icon_theme_dir"
+        cp "$icon_src" "$icon_theme_dir/${desktop_name}.png"
+        if command_exists gtk-update-icon-cache; then
+            run_or_echo gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+        fi
+    else
+        print_status "warning" "$label icon not found at $icon_src. Using default icon."
+        icon_value="applications-internet"
+    fi
+
+    cat > "$desktop_file" << EOF
+[Desktop Entry]
+Name=${label}
+Exec=google-chrome --app=${url}
+Terminal=false
+Type=Application
+Icon=${icon_value}
+Categories=${categories}
+EOF
+    run_or_echo chmod +x "$desktop_file"
+
+    if command_exists update-desktop-database; then
+        run_or_echo update-desktop-database "$desktop_dir" 2>/dev/null || true
+    fi
+
+    print_status "success" "$label desktop entry created"
+    print_status "info" "$label: Chrome PWA for $url"
+}
+
+# ============================================================================
 # INSTALL_REGISTRY INFRASTRUCTURE
 # ============================================================================
 

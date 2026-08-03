@@ -201,7 +201,12 @@ configure_dock() {
         fi
     done
     
-    # 2. Firefox
+    # 2. SoundCloud (PWA) — only ever one filename, so no candidate loop needed
+    if result=$(find_desktop_file 'soundcloud.desktop'); then
+        favorites+=("'$result'")
+    fi
+
+    # 3. Firefox
     for app in 'firefox_firefox.desktop' 'firefox.desktop'; do
         if result=$(find_desktop_file "$app"); then
             favorites+=("'$result'")
@@ -209,7 +214,7 @@ configure_dock() {
         fi
     done
     
-    # 3. Google Chrome
+    # 4. Google Chrome
     for app in 'google-chrome.desktop' 'chrome.desktop'; do
         if result=$(find_desktop_file "$app"); then
             favorites+=("'$result'")
@@ -217,14 +222,9 @@ configure_dock() {
         fi
     done
     
-    # 4. Google Keep
-    for app in 'chrome-eilembjdkfgodjkcjnpgpaenohkicgjd-Default.desktop' 'google-keep_google-keep.desktop' 'google-keep.desktop' 'keep.desktop' 'keep_keep.desktop'; do
-        if result=$(find_desktop_file "$app"); then
-            favorites+=("'$result'")
-            break
-        fi
-    done
-    
+    # Google Keep is deliberately NOT pinned here — it lives in the OrgPessoal
+    # app folder instead, via its INSTALL_REGISTRY entry in install_lib/productivity.sh.
+
     # 5. Notion
     for app in 'notion-snap-reborn_notion-snap-reborn.desktop' 'notion-app_notion-app.desktop' 'notion-app.desktop' 'notion.desktop'; do
         if result=$(find_desktop_file "$app"); then

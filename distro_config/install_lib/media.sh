@@ -144,6 +144,18 @@ install_handbrake() {
     fi
 }
 
+install_soundcloud() {
+    print_status "section" "SOUNDCLOUD"
+
+    # SoundCloud ships no native Linux client, and every third-party desktop client
+    # (Soundnode, Auryo) is archived and pinned to the retired v1 API. The web player
+    # is the only maintained surface — wrap it as a Chrome PWA.
+    install_chrome_pwa "SoundCloud" "https://soundcloud.com" "soundcloud" \
+        "soundcloud_app.png" "AudioVideo;Audio;Player;" 512 || return 1
+
+    print_status "config" "Pinned to the dock beside Spotify by ubuntu_workspace.sh"
+}
+
 install_obs() {
     print_status "section" "OBS STUDIO"
 
@@ -175,4 +187,5 @@ INSTALL_REGISTRY+=(
     "install_asunder:Asunder CD Ripper:Media:asunder.desktop"
     "install_handbrake:HandBrake DVD Ripper:Media:fr.handbrake.ghb.desktop"
     "install_obs:OBS Studio:Media:com.obsproject.Studio.desktop"
+    "install_soundcloud:SoundCloud::soundcloud.desktop"
 )

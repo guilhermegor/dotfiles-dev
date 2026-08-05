@@ -993,6 +993,40 @@ install_faster_whisper() {
     fi
 }
 
+# ============================================================================
+# HEADROOM (CONTEXT COMPRESSION FOR AI AGENTS)
+# ============================================================================
+
+install_headroom() {
+    print_status "section" "HEADROOM (AI CONTEXT COMPRESSION)"
+
+    # Headroom's core is Rust, but the `headroom` CLI ships inside the Python
+    # distribution, so pipx yields the command in its own isolated venv.
+    # Upstream recommends `uv tool install`; pipx does the same job and is
+    # already a bootstrapper here (install_pipx), so no second tool manager.
+    if command_exists headroom; then
+        print_status "info" "headroom already installed"
+        return 0
+    fi
+
+    if ! command_exists pipx; then
+        print_status "error" "pipx not found — run install_pipx first"
+        return 1
+    fi
+
+    # ponytail: no --python pin, unlike install_faster_whisper. The [all] extra
+    # pulls prebuilt wheels; pin to a pyenv interpreter here if a future system
+    # Python ever ships without them (upstream builds against 3.13).
+    print_status "info" "Installing headroom-ai[all] via pipx..."
+    if run_or_echo pipx install "headroom-ai[all]" &>> "$LOG_FILE"; then
+        print_status "success" "headroom installed (command: headroom)"
+        print_status "config" "Run 'headroom --help'; docs: https://github.com/headroomlabs-ai/headroom"
+    else
+        print_status "error" "headroom installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
 INSTALL_REGISTRY+=(
     "install_ollama:Ollama AI Platform::"
     "install_claude_code:Claude Code::"
@@ -1001,4 +1035,5 @@ INSTALL_REGISTRY+=(
     "install_claudestatus:claudestatus (Claude Usage Dashboard)::"
     "install_rtk:RTK (Rust Token Killer)::"
     "install_faster_whisper:faster-whisper (Speech-to-Text CLI)::"
+    "install_headroom:Headroom (AI Context Compression)::"
 )

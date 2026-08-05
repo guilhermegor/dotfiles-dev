@@ -97,17 +97,22 @@ closing it would close the children's tracking with work outstanding.
 ## New step structure
 
 ```
-0. Resolve tracker              NEW
-1. Resolve target issue         (today's step 0)
-2. Detect repo context          (today's step 2, moved up — step 1 needs it)
+0. Resolve tracker                 NEW
+1. Detect workspace context        (today's step 2, moved up — step 2 needs it)
+2. Resolve target issue            (today's step 0)
 3. Derive title / conventional type / slug
 4. Classify work type + HITL/AFK   NEW
 5. Decide hierarchy                NEW
 6. Create issue(s)
-7. Board card + column          (column derived in step 4)
-8. Branch                       (leaf only)
+7. Board card + column             (column derived in step 4)
+8. Branch                          (leaf only)
 9. Report
 ```
+
+Today's step 0 opens with "run step 2 first" — a forward reference that only worked because a
+human read the whole file before executing. Context detection now genuinely precedes the
+lookup that needs it, and for `linear` it also resolves the team, viewer id, workflow states
+and labels in a single query.
 
 ### Argument surface
 

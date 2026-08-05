@@ -261,6 +261,47 @@ install_bats() {
     fi
 }
 
+install_coderabbit() {
+    print_status "section" "CODERABBIT CLI (AI CODE REVIEW)"
+
+    # `cr` is only a short alias for `coderabbit`; guard on the real command name.
+    if command_exists coderabbit; then
+        print_status "info" "coderabbit already installed"
+        return 0
+    fi
+
+    # Homebrew is deliberately NOT used: `coderabbit` ships as a macOS-only cask
+    # (`brew install --cask coderabbit`, "Requirements: macOS"), and Homebrew on
+    # Linux has no cask support at all — so `brew install coderabbit` can only
+    # fail here. The vendor script is the only documented Linux path.
+    #
+    # Fetched to a temp file instead of piping curl straight into sh: the payload
+    # stays inspectable in the log, and the execution can go through run_or_echo
+    # so DRY_RUN=1 previews it rather than running a remote installer.
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    print_status "info" "Downloading the CodeRabbit install script..."
+    if ! curl -fsSL https://cli.coderabbit.ai/install.sh -o "$tmp_dir/install.sh" 2>> "$LOG_FILE"; then
+        print_status "error" "Failed to download the CodeRabbit install script"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    print_status "info" "Running the CodeRabbit installer..."
+    if run_or_echo sh "$tmp_dir/install.sh" &>> "$LOG_FILE"; then
+        print_status "success" "coderabbit installed (command: coderabbit, alias: cr)"
+        # Auth opens a browser and is per-user — never trigger it from the installer.
+        print_status "config" "Authenticate manually: coderabbit auth login"
+    else
+        print_status "error" "coderabbit install failed — ensure ~/.local/bin is on PATH; check $LOG_FILE"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    rm -rf "$tmp_dir"
+}
+
 INSTALL_REGISTRY+=(
     "install_github_cli:GitHub CLI::"
     "install_act:act (Run GitHub Actions Locally)::"
@@ -268,4 +309,5 @@ INSTALL_REGISTRY+=(
     "install_shellcheck:shellcheck (Shell Script Linter)::"
     "install_gitlint:gitlint (Commit Message Linter)::"
     "install_bats:bats (Bash Test Framework)::"
+    "install_coderabbit:CodeRabbit CLI (AI Code Review)::"
 )

@@ -36,7 +36,21 @@ non-obvious points below are **not**, and a future audit must not relitigate the
    prefix — `deny git push --force` also kills the safe `--force-with-lease` — so it
    is strictly worse than the guard.
 
-3. **No prose "never commit/push" rule** (in this doc or the global CLAUDE.md). That
+3. **The `.env` deny is enumerated on purpose — do NOT collapse it back to
+   `Read(**/.env.*)`.** That one pattern also matched `.env.example`, the tracked,
+   secret-free template every project needs edited, and made it uneditable (Edit
+   requires Read, and deny beats allow — so adding `Read(**/.env.example)` or
+   `Write(...)` to `allow` is a no-op, not a fix). The exception cannot be expressed
+   in one rule: extglob negation (`Read(**/.env.!(example))`) is **unverified**, and
+   if the matcher does not support it the pattern matches nothing and every `.env.*`
+   silently becomes readable — a fail-open regression. The enumeration fails open
+   only for suffixes nobody listed, which is auditable. Tail wildcards cover the
+   framework conventions (`dev*`→dev/development, `prod*`, `stag*`, `hml*`/`homolog*`
+   for BR environments). Add a row when a new secret-bearing suffix shows up.
+   Note `claude -p` does **not** enforce these deny rules, so it cannot be used to
+   test them; and settings do not hot-reload mid-session.
+
+4. **No prose "never commit/push" rule** (in this doc or the global CLAUDE.md). That
    was a probabilistic instruction; it is replaced by `commit`→`allow`,
    `push`→`ask`. Re-adding it duplicates the gate and brings back the friction.
 

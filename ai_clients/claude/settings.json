@@ -112,7 +112,6 @@
       "WebFetch",
       "Skill(update-config)",
       "Bash(claude mcp:*)",
-
       "Bash(cat:*)",
       "Bash(head:*)",
       "Bash(tail:*)",
@@ -135,7 +134,6 @@
       "Bash(printf:*)",
       "Bash(mkdir:*)",
       "Bash(touch:*)",
-
       "Bash(ls:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
@@ -152,7 +150,6 @@
       "Bash(rtk gain:*)",
       "Bash(rtk discover:*)",
       "Bash(rtk --version)",
-
       "Bash(diff:*)",
       "Bash(cut:*)",
       "Bash(tr:*)",
@@ -163,7 +160,6 @@
       "Bash(jq:*)",
       "Bash(yq:*)",
       "Bash(sqlite3:*)",
-
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -185,12 +181,10 @@
       "Bash(rtk git stash list:*)",
       "Bash(rtk git ls-files:*)",
       "Bash(rtk proxy git:*)",
-
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(rtk git add:*)",
       "Bash(rtk git commit:*)",
-
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
       "Bash(gh pr diff:*)",
@@ -209,7 +203,6 @@
       "Bash(rtk gh run view:*)",
       "Bash(rtk gh run list:*)",
       "Bash(rtk gh repo view:*)",
-
       "Bash(gitlint:*)",
       "Bash(codespell:*)",
       "Bash(shellcheck:*)",
@@ -220,7 +213,6 @@
       "Bash(rtk pytest:*)",
       "Bash(bats:*)",
       "Bash(make:*)",
-
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
       "mcp__plugin_context-mode_context-mode__ctx_search",
@@ -320,6 +312,10 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/release_dispatch_guard.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/pr_merge_threads_guard.sh\""
           }
         ]
       },
@@ -368,6 +364,16 @@
             "type": "command",
             "command": "pw-play /usr/share/sounds/freedesktop/stereo/message.oga 2>/dev/null || true",
             "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/open_review_threads_nudge.sh\""
           }
         ]
       }

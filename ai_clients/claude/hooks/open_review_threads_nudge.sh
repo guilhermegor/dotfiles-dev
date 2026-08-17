@@ -42,6 +42,20 @@ query($owner:String!, $repo:String!, $number:Int!) {
           comments(first:50) { nodes { author { login } body } }
         }
       }
+      commits(last:1) {
+        nodes {
+          commit {
+            statusCheckRollup {
+              contexts(first:100) {
+                nodes {
+                  __typename
+                  ... on CheckRun { name status }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
@@ -78,10 +92,32 @@ main() {
 	name="${repo##*/}"
 	[[ -n "$owner" && -n "$name" ]] || exit 0
 
-	threads="$(gh api graphql -f query="$(read_query)" \
-		-F owner="$owner" -F repo="$name" -F number="$number" 2>/dev/null)" || exit 0
-	printf '%s' "$threads" | jq -e '.data.repository.pullRequest.reviewThreads' >/dev/null 2>&1 \
-		|| exit 0
+	# ⚠️ FAIL CLOSED on an unreadable answer. This used to `exit 0` when the query failed, so
+	# during a GitHub outage the guard was silently ABSENT — indistinguishable from "nothing to
+	# do", which is the exact blindness it exists to remove. Measured 2026-08-17: a run of
+	# HTTP 503s swallowed a thread reply, and the thread then sat resolved with no reasoning
+	# recorded. Retry a few times first, because a single 503 is normal and blocking on one
+	# would cry wolf.
+	local attempt
+	threads=""
+	for attempt in 1 2 3; do
+		threads="$(gh api graphql -f query="$(read_query)" \
+			-F owner="$owner" -F repo="$name" -F number="$number" 2>/dev/null)" || threads=""
+		printf '%s' "$threads" | jq -e '.data.repository.pullRequest.reviewThreads' \
+			>/dev/null 2>&1 && break
+		threads=""
+		sleep $((attempt * 3))
+	done
+	if [[ -z "$threads" ]]; then
+		{
+			echo "PR #${number}: could NOT read the review threads (GitHub API unreachable after"
+			echo "3 attempts) — so their state is UNKNOWN, not clean."
+			echo
+			echo "Do not report this PR as finished on the strength of a check that never ran."
+			echo "Re-read the threads when the API answers again."
+		} >&2
+		exit 2
+	fi
 
 	roster="$(roster_logins)"
 
@@ -104,6 +140,31 @@ main() {
 		    "  \($t.path // "?"): replied — still needs RESOLVING"
 		  else empty end
 	' 2>/dev/null)"
+
+	# ⚠️ "Zero open threads" is only a VERDICT once the reviewers have finished. While a check is
+	# still running the reading is a SNAPSHOT: measured on blueprintx#186, threads read 0 and a
+	# CodeRabbit re-review opened SIX new ones thirty seconds later — and the turn had already
+	# been reported as clean. Nothing re-runs the CI gate on a resolve either, so waiting is the
+	# only thing that turns the snapshot into an answer. Cheap, self-clearing, and it also
+	# enforces the ordinary rule that a PR is not "done" while its checks are mid-flight.
+	local running
+	running="$(printf '%s' "$threads" | jq -r '
+		[.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[]?
+		 | select(.__typename == "CheckRun" and .status != "COMPLETED") | .name]
+		| join(", ")' 2>/dev/null)"
+
+	if [[ -z "$problems" && -n "$running" ]]; then
+		{
+			echo "PR #${number}: every review thread is answered and resolved RIGHT NOW, but"
+			echo "checks are still running — so that reading is a snapshot, not a verdict."
+			echo
+			echo "  still running: ${running}"
+			echo
+			echo "A reviewer bot posts its findings when its own check finishes. Wait for the"
+			echo "checks to go terminal and re-read the threads before reporting this PR as clean."
+		} >&2
+		exit 2
+	fi
 
 	[[ -z "$problems" ]] && exit 0
 

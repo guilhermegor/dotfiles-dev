@@ -191,21 +191,30 @@ emit_completeness() {
 	printf '%s\n' "--- completeness (both directions, dotfiles-dev#81) ---"
 
 	# Row 1 — lessons → issues (store text; no network).
-	local total=0 tracked=0 file name
+	#
+	# What counts as accounted-for is a `Status:` line, not merely a number somewhere in the
+	# prose. A citation says which issue exists; only a status says whether the work LANDED,
+	# so keying on the number alone makes every already-shipped lesson debt forever. Measured
+	# blueprintx 2026-08-16: 170 of 243 lessons "unaccounted", of which 156 were in fact
+	# delivered — the metric was reporting the store's age, not its debt.
+	local total=0 declared=0 queued=0 file name
 	local -a unaccounted=()
 	for file in "$store"/*.md; do
 		[ -e "$file" ] || continue
 		name="$(basename "$file")"
 		[ "$name" = "README.md" ] && continue
 		total=$((total + 1))
-		if grep -qE "${repo}#[0-9]+" "$file"; then
-			tracked=$((tracked + 1))
+		if grep -qE '^- \*\*Status:\*\*' "$file"; then
+			declared=$((declared + 1))
+			grep -qE '^- \*\*Status:\*\* queued' "$file" && queued=$((queued + 1))
+		elif grep -qE "${repo}#[0-9]+" "$file"; then
+			declared=$((declared + 1))
 		else
 			unaccounted+=("$name")
 		fi
 	done
-	printf '  lessons → issues : %d in store, %d reference an issue/PR, %d unaccounted\n' \
-		"$total" "$tracked" "${#unaccounted[@]}"
+	printf '  lessons → issues : %d in store, %d declared (%d still queued), %d undeclared\n' \
+		"$total" "$declared" "$queued" "${#unaccounted[@]}"
 
 	# Row 2 — issues → lessons (live issue list; report mode + gh only, fails open).
 	local slug="" issues="" n sourced=0 icount=0
@@ -213,8 +222,14 @@ emit_completeness() {
 	if [ "$mode" = "report" ] && command -v gh >/dev/null 2>&1; then
 		slug="$(repo_slug "$cwd" 2>/dev/null || true)"
 	fi
+	# `gh issue list` defaults to 30 rows. Without an explicit --limit the audit silently
+	# reports on a SAMPLE and calls it the population: measured blueprintx 2026-08-16, the
+	# repo had 46 open issues, so 16 were never examined and the orphan count was wrong by
+	# construction. A checker that cannot see the whole set is the exact blindness this
+	# script exists to catch, so it also says so when the page fills.
+	local -i issue_limit=500
 	if [ -n "$slug" ]; then
-		issues="$(gh issue list --repo "$slug" --state open --json number \
+		issues="$(gh issue list --repo "$slug" --state open --limit "$issue_limit" --json number \
 			--jq '.[].number' 2>/dev/null || true)"
 		while IFS= read -r n; do
 			[ -n "$n" ] || continue
@@ -227,6 +242,10 @@ emit_completeness() {
 		done <<<"$issues"
 		printf '  issues  → lessons: %d open, %d sourced by a lesson, %d orphan\n' \
 			"$icount" "$sourced" "${#orphans[@]}"
+		if [ "$icount" -ge "$issue_limit" ]; then
+			printf '  ! issue list hit the --limit (%d) — the count above is a floor, not the total\n' \
+				"$issue_limit"
+		fi
 	else
 		printf '  issues  → lessons: skipped (needs gh + report mode; not run at SessionEnd)\n'
 	fi
@@ -235,7 +254,8 @@ emit_completeness() {
 		printf '  ! open issues with no lesson — write one or mark not-lesson-worthy: %s\n' "${orphans[*]}"
 	fi
 	if [ "${#unaccounted[@]}" -gt 0 ]; then
-		printf '  ! lessons with no issue/PR reference: %s\n' "${unaccounted[*]}"
+		printf '  ! lessons with no Status: line — record delivered/tracked/queued/advisory: %s\n' \
+			"${unaccounted[*]}"
 	fi
 }
 
@@ -266,7 +286,8 @@ emit_report() {
 	printf '%s\n' "--- verify manually or via /wrap-up (need judgment) ---"
 	printf '%s\n' "  - [ ] Superseded rules: did this session CHANGE a standing rule? grep tracked docs/README/ledgers for the OLD rule — a tracked doc outranks memory next session."
 	printf '%s\n' "  - [ ] Issues/PRs: every issue created this session is on the board and its card is in the right column; open PRs are accounted for."
-	printf '%s\n' "  - [ ] Completeness BOTH ways (above): resolve each 'orphan' open issue (write its lesson or mark it not-lesson-worthy) and each 'unaccounted' lesson (add its issue/PR reference) — a one-directional check hides the B-side orphan."
+	printf '%s\n' "  - [ ] Completeness BOTH ways (above): resolve each 'orphan' open issue (write its lesson or list it under the store README's 'Issues not born of a lesson') and each 'undeclared' lesson (record a Status: line) — a one-directional check hides the B-side orphan."
+	printf '%s\n' "  - [ ] 'still queued' above is the debt that is real: lessons declared owed with no issue filed. Zero is expected only right after a triage."
 	printf '%s\n' "  - [ ] Checkpoint: project memory has a resume point covering this session's work."
 	printf '%s\n' "  - [ ] Lessons: every generalizable finding is captured in the right store (BlueprintX vs dotfiles-dev) — routed by where the fix lands."
 }

@@ -34,6 +34,8 @@ setup() {
 	cat >"$TEST_TMP/bin/gh" <<'STUB'
 #!/bin/bash
 # Only implements `gh issue list … --jq '.[].number'` → one number per line.
+# Records its own argv so a test can prove the caller bounded the page explicitly.
+printf '%s\n' "$*" >>"$GH_ARGV_LOG"
 printf '%s\n' $GH_ISSUES
 STUB
 	chmod +x "$TEST_TMP/bin/gh"
@@ -51,25 +53,53 @@ lesson() {
 	printf -- '- %s\n' "$name" >>"$STORE/README.md"
 }
 
+# Lesson carrying an explicit `Status:` line — the disposition, not just a citation.
+lesson_status() {
+	local name="$1" status="$2"
+	printf '# %s\n\n- **Tier:** language-common\n- **Status:** %s\n' "$name" "$status" \
+		>"$STORE/$name"
+	printf -- '- %s\n' "$name" >>"$STORE/README.md"
+}
+
 run_report() {
-	run bash -c "cd '$REPO' && PATH='$TEST_TMP/bin:$PATH' GH_ISSUES='$1' bash '$HOOK' </dev/null"
+	run bash -c "cd '$REPO' && PATH='$TEST_TMP/bin:$PATH' GH_ISSUES='$1' \
+		GH_ARGV_LOG='$TEST_TMP/gh_argv' bash '$HOOK' </dev/null"
 }
 
 # --- row 1: lessons → issues (store-internal, no network) ---------------------------------------
 
-@test "row 1 flags a lesson with no issue/PR reference as unaccounted" {
+@test "row 1 flags a lesson with no Status and no reference as undeclared" {
 	lesson "orphan-lesson.md" ""
 	run_report ""
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"lessons → issues : 1 in store, 0 reference an issue/PR, 1 unaccounted"* ]]
-	[[ "$output" == *"lessons with no issue/PR reference: orphan-lesson.md"* ]]
+	[[ "$output" == *"lessons → issues : 1 in store, 0 declared (0 still queued), 1 undeclared"* ]]
+	[[ "$output" == *"lessons with no Status: line"*"orphan-lesson.md"* ]]
 }
 
-@test "row 1 counts a lesson that references its issue as tracked" {
+@test "row 1 counts a lesson that references its issue as declared" {
 	lesson "tracked-lesson.md" "42"
 	run_report ""
-	[[ "$output" == *"lessons → issues : 1 in store, 1 reference an issue/PR, 0 unaccounted"* ]]
-	[[ "$output" != *"lessons with no issue/PR reference"* ]]
+	[[ "$output" == *"lessons → issues : 1 in store, 1 declared (0 still queued), 0 undeclared"* ]]
+	[[ "$output" != *"lessons with no Status: line"* ]]
+}
+
+@test "row 1 accepts a delivered Status with no issue number as declared" {
+	# The whole point of the field: work that shipped before issues existed is not debt.
+	lesson_status "shipped.md" "delivered — pre-PR (abc1234)"
+	run_report ""
+	[[ "$output" == *"lessons → issues : 1 in store, 1 declared (0 still queued), 0 undeclared"* ]]
+}
+
+@test "row 1 counts a queued Status separately as the debt still owed" {
+	lesson_status "owed.md" "queued — no issue filed (target absent)"
+	run_report ""
+	[[ "$output" == *"lessons → issues : 1 in store, 1 declared (1 still queued), 0 undeclared"* ]]
+}
+
+@test "row 1 does not count advisory as queued" {
+	lesson_status "judgment.md" "advisory — no scaffold target"
+	run_report ""
+	[[ "$output" == *"lessons → issues : 1 in store, 1 declared (0 still queued), 0 undeclared"* ]]
 }
 
 # --- row 2: issues → lessons (the B-side orphan the old audit could not see) --------------------
@@ -93,6 +123,14 @@ run_report() {
 	run_report "7"
 	[[ "$output" == *"1 open, 0 sourced by a lesson, 1 orphan"* ]]
 	[[ "$output" == *"#7"* ]]
+}
+
+@test "row 2 bounds the issue page explicitly instead of taking gh's default 30" {
+	# Measured blueprintx 2026-08-16: without --limit the audit saw 30 of 46 open issues and
+	# reported the orphan count over that silent sample.
+	lesson "some-lesson.md" "42"
+	run_report "42"
+	[[ "$(cat "$TEST_TMP/gh_argv")" == *"--limit"* ]]
 }
 
 # --- SessionEnd must NEVER hit the network (the fail-open guarantee) ----------------------------

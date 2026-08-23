@@ -42,8 +42,12 @@ MIN_HITS=4
 doc_language_is_english() {
 	# The repo's README is the authority on what language its documentation is written in.
 	# Absent README → unknown, and an unknown must not be enforced as a rule.
-	local readme
-	for readme in README.md readme.md README.MD; do
+	#
+	# ⚠️ Resolve it from the repo ROOT, never the cwd. Looking in the current directory made the
+	# guard a silent no-op for every command issued from a subdirectory — which is most of them.
+	local root readme
+	root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+	for readme in "$root/README.md" "$root/readme.md" "$root/README.MD"; do
 		[ -f "$readme" ] || continue
 		# Same test, applied to the README itself: enough Portuguese function words means the
 		# documentation is Portuguese and this guard has nothing to say.
@@ -71,15 +75,28 @@ count_pt_words() {
 }
 
 extract_body() {
-	# Pull the prose out of the command line: `--body "…"`, `-f body=…`, or `--body-file <path>`.
-	# Best-effort by design — a body this cannot see is a body this does not judge, which is the
-	# right failure direction for a guard that blocks.
-	local command="$1" body=""
-	body="$(printf '%s' "$command" | sed -n "s/.*--body[= ]\+['\"]\(.*\)/\1/p")"
-	[ -n "$body" ] || body="$(printf '%s' "$command" | sed -n "s/.*-f[[:space:]]\+body=['\"]\?\(.*\)/\1/p")"
+	# Pull the prose out of the command: `--body "…"`, `-f body=…`, or `--body-file <path>`.
+	#
+	# ⚠️ Extraction runs through `jq`, NOT `sed`. `sed` is line-oriented, so it captured only the
+	# FIRST LINE of a body — and every real PR or issue body is multi-line, which made this guard
+	# blind to exactly the case it exists for. Measured: a multi-line Portuguese body scored 0
+	# and sailed through, while the same text on one line blocked. jq's `s` flag makes `.` span
+	# newlines, so the whole body is seen. ⚠️ In jq/Oniguruma the flag is "m", NOT "s" — the
+	# opposite of PCRE, where "s" is DOTALL and "m" is multiline. Using "s" here silently kept
+	# the first-line-only behaviour, which is how the bug survived its own fix. $1 = raw payload.
+	local payload="$1" body=""
+	body="$(printf '%s' "$payload" | jq -r '
+		(.tool_input.command // "")
+		| (capture("--body[= ]+\"(?<b>.*)\""; "m").b)
+		// (capture("--body[= ]+'"'"'(?<b>.*)'"'"'"; "m").b)
+		// (capture("-f[[:space:]]+body=\"(?<b>.*)\""; "m").b)
+		// (capture("-f[[:space:]]+body='"'"'(?<b>.*)'"'"'"; "m").b)
+		// empty' 2>/dev/null)"
 	if [ -z "$body" ]; then
 		local file
-		file="$(printf '%s' "$command" | sed -n "s/.*--body-file[= ]\+['\"]\?\([^'\"[:space:]]\+\).*/\1/p")"
+		file="$(printf '%s' "$payload" | jq -r '
+			(.tool_input.command // "")
+			| (capture("--body-file[= ]+[\"'"'"']?(?<f>[^\"'"'"'[:space:]]+)").f) // empty' 2>/dev/null)"
 		[ -n "$file" ] && [ -f "$file" ] && body="$(cat "$file")"
 	fi
 	printf '%s' "$body"
@@ -89,6 +106,8 @@ main() {
 	local payload tool command body hits
 
 	payload="$(cat)"
+	# jq parses the payload AND extracts the body, so it must be present before either.
+	command -v jq >/dev/null 2>&1 || exit 0
 	tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
 	[[ "$tool" == "Bash" ]] || exit 0
 
@@ -100,13 +119,16 @@ main() {
 		| grep -Eq '(gh[[:space:]]+(pr|issue)[[:space:]]+(create|edit))|(gh[[:space:]]+api[^|]*comments)' \
 		|| exit 0
 
-	printf '%s' "$command" | grep -q "$ESCAPE_HATCH" && exit 0
+	# ⚠️ The escape hatch must be an assignment PREFIXING the command, not a string appearing
+	# anywhere in it — otherwise a body that merely quotes the variable name (this hook's own
+	# error message does) disables the guard for that call.
+	printf '%s' "$command" \
+		| grep -Eq "(^|[;&|][[:space:]]*)${ESCAPE_HATCH}[[:space:]]" && exit 0
 
-	command -v jq >/dev/null 2>&1 || exit 0
 	git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 	doc_language_is_english || exit 0
 
-	body="$(extract_body "$command")"
+	body="$(extract_body "$payload")"
 	[[ -n "$body" ]] || exit 0
 
 	hits="$(count_pt_words "$body")"

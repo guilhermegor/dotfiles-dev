@@ -36,10 +36,11 @@ query($owner:String!, $repo:String!, $number:Int!) {
   repository(owner:$owner, name:$repo) {
     pullRequest(number:$number) {
       reviewThreads(first:100) {
+        totalCount
         nodes {
           isResolved
           path
-          comments(first:50) { nodes { author { login } body } }
+          comments(first:50) { totalCount nodes { author { login __typename } body } }
         }
       }
       commits(last:1) {
@@ -47,9 +48,19 @@ query($owner:String!, $repo:String!, $number:Int!) {
           commit {
             statusCheckRollup {
               contexts(first:100) {
+                totalCount
                 nodes {
                   __typename
-                  ... on CheckRun { name status }
+                  ... on CheckRun {
+                    name
+                    status
+                    checkSuite { app { slug } }
+                  }
+                  ... on StatusContext {
+                    context
+                    state
+                    creator { login }
+                  }
                 }
               }
             }
@@ -70,6 +81,14 @@ roster_logins() {
 			| sed 's/\[bot\]$//' | sed '/^$/d'
 		return 0
 	fi
+	# No roster: fall back to treating any bot account as a reviewer, resolved per comment in the
+	# jq filter below.
+	#
+	# ⚠️ The discriminator there is `author.__typename == "Bot"`, NOT a `[bot]` login suffix.
+	# GraphQL strips that suffix (the warning above), so a suffix test matched NOTHING and every
+	# bot counted as a human reply. Measured on this repo, which ships no roster: all 11
+	# CodeRabbit findings on dotfiles-dev#127 were reported as "replied" when nobody had replied
+	# to any of them. `__typename` is the API's own answer to the question and cannot drift.
 	printf '__NO_ROSTER__\n'
 }
 
@@ -98,15 +117,23 @@ main() {
 	# HTTP 503s swallowed a thread reply, and the thread then sat resolved with no reasoning
 	# recorded. Retry a few times first, because a single 503 is normal and blocking on one
 	# would cry wolf.
-	local attempt
+	local attempt attempts=3
 	threads=""
-	for attempt in 1 2 3; do
+	for attempt in $(seq 1 "$attempts"); do
 		threads="$(gh api graphql -f query="$(read_query)" \
 			-F owner="$owner" -F repo="$name" -F number="$number" 2>/dev/null)" || threads=""
-		printf '%s' "$threads" | jq -e '.data.repository.pullRequest.reviewThreads' \
-			>/dev/null 2>&1 && break
+		# GraphQL answers 200 with a PARTIAL body: `errors` alongside a half-filled `data`.
+		# Accepting that reads a truncated thread list as the whole truth, which is a false
+		# "all clean" — the one verdict this hook must never emit by accident.
+		if printf '%s' "$threads" | jq -e '
+			(.errors | not) and (.data.repository.pullRequest.reviewThreads != null)
+		' >/dev/null 2>&1; then
+			break
+		fi
 		threads=""
-		sleep $((attempt * 3))
+		# No sleep after the LAST attempt — nothing follows it, so the delay is pure latency
+		# added to a turn that is already going to block.
+		[ "$attempt" -lt "$attempts" ] && sleep $((attempt * 3))
 	done
 	if [[ -z "$threads" ]]; then
 		{
@@ -129,9 +156,9 @@ main() {
 		| . as $t
 		| ($t.comments.nodes
 		   | map(select(
-		       ((.author.login // "") as $l
-		        | if ($bots | index("__NO_ROSTER__")) then ($l | test("\\[bot\\]$") | not)
-		          else ($bots | index($l) | not) end)
+		       (if ($bots | index("__NO_ROSTER__"))
+		        then ((.author.__typename // "") != "Bot")
+		        else ($bots | index(.author.login // "") | not) end)
 		       and ((.body // "" | length) >= $min)))
 		   | length) as $answers
 		| if $answers == 0 then
@@ -141,16 +168,67 @@ main() {
 		  else empty end
 	' 2>/dev/null)"
 
+	# ⚠️ A single page is not the whole PR. `first:100` / `first:50` silently DROP whatever does
+	# not fit, and a dropped thread reads exactly like an absent one — a false "all clean", the
+	# one verdict this must never emit by accident. Cursor pagination in bash for two nested
+	# connections buys nothing here: the counts already say when a page is short, and "I cannot
+	# see all of it" is the honest report either way.
+	local truncated
+	truncated="$(printf '%s' "$threads" | jq -r '
+		.data.repository.pullRequest.reviewThreads as $rt
+		| [ (if ($rt.totalCount // 0) > ($rt.nodes | length) then
+		       "  UNREADABLE: \($rt.totalCount) review threads exist, only \($rt.nodes | length) fit one page"
+		     else empty end),
+		    ($rt.nodes[]
+		     | select((.comments.totalCount // 0) > (.comments.nodes | length))
+		     | "  UNREADABLE: \(.path // "?"): \(.comments.totalCount) comments, only \(.comments.nodes | length) read") ]
+		| join("\n")' 2>/dev/null)"
+	[ -n "$truncated" ] && problems="$(printf '%s\n%s' "$truncated" "$problems")"
+
 	# ⚠️ "Zero open threads" is only a VERDICT once the reviewers have finished. While a check is
 	# still running the reading is a SNAPSHOT: measured on blueprintx#186, threads read 0 and a
 	# CodeRabbit re-review opened SIX new ones thirty seconds later — and the turn had already
 	# been reported as clean. Nothing re-runs the CI gate on a resolve either, so waiting is the
 	# only thing that turns the snapshot into an answer. Cheap, self-clearing, and it also
 	# enforces the ordinary rule that a PR is not "done" while its checks are mid-flight.
+	#
+	# ⚠️ Wait ONLY for checks that can produce a review. Waiting for every check meant a
+	# 15-minute scaffold matrix held the turn hostage while producing no findings at all —
+	# measured on blueprintx#188, where this hook blocked on `Scaffold + lint + test` twice.
+	# A guard that makes people wait for something it does not need is a guard they disable.
+	# The discriminator is the check's producing IDENTITY matched against the reviewer roster,
+	# not its name: names are prose and change, the app is what posts the review.
+	#
+	# ⚠️ Two things the first attempt got wrong, both measured on blueprintx#188:
+	#   1. The roster answers a DIFFERENT question — "whose comments do not count as an answer"
+	#      — and it therefore lists `github-actions`, the repo's own CI, which never posts a
+	#      review thread. Reusing the list unfiltered let a 15-minute scaffold matrix count as
+	#      a pending reviewer. Subtract the CI app.
+	#   2. A reviewer's check may be a **StatusContext**, not a CheckRun: CodeRabbit publishes a
+	#      commit status (`creator.login`), so a CheckRun-only filter never sees it — the exact
+	#      producer the wait exists for.
 	local running
-	running="$(printf '%s' "$threads" | jq -r '
-		[.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[]?
-		 | select(.__typename == "CheckRun" and .status != "COMPLETED") | .name]
+	#
+	# ⚠️ `contexts(first:100)` can also be short. An unread context is indistinguishable from an
+	# absent one, so a running reviewer check past the page boundary would read as "nothing
+	# pending" — say so instead of inventing a verdict.
+	running="$(printf '%s' "$threads" | jq -r --arg roster "$roster" '
+		($roster | split("\n") | map(select(length > 0)) | map(ascii_downcase)
+		 | map(select(. != "github-actions"))) as $bots
+		| (.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts) as $c
+		| ([$c.nodes[]?
+		   | if .__typename == "CheckRun" then
+		       select(.status != "COMPLETED")
+		       | select(($bots | index((.checkSuite.app.slug // "") | ascii_downcase)) != null)
+		       | .name
+		     elif .__typename == "StatusContext" then
+		       select(.state == "PENDING" or .state == "EXPECTED")
+		       | select(($bots | index((.creator.login // "") | ascii_downcase)) != null)
+		       | .context
+		     else empty end]
+		   + (if ($c.totalCount // 0) > ($c.nodes | length)
+		      then ["\($c.totalCount - ($c.nodes | length)) further check(s) this page could not read"]
+		      else [] end))
 		| join(", ")' 2>/dev/null)"
 
 	if [[ -z "$problems" && -n "$running" ]]; then

@@ -47,10 +47,11 @@ query($owner:String!, $repo:String!, $number:Int!) {
   repository(owner:$owner, name:$repo) {
     pullRequest(number:$number) {
       reviewThreads(first:100) {
+        totalCount
         nodes {
           isResolved
           path
-          comments(first:50) { nodes { author { login } body } }
+          comments(first:50) { totalCount nodes { author { login __typename } body } }
         }
       }
     }
@@ -71,8 +72,14 @@ roster_logins() {
 			| sed 's/\[bot\]$//' | sed '/^$/d'
 		return 0
 	fi
-	# No roster: fall back to treating any bot account as a reviewer. GraphQL strips the suffix,
-	# so this is resolved per comment in the jq filter below instead.
+	# No roster: fall back to treating any bot account as a reviewer, resolved per comment in the
+	# jq filter below.
+	#
+	# ⚠️ The discriminator there is `author.__typename == "Bot"`, NOT a `[bot]` login suffix.
+	# GraphQL strips that suffix (the warning above), so a suffix test matched NOTHING and every
+	# bot counted as a human reply. Measured on this repo, which ships no roster: all 11
+	# CodeRabbit findings on dotfiles-dev#127 were reported as "replied" when nobody had replied
+	# to any of them. `__typename` is the API's own answer to the question and cannot drift.
 	printf '__NO_ROSTER__\n'
 }
 
@@ -94,19 +101,55 @@ main() {
 	# Explicit opt-out.
 	printf '%s' "$command" | grep -q "$ESCAPE_HATCH" && exit 0
 
-	# PR number: explicit argument, else the current branch's PR.
-	number="$(printf '%s' "$command" \
-		| grep -oE 'gh[[:space:]]+pr[[:space:]]+merge[[:space:]]+[0-9]+' \
-		| grep -oE '[0-9]+$')"
-	if [ -z "$number" ]; then
-		number="$(gh pr view --json number -q .number 2>/dev/null)" || exit 0
-	fi
+	# The MERGE TARGET, not "whatever PR this branch happens to be on".
+	#
+	# ⚠️ `gh pr merge` takes its target as a number, a branch name OR a URL, in any position among
+	# the flags, and `--repo` can aim the whole call at another repository. Matching only a number
+	# glued to `gh pr merge` meant `gh pr merge --squash 42` fell through to the current branch:
+	# the guard then vetted a DIFFERENT PR than the one being merged, and a clean branch PR waved
+	# through a merge of a PR with open threads — the guard reporting on the wrong subject is
+	# worse than no guard, because it reads as a pass.
+	#
+	# `gh pr view` already resolves all three spellings, so the parsing job is only to find the
+	# first positional and the `--repo` value. Its `.url` then carries owner/repo, which is why
+	# `gh repo view` is gone: that one always answered about the CURRENT directory.
+	local -a toks=() view_args=()
+	local tok target="" repo_arg="" i j
+	read -ra toks <<<"$(printf '%s' "$command" | tr '\n' ' ')"
+	for ((i = 1; i < ${#toks[@]}; i++)); do
+		[[ "${toks[i]}" == "merge" && "${toks[i - 1]}" == "pr" ]] && break
+	done
+	for ((j = i + 1; j < ${#toks[@]}; j++)); do
+		tok="${toks[j]}"
+		case "$tok" in
+			--repo=*) repo_arg="${tok#*=}"; continue ;;
+			--repo | -R) repo_arg="${toks[j + 1]:-}"; ((j++)); continue ;;
+			# Flags that consume the next token. Skipping the VALUE too is the point: without it a
+			# word inside `--body "fix the thing"` reads as a branch name and becomes the target.
+			--body | -b | --body-file | -F | --subject | -t | --author-email | -A | --match-head-commit)
+				((j++)); continue ;;
+			-*) continue ;;
+		esac
+		# gh accepts exactly one positional, so the first one is the target.
+		[ -z "$target" ] && target="$tok"
+	done
+	# Anything that cannot be a number, a URL or a branch name is quoting debris, not a target.
+	[[ -n "$target" && ! "$target" =~ ^([0-9]+|https?://[^[:space:]]+|[A-Za-z0-9][A-Za-z0-9._/-]*)$ ]] \
+		&& target=""
+	[ -n "$target" ] && view_args+=("$target")
+	[ -n "$repo_arg" ] && view_args+=(--repo "$repo_arg")
+
+	local pr_json url
+	pr_json="$(gh pr view "${view_args[@]}" --json number,url 2>/dev/null)" || exit 0
+	number="$(printf '%s' "$pr_json" | jq -r '.number // empty' 2>/dev/null)"
 	[[ "$number" =~ ^[0-9]+$ ]] || exit 0
 
-	repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || exit 0
+	url="$(printf '%s' "$pr_json" | jq -r '.url // empty' 2>/dev/null)"
+	repo="${url#*://*/}"
+	repo="${repo%%/pull/*}"
 	owner="${repo%%/*}"
 	name="${repo##*/}"
-	[[ -n "$owner" && -n "$name" ]] || exit 0
+	[[ -n "$owner" && -n "$name" && "$owner" != "$repo" ]] || exit 0
 
 	threads="$(gh api graphql -f query="$(read_query)" \
 		-F owner="$owner" -F repo="$name" -F number="$number" 2>/dev/null)" || exit 0
@@ -125,9 +168,9 @@ main() {
 		| . as $t
 		| ($t.comments.nodes
 		   | map(select(
-		       ((.author.login // "") as $l
-		        | if ($bots | index("__NO_ROSTER__")) then ($l | test("\\[bot\\]$") | not)
-		          else ($bots | index($l) | not) end)
+		       (if ($bots | index("__NO_ROSTER__"))
+		        then ((.author.__typename // "") != "Bot")
+		        else ($bots | index(.author.login // "") | not) end)
 		       and ((.body // "" | length) >= $min)))
 		   | length) as $answers
 		| if $answers == 0 then
@@ -136,6 +179,23 @@ main() {
 		    "  \($t.path // "?"): replied, but the conversation is still OPEN"
 		  else empty end
 	' 2>/dev/null)"
+
+	# ⚠️ A single page is not the whole PR. `first:100` / `first:50` silently DROP whatever does
+	# not fit, and a dropped thread reads exactly like an absent one — a false "all clean", the
+	# one verdict this must never emit by accident. Cursor pagination in bash for two nested
+	# connections buys nothing here: the counts already say when a page is short, and "I cannot
+	# see all of it" is the honest report either way.
+	local truncated
+	truncated="$(printf '%s' "$threads" | jq -r '
+		.data.repository.pullRequest.reviewThreads as $rt
+		| [ (if ($rt.totalCount // 0) > ($rt.nodes | length) then
+		       "  UNREADABLE: \($rt.totalCount) review threads exist, only \($rt.nodes | length) fit one page"
+		     else empty end),
+		    ($rt.nodes[]
+		     | select((.comments.totalCount // 0) > (.comments.nodes | length))
+		     | "  UNREADABLE: \(.path // "?"): \(.comments.totalCount) comments, only \(.comments.nodes | length) read") ]
+		| join("\n")' 2>/dev/null)"
+	[ -n "$truncated" ] && problems="$(printf '%s\n%s' "$truncated" "$problems")"
 
 	[[ -z "$problems" ]] && exit 0
 

@@ -18,15 +18,18 @@ authoring half of a Linear-style flow. This command only sets the card's *starti
 Follow these steps exactly. `$ARGUMENTS` holds an issue reference *or* a work description,
 plus optional flags.
 
-## Two type axes — never conflate them
+## Three axes — never conflate them
 
 | Axis | Values | Drives |
 |---|---|---|
 | **Conventional type** | `feat` `fix` `docs` `refactor` `test` `chore` | title prefix, branch name |
 | **Work type** (`--work`) | `research` `prototype` `grilling` `task` | issue type field, HITL/AFK label, **starting column** |
+| **Oracle strength** | `oracle:strong` `oracle:weak` | which runtime may take it — **independent of HITL/AFK**, see step 4 |
 
 Conventional type says *what the change is*. Work type says *how the ticket gets resolved*.
-A `feat` is perfectly able to be a `research` ticket.
+Oracle strength says *who may resolve it*. A `feat` is perfectly able to be a `research` ticket,
+and a `task` that is `afk` may still be `oracle:weak` — nobody needs to watch it, and it still
+must not go to a cheaper model, because nothing would catch a wrong answer.
 
 ## 0. Resolve the tracker
 
@@ -136,7 +139,7 @@ entirely if `--work` was passed). Explain the table in the prompt so the choice 
 | `research` | AFK | `Backlog` | *how* — the approach is unproven, but an agent can settle it alone |
 | `prototype` | HITL | `Backlog` | *how* — needs a cheap, rough, concrete artifact built with you |
 | `grilling` | HITL | `Backlog` | *what* — no acceptance criteria written down yet |
-| `task` | either | `Ready` | none — *why*, *what* and *how* are all cleared; pull-ready |
+| `task` | AFK unless the body names a decision for you | `Ready` | none — *why*, *what* and *how* are all cleared; pull-ready |
 
 This **derives the starting column**, so step 7 confirms a value rather than re-judging the
 three upstreams from scratch every time. The user can still override to any board column.
@@ -146,7 +149,49 @@ repo may not have them. Do not probe with a dry run — attempt `--type <work-ty
 time (step 6) and, if GitHub rejects it, retry without the flag and apply a `type:<work-type>`
 label instead. Linear has no type field at all, so it always uses the label form.
 
-The mode is always a label on both trackers: `hitl` or `afk`.
+The mode is always a label on both trackers: `hitl` or `afk`. `task` used to read "either", which
+left the most common work type with no rule while this line insisted a label always gets written —
+so the default is now stated: **AFK unless the body names a decision that is yours to make.**
+
+### Oracle strength — a SECOND, orthogonal label
+
+Also apply exactly one of `oracle:strong` / `oracle:weak`, asked in the same `AskUserQuestion`:
+
+| Label | Test | Consequence |
+|---|---|---|
+| `oracle:strong` | a gate, test, or measurable outcome decides correctness **mechanically** | safe to delegate to a cheaper model or another runtime — verification is an exit code |
+| `oracle:weak` | correctness is a judgement call; a wrong answer looks right | keep it on the primary model |
+
+⚠️ **This is NOT the same axis as `hitl`/`afk`, and collapsing them ships an inversion.** `afk`
+answers *"does a human need to be in the loop?"*; oracle strength answers *"will anything catch a
+wrong answer?"* The table above proves they are independent: **`research` is AFK** — an agent can
+settle it alone — and is simultaneously the *least* oracle-backed work in the set, because its own
+row says the approach is **unproven**. Routing on `afk` would send unverifiable work to the
+cheapest runtime, which is exactly backwards.
+
+⚠️ **Judge the oracle, never the size.** Two measured counter-examples (blueprintx, 2026-08-26)
+where a complexity scale mis-routes:
+
+- **blueprintx#238** looked small and mechanical. Two decisive facts existed only after
+  measurement: deptry's `--config` re-points it at that file as its **manifest** (27 findings vs
+  0), and running outside the venv **inverts** the verdict (9 findings, all false; both real
+  defects gone). A delegate writes the obvious shared `deptry.toml`, it reads clean, exits 0, and
+  the gate is silently blind.
+- **"the five tiers share no state"** was asserted and wrong: 6 of the 8 cache fixtures
+  `scaffold_lint_test.sh` seeds live in one shared tree and its EXIT trap deletes them, so a naive
+  parallel run races and blames an innocent tier.
+
+Both are *small* with *weak oracles* — what a size label sends away and this label keeps.
+
+**Who reads it.** Deliberately a query, not an orchestrator — there is no dispatcher yet, and a
+router with no consumer is the abstraction this repo keeps refusing to build:
+
+```bash
+gh issue list --label afk --label oracle:strong --state open   # the delegate-safe queue
+```
+
+Any decision to hand work to a cheaper model or another runtime **must** consult that queue rather
+than re-judging from the title. When a dispatcher does arrive, it reads the same two labels.
 
 On Linear, resolve label ids from the team's labels fetched in step 1; create any that are
 missing with `issueLabelCreate(input:{teamId:…,name:…})` before attaching them.
@@ -194,8 +239,23 @@ Per-tracker operations — one spine, two arms:
 | create | `rtk gh issue create --title "<title>" --body-file <f> --assignee @me` | `issueCreate(input:{teamId,title,description,assigneeId})` |
 | work type | `--type <work-type>`, else `type:<work-type>` label on rejection | `type:<work-type>` label |
 | mode | `--label hitl\|afk` | label id |
+| oracle | `--label oracle:strong\|oracle:weak` | label id |
 | extra label | `--label <name>` when `--label` was passed | label id |
 | parent | `--parent <n>` | `parentId` on `issueCreate` |
+
+⚠️ **On GitHub, ensure the label exists before attaching it.** `gh issue create --label <name>`
+**fails the whole create** when the label is absent from the repo — and `oracle:strong` /
+`oracle:weak` exist in no repo yet, while `hitl` / `afk` exist only where they were added by hand.
+So run this first, for each label being attached:
+
+```bash
+rtk gh label create "<name>" --description "<why>" --color "<hex>" --force
+```
+
+`--force` makes it idempotent (it updates an existing label instead of erroring), so this is safe
+to run unconditionally. The Linear arm already did the equivalent — *"create any that are missing
+with `issueLabelCreate(...)` before attaching them"* — and the GitHub arm silently did not, which
+is the asymmetry that turns a new label into a failed `issue create` on first use.
 
 Write the body with the Write tool to a scratchpad file and pass `--body-file` — never inline a
 multi-line body into the shell, where the accented characters and backticks get mangled.

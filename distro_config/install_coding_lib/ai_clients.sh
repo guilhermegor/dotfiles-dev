@@ -474,6 +474,48 @@ install_qwen() {
 }
 
 # ============================================================================
+# OPENAI CODEX CLI
+# ============================================================================
+
+install_codex() {
+    print_status "section" "OPENAI CODEX CLI INSTALLATION"
+
+    if command_exists codex; then
+        print_status "info" "OpenAI Codex CLI is already installed ($(timeout 10 codex --version 2>/dev/null | head -n1 || echo "unknown"))"
+
+        echo -e "\n${YELLOW}Do you want to reinstall/update OpenAI Codex CLI? (y/n):${NC}"
+        read -r update_codex
+        if [[ ! "$update_codex" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing OpenAI Codex CLI installation"
+            return 0
+        fi
+    fi
+
+    if ! command_exists npm; then
+        print_status "error" "npm is not available. Please ensure Node.js is properly installed."
+        return 1
+    fi
+
+    print_status "info" "Installing @openai/codex globally via npm..."
+    run_or_echo npm install -g @openai/codex &>> "$LOG_FILE"
+
+    print_status "info" "Verifying OpenAI Codex CLI installation..."
+    if command_exists codex; then
+        print_status "success" "OpenAI Codex CLI installed successfully"
+        print_status "success" "Codex version: $(timeout 10 codex --version 2>/dev/null | head -n1 || echo "Not available")"
+
+        echo ""
+        print_status "info" "OpenAI Codex CLI usage:"
+        print_status "config" "  Login: codex login"
+        print_status "config" "  Run in project: cd /path/to/project && codex"
+        print_status "config" "  Update: npm update -g @openai/codex"
+    else
+        print_status "error" "OpenAI Codex CLI installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
+# ============================================================================
 # CLAUDESTATUS (+ display/api/cli patches)
 # ============================================================================
 
@@ -1032,6 +1074,7 @@ INSTALL_REGISTRY+=(
     "install_claude_code:Claude Code::"
     "install_github_copilot_cli:GitHub Copilot CLI::"
     "install_qwen:Qwen Code::"
+    "install_codex:OpenAI Codex CLI::"
     "install_claudestatus:claudestatus (Claude Usage Dashboard)::"
     "install_rtk:RTK (Rust Token Killer)::"
     "install_faster_whisper:faster-whisper (Speech-to-Text CLI)::"

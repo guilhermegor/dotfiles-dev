@@ -208,6 +208,9 @@ main() {
     if command_exists qwen; then
         print_status "config" "  Qwen Code: $(timeout 5 qwen --version 2>/dev/null | head -n1 || echo 'Not available')"
     fi
+    if command_exists codex; then
+        print_status "config" "  OpenAI Codex CLI: $(timeout 5 codex --version 2>/dev/null | head -n1 || echo 'Not available')"
+    fi
 
     echo ""
     print_status "info" "Global versions set in ~/.tool-versions:"

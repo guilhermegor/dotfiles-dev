@@ -177,6 +177,46 @@ allowed-tools: Read Glob Grep  # space-separated for skills (no commas)
 - Keep total token count low — skills load into every conversation that
   triggers them
 
+## Session profiles (cheap-brain runtime, dotfiles-dev#151)
+
+| | |
+|---|---|
+| **Source** | `ai_clients/claude/settings.<provider>.json` (an `env`-only overlay, not a full settings.json) + `ai_clients/claude/profile_functions.sh` (the launcher) |
+| **Installs to** | `~/.claude/settings.<provider>.json` (token resolved from `.env`) + `~/.claude/profile_functions.sh`, sourced from `~/.bashrc` |
+| **Lib script** | `lib/profiles.sh` → `install_profiles()`, step key `profiles` |
+| **Invoked by user as** | `claude-profile <provider>` (shell function; e.g. `claude-profile deepseek`) |
+
+A profile points `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` at an
+Anthropic-compatible endpoint so the harness — every skill, hook, gate,
+guard, and MCP server — survives; only the model changes. The token is
+never committed: the source file ships the placeholder `KEY-GOES-HERE` and
+`_install_deepseek_profile` in `lib/profiles.sh` substitutes it from the
+project root `.env` at deploy time, the same pattern `mcp_servers.sh`
+already uses for `CONTEXT7_API_KEY`/`TAVILY_API_KEY`.
+
+**Verified endpoint:** DeepSeek, `https://api.deepseek.com/anthropic`, auth
+via `ANTHROPIC_AUTH_TOKEN` — **verified 2026-08-26** (see the runtime
+roster issue, dotfiles-dev#151, for the sourced comparison against
+Zhipu/GLM, Moonshot/Kimi, and MiniMax). Re-verify and update this date
+before relying on it again; provider compatibility is the field most
+likely to rot.
+
+⚠️ **The two-session pattern, and why it's two sessions and not one.**
+`ANTHROPIC_BASE_URL` is process-level: it swaps the model for the WHOLE
+session, subagents included, because a subagent inherits the parent
+process's endpoint. So "premium orchestrator managing cheap-model
+subagents" cannot be built inside a single session — there is no per-
+subagent endpoint override. The working pattern is **two separate
+sessions**:
+
+- a normal (premium) session for work that needs the strong model, and
+- a `claude-profile <provider>` (cheap-brain) session for delegated or
+  AFK-shaped work,
+
+handed off between them via `gh issue list --label afk --label
+oracle:strong` (dotfiles-dev#150's routing label), not via subagent calls
+within one process.
+
 ## Namespace prefixes (summary)
 
 | Prefix | Type | Invocation |

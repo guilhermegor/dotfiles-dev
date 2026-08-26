@@ -22,6 +22,7 @@ source "$SCRIPT_DIR/lib/agents.sh"
 source "$SCRIPT_DIR/lib/claude_md.sh"
 source "$SCRIPT_DIR/lib/rules.sh"
 source "$SCRIPT_DIR/lib/mcp_servers.sh"
+source "$SCRIPT_DIR/lib/profiles.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 source "$SCRIPT_DIR/lib/claude_mem.sh"
 source "$SCRIPT_DIR/lib/prune.sh"
@@ -90,6 +91,7 @@ STEPS=(
     "marketplaces|Register plugin marketplaces"
     "plugins|Promote plugins to user scope"
     "mcp_servers|Install MCP servers"
+    "profiles|Install cheap-brain session profiles (deepseek, ...)"
     "claude_mem|Configure claude-mem mode"
     "prune|Prune orphaned artifacts (asks before removing)"
 )
@@ -108,6 +110,7 @@ dispatch_step() {
         marketplaces)   print_status "section" "REGISTERING MARKETPLACES"    && run_marketplaces ;;
         plugins)        print_status "section" "PROMOTING PLUGINS TO USER SCOPE" && run_plugins ;;
         mcp_servers)    install_mcp_servers ;;
+        profiles)       install_profiles ;;
         claude_mem)     configure_claude_mem ;;
         prune)          prune_orphans ;;
         *) print_status "error" "Unknown step: $key"; return 1 ;;

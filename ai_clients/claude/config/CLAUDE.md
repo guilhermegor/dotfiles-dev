@@ -96,6 +96,28 @@ whenever a source file is touched, so it stays out of the always-on context.
 Per-language rules (`python.md`, `bash.md`, …) layer on top. Only genuinely
 cross-cutting, non-file-scoped rules remain below.
 
+## Dispatching subagents — brief them to commit early
+
+When a task handed to a subagent (or a worktree-isolated agent) is expected to touch
+multiple files or take more than a couple of tool calls, its brief must say to commit
+at the first coherent point and keep committing — not to save committing for the end.
+Measured cost of the opposite (dotfiles-dev#167): three subagents were killed on the
+session limit in one afternoon holding 662, 694, and 256 lines of *uncommitted* work
+each, rescued only because a human happened to notice before the worktree was torn
+down. The loss was never caused by running out of budget — a kill halfway through
+costs the same whether it lands at 50% or 90% of the window — it was caused by work
+sitting in the worktree, undurable, until the very end.
+
+This prose rule is the probabilistic half of the fix, and prose alone is not enough
+(see the `Compaction`/"rule that must fire every cycle" framing below); the
+deterministic half is `uncommitted_worktree_guard.sh`, a `Stop` hook that refuses to
+end a turn while `git status --porcelain` is non-empty. A **pre-dispatch** "is there
+room to finish what I'm about to start?" budget check was considered and deliberately
+NOT built: there is no remaining-context-window signal readable from the hook
+environment, and a wall-clock/token-percentage alarm was evaluated and rejected — a
+90%-alarm narrows the window in which the damage happens without shrinking the damage
+itself, and it fires exactly when there is least room left to act.
+
 ## Version Control
 
 - Conventional Commits: `feat:`, `fix:`, `chore:`, `test:`, `docs:`, `refactor:`.

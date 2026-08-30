@@ -157,7 +157,7 @@ hardest where the mechanism is most needed. `schedule:` is the one trigger GitHu
 Report **time-to-first-review per PR**, never requests per hour: a PR sitting unreviewed is the
 user-visible cost, and that is the number this step must move.
 
-## 5. RELEASE — evaluate, propose, do not cut
+## 5. RELEASE — evaluate and cut
 
 ```bash
 rtk git diff --name-only $(rtk git describe --tags --abbrev=0 origin/main)..origin/main -- <shipped-paths>
@@ -258,8 +258,23 @@ Every brief carries:
   inherited its bug **plus one of its own**.
 - Do not conclude a path is clean from rtk-proxied `git status` / `ls` / `find`.
 - Do not force-merge past a red required check, or remove one to unblock a PR.
-- Do not ask permission to run this. Ask only before cutting a release or taking an outward-facing,
-  hard-to-reverse action.
+- Do not ask permission to run this, and do not ask before cutting a release — see step 5.
+
+⚠️ **The one standing ask, and it is scoped narrowly on purpose:** an outward-facing action that is
+**hard to reverse and not this loop's own work** — changing branch protection or required checks,
+force-pushing over someone else's commits, closing a PR that is not yours, changing a repo setting.
+Everything the loop does routinely (commit, push, open a PR, reply, resolve, re-run a check, update
+a branch, dispatch an agent, cut a release) is reversible or additive, and asking about those is
+the ceremony this file exists to remove.
+
+🎯 **The decidability test, for any exception added later:** does the check answer from **data**, or
+from something **this session knows**? Data → automate it. Session knowledge → it stays a judgment,
+and it should say so rather than pretending to be a rule.
+
+Re-run that test on every carve-out when the rule it qualifies changes. ⚠️ **Exceptions inherit the
+ceremony of the rule they qualify** — measured twice in this file: the release step became
+autonomous while its two exceptions stayed asks, and this `Do Not` line still said "ask before
+cutting a release" after step 5 had been rewritten to cut.
 
 ## Reporting
 

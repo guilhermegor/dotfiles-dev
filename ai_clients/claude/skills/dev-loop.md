@@ -112,6 +112,35 @@ PRs as having open threads.
 Measured: a re-run flipped a check green and **native auto-merge fired on its own**, merging the PR
 with no further input. The whole cost of that defect was one stale run nobody re-ran.
 
+## 4b. REVIEWER SLOT — the supply side, and the step nobody is corrected for missing
+
+Every other step **reacts** to work that arrived. This one asks whether the scarce resource is
+free, because an idle server produces no event to react to.
+
+Measured: a reviewer slot idle **4h24** with **30 PRs** waiting, the oldest unreviewed for **4
+days**. The hourly loop passed through that window four times and reported "no change" — correct on
+its own terms, and blind.
+
+⚠️ **Do not delegate this to a scheduled workflow.** A `schedule:` cron declared `*/10` was measured
+running **6 times in 21 hours** — GitHub throttles scheduled workflows on low-activity repos,
+hardest where the mechanism is most needed. `schedule:` is the one trigger GitHub is free to skip.
+
+1. **Is the slot free?** Read the newest roster notice per PR: a rate-limit notice means turned
+   away, a completion means it ran. Busy → **say so** and move on.
+2. **Pick the candidate — blast radius first, age second.**
+   - Filter to PRs whose **only** blocker is the review gate. Otherwise the ask is spent on a PR a
+     review cannot unblock.
+   - Rank a `chore`/`ci`/`fix` touching a **shared** surface (a gate, a copy list, a template both
+     families read) above a `feat` touching one tier — it unblocks others, they unblock themselves.
+   - Break ties by age, so nothing starves. ⚠️ Age alone is a **fairness** rule, not a throughput
+     rule; it is the metric that is free to compute, which is how it becomes the default without
+     anyone choosing it.
+3. **At most one ask per round.** A burst genuinely trips the account limit — 12 rate-limit notices
+   in 11 minutes, measured.
+
+Report **time-to-first-review per PR**, never requests per hour: a PR sitting unreviewed is the
+user-visible cost, and that is the number this step must move.
+
 ## 5. RELEASE — evaluate, propose, do not cut
 
 ```bash

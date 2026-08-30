@@ -175,6 +175,23 @@ erroring. `.claude/release.conf` is the declared list where one exists.
 Compute the free surface: the files the open PRs touch, versus the open issues. Dispatch agents for
 what does not collide.
 
+🔴 **First: is an open PR already closing this issue?** A file-collision check compares PR files
+against PR files and **cannot see an issue that is already claimed** — so it reports a free surface
+for work that is already done.
+
+```bash
+gh api graphql -f query='{search(query:"repo:OWNER/REPO is:pr is:open",type:ISSUE,first:60){
+  nodes{... on PullRequest{number closingIssuesReferences(first:5){nodes{number}}}}}}' \
+  --jq '.data.search.nodes[]|.number as $p|.closingIssuesReferences.nodes[]|"\(.number) <- PR #\($p)"'
+```
+
+⚠️ **Do not trust the branch-name heuristic for this.** Matching a trailing `-<issue>` in the branch
+name misses a PR whose branch was named after a different slice, which is exactly how it failed:
+measured 2026-08-30, an agent was dispatched for #145 while **PR #279 had been open four days**
+closing the same issue and touching the identical two files. The duplicate PR had to be closed. The
+`closingIssuesReferences` query above is the reliable form — it reads what GitHub itself will act
+on at merge time.
+
 ⚠️ **If the free surface is empty, state it.** That is information, not silence.
 
 Every brief carries:

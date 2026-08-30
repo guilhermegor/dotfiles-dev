@@ -173,13 +173,37 @@ information and leaves working code unpublished.
 ⚠️ **"Functional" is the condition, and it is already answered by the time you get here** — the
 change is on the default branch, which means it cleared the required checks. Do not re-litigate it.
 
-Still ask before cutting when, and only when:
-- the diff is **breaking** (`type!:` / `BREAKING CHANGE:`) — the bump crosses a version boundary
-  and 0.x semantics make that a MINOR, a judgment the owner should confirm;
-- a **known defect** is in the shipped diff. Measured precedent: a vendor-allowlist PR merged with
-  an `import(variable)` bypass still open, and cutting it would have shipped a deny-by-default gate
-  with a documented hole to every generated project. The owner chose to wait for the fix — a gate
-  that creates false confidence is worse than none.
+### The two former exceptions, one automated and one not — the split is decidability
+
+**Breaking: compute it, do not ask.** `type!:` / `BREAKING CHANGE:` in `git log <tag>..HEAD` is a
+grep, and the bump table settles the rest (0.x: breaking → MINOR, feat/fix → PATCH). There is no
+judgment left to confirm. **Cut it and announce the bump you computed**, so a wrong table is
+visible rather than silent.
+
+```bash
+git log "$tag"..origin/main --format='%s%n%b' | grep -cE '^[a-z]+(\(.+\))?!:|^BREAKING CHANGE:'
+```
+
+**A known defect in the shipped diff: signal, then decide — this one cannot be mechanised.** The
+measured precedent is real: a vendor-allowlist PR merged at 01:11Z with an `import(variable)`
+bypass, and the issue describing that bypass was opened at 01:35Z — *before* the cut was proposed.
+Cutting would have shipped a deny-by-default gate with a documented hole to every generated
+project, and **a gate that creates false confidence is worse than none.**
+
+⚠️ **The obvious automation does not work, and it was measured.** Searching open issues for the
+shipped filenames returned **6 matches for a 2-file diff**, none of them a defect in those files —
+issues mention a path for context far more often than they report a fault in it. A veto on that
+signal would block nearly every release; trusting it would be theatre.
+
+So the rule is:
+
+- surface it — list open issues referencing any shipped path, as **context, never a verdict**;
+- ⚠️ hold **only** when a specific defect is known to be *in the shipped code* — which in practice
+  means this session found it, or an issue names the shipped path as the location of a fault;
+- otherwise cut, and say which issues you saw and why they do not block.
+
+🎯 The distinction that decides it: *did something you already know make the shipped artifact
+wrong?* That is a fact this session holds, not a query it can run.
 
 Verify all three, none implies another: **per-job conclusions** (a skipped publish behind a
 cancelled matrix reads as success at the run level), **the tag exists**, **the release is not a

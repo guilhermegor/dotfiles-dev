@@ -128,13 +128,29 @@ hardest where the mechanism is most needed. `schedule:` is the one trigger GitHu
 1. **Is the slot free?** Read the newest roster notice per PR: a rate-limit notice means turned
    away, a completion means it ran. Busy → **say so** and move on.
 2. **Pick the candidate — blast radius first, age second.**
-   - Filter to PRs whose **only** blocker is the review gate. Otherwise the ask is spent on a PR a
-     review cannot unblock.
-   - Rank a `chore`/`ci`/`fix` touching a **shared** surface (a gate, a copy list, a template both
-     families read) above a `feat` touching one tier — it unblocks others, they unblock themselves.
+   - **Filter to PRs whose ONLY blocker is the review gate** (`BLOCKED`, and the review check is
+     the sole red). ⚠️ A `DIRTY` PR is not a candidate: a review cannot resolve a merge conflict,
+     so the ask is spent for nothing. Measured — of the five PRs holding the contended wiring
+     files, **three were `DIRTY`**; asking for any of them would have burned the window.
+   - **Rank by MEASURED contention, not by commit type.** Build the contended-file set and count
+     how many *blocked issues* each PR's files hold hostage:
+
+     ```bash
+     for n in $(gh pr list --state open --json number --jq '.[].number'); do
+       gh pr view $n --json files --jq '.files[].path'
+     done | sort | uniq -c | sort -rn | head
+     ```
+
+     A file several PRs touch is a bottleneck; a PR holding one is worth more than its diff.
+     ⚠️ **`chore`/`ci` was a proxy for this and it is a weak one** — it correlates with shared
+     surfaces but does not measure them, and the measurement is one command away. Use the count.
    - Break ties by age, so nothing starves. ⚠️ Age alone is a **fairness** rule, not a throughput
      rule; it is the metric that is free to compute, which is how it becomes the default without
      anyone choosing it.
+
+   🎯 **Before spending the ask, check whether a cheaper lever exists.** A `DIRTY` PR holding a
+   contended file is unblocked by a rebase — free, no slot, no waiting. Resolving those first
+   raises the value of the *next* ask instead of consuming this one.
 3. **At most one ask per round.** A burst genuinely trips the account limit — 12 rate-limit notices
    in 11 minutes, measured.
 

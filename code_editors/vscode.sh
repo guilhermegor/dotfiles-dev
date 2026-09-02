@@ -128,27 +128,37 @@ check_vscode_installed() {
 install_extensions() {
     print_status "section" "INSTALLING VS CODE EXTENSIONS"
     
-    local extensions=(
-        "dzhavat.bracket-pair-toggler"
-        "dbaeumer.vscode-eslint"
-        "anthropic.claude-code"
-        "ritwickdey.liveserver"
-        "pkief.material-icon-theme"
-        "humao.rest-client"
-        "esbenp.prettier-vscode"
-        "natqe.reload"
-        "tamasfe.even-better-toml"
-        "be5invis.toml"
-        "prisma.prisma"
-        "alexcvzz.vscode-sqlite"
-        "clinyong.vscode-css-modules"
-        "formulahendry.auto-rename-tag"
-        "omthemes.omthemes"
-        "bierner.markdown-mermaid"
-        "firsttris.vscode-jest-runner"
-        "usernamehw.errorlens"
-        "mechatroner.rainbow-csv"
-    )
+    # ⚠️ ONE list, read from disk — never a second array here (dotfiles-dev#185).
+    # Two lists existed and only this one installed anything, so ~15 entries that lived only
+    # in .vscode/extensions.txt were never installed while the file looked authoritative.
+    # Adding an extension there and nowhere else looked done and was a no-op.
+    local extensions_file
+    extensions_file="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.vscode/extensions.txt"
+
+    if [[ ! -f "$extensions_file" ]]; then
+        print_status "error" "Extension list not found: $extensions_file"
+        return 1
+    fi
+
+    local extensions=()
+    local line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%#*}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [[ -z "$line" ]] && continue
+        # The `vscode:` prefix marks which editor an entry targets, so the file can hold more
+        # than one editor's set later. Strip it; a bare id is accepted too.
+        extensions+=("${line#vscode:}")
+    done < "$extensions_file"
+
+    # ⚠️ An empty list is a FAILURE, not a quiet success: a moved or emptied file would
+    # otherwise report "Extensions installed: 0, Skipped: 0" and read as a clean run.
+    if [[ ${#extensions[@]} -eq 0 ]]; then
+        print_status "error" "No extensions found in $extensions_file"
+        return 1
+    fi
+    print_status "info" "Read ${#extensions[@]} extension(s) from ${extensions_file##*/}"
     
     local installed_count=0
     local skipped_count=0

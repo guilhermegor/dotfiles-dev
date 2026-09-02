@@ -21,6 +21,7 @@ copy_hook_file() {
         return 1
     fi
 
+    mkdir -p "$(dirname "$dest")"
     cp "$src" "$dest"
     chmod +x "$dest"
     print_status "success" "Installed $1 → $dest"
@@ -50,4 +51,7 @@ install_hooks() {
     copy_hook_file "pr_merge_threads_guard.sh" "$hooks_dir"
     copy_hook_file "open_review_threads_nudge.sh" "$hooks_dir"
     copy_hook_file "gh_prose_language_guard.sh" "$hooks_dir"
+    copy_hook_file "lib/review_thread_gate.sh" "$hooks_dir"
+    copy_hook_file "subagent_stop_sweep.sh" "$hooks_dir"
+    copy_hook_file "uncommitted_worktree_guard.sh" "$hooks_dir"
 }

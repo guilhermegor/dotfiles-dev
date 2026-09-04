@@ -67,7 +67,7 @@ push_shipped_change_to_origin() {
     worker="$(mktemp -d)"
     git clone -q "$ORIGIN" "$worker"
     (cd "$worker" && git config user.email t@t && git config user.name t \
-        && echo "x" >> src/lib.py && git add src/lib.py \
+        && mkdir -p src && echo "x" >> src/lib.py && git add src/lib.py \
         && git commit -q -m "$msg" && git push -q origin main)
     rm -rf "$worker"
 }

@@ -10,10 +10,16 @@
 #
 # Hook I/O contract (same as pr_template_guard.sh): silent on stdout, speaks only through exit code
 # + stderr — so there is intentionally no lib/common.sh / print_status here. It fails OPEN
-# everywhere: any message the guard cannot cleanly parse out of the raw command string (a heredoc,
-# -F/--file, more than one -m, a combined short cluster like -am, or a title built from shell
-# expansion) exits 0 and lets the commit proceed. Per the hook-command-string-scraping-fragile
-# lesson, better to miss some long titles than to false-block a valid commit.
+# everywhere: any message the guard cannot cleanly parse out of the raw command string (a heredoc
+# not feeding `-F-`, `-F path/to/file`, more than one -m, a combined short cluster like -am, or a
+# title built from shell expansion) exits 0 and lets the commit proceed. Per the
+# hook-command-string-scraping-fragile lesson, better to miss some long titles than to
+# false-block a valid commit.
+#
+# One narrowed exception (issue #140): `-F-`/`--file=-` fed by exactly one heredoc is the most
+# common shape an agent session uses, and unlike `-F path`, the heredoc body IS present in the
+# raw command string — so extract_heredoc_title() measures its first line instead of stepping
+# over it.
 
 set -u
 
@@ -38,13 +44,19 @@ main() {
         | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+commit([[:space:]]|$)' \
         || exit 0
 
-    # Fail open on message sources we cannot cleanly read the title out of a raw command string:
-    #   * a heredoc-fed message (`<<`), whose body is not in the command string at all;
-    #   * a file-fed message (`-F` / `--file`), whose title lives in a file we are not reading here.
-    printf '%s' "$command" | grep -q '<<' && exit 0
-    printf '%s' "$command" | grep -Eq -- '(-F[[:space:]]|--file([[:space:]]|=))' && exit 0
+    if printf '%s' "$command" | grep -q '<<'; then
+        # A heredoc is present. The one shape we can safely parse is `-F-`/`--file=-` fed by
+        # exactly one heredoc (issue #140) — its body is in the raw command string. Anything
+        # else (heredoc feeding something other than `-F-`, more than one heredoc, an `-m` also
+        # present, a title needing shell expansion) is genuinely ambiguous from a raw string
+        # scrape: fail open.
+        title="$(extract_heredoc_title "$command")" || exit 0
+    else
+        # `-F <path>` / `--file <path>`: title lives in a file we are not reading here.
+        printf '%s' "$command" | grep -Eq -- '(-F[[:space:]]|--file([[:space:]]|=))' && exit 0
 
-    title="$(extract_single_title "$command")" || exit 0   # unparseable / multi / dynamic → allow
+        title="$(extract_single_title "$command")" || exit 0   # unparseable / multi / dynamic
+    fi
     max_len="$(read_title_max_length)"
 
     (( ${#title} > max_len )) || exit 0   # within limit → allow
@@ -91,6 +103,35 @@ extract_single_title() {
     esac
 
     printf '%s' "${titles[0]%%$'\n'*}"   # first line only
+}
+
+extract_heredoc_title() {
+    # Narrow, unambiguous case from issue #140: `-F-`/`--file=-` (message read from stdin) fed
+    # by a single heredoc. The heredoc body IS the message and IS present in the raw command
+    # string, so its first line is the title. Return 1 (fail open) on anything this static
+    # scrape cannot resolve without a real shell parse: no `-F-`, more than one heredoc marker,
+    # an `-m`/`--message` also present (ambiguous source), or a title needing shell expansion
+    # (`$...`, `` `...` ``) that a raw-string measurement would get wrong.
+    local s="$1" opener_re body_re count title
+
+    printf '%s' "$s" \
+        | grep -Eq -- '(^|[[:space:]])(-F[[:space:]]*-|--file([[:space:]]+|=)-)([[:space:]]|$)' \
+        || return 1
+    printf '%s' " $s" | grep -Eq '[[:space:]](-m|--message)([[:space:]=]|$)' && return 1
+
+    opener_re=$'<<-?[[:space:]]*[\'"]?[A-Za-z_][A-Za-z0-9_]*[\'"]?'
+    count="$(printf '%s' "$s" | grep -oE "$opener_re" | wc -l)"
+    [[ "$count" -eq 1 ]] || return 1
+
+    body_re="${opener_re}"$'[^\n]*\n(.*)'
+    [[ "$s" =~ $body_re ]] || return 1
+    title="${BASH_REMATCH[1]%%$'\n'*}"
+
+    case "$title" in
+        *'$'* | *'`'*) return 1 ;;
+    esac
+
+    printf '%s' "$title"
 }
 
 read_title_max_length() {

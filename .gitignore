@@ -25,3 +25,7 @@
 # Local records only — the source of truth is the global store; excluded from any docs site.
 docs/blueprintx-lessons.md
 docs/dotfiles-dev-lessons.md
+
+# Claude Code project-local scratch: machine-local settings.local.json and the
+# per-subagent worktrees the Agent tool creates. Never repo content (#196).
+.claude/

@@ -87,6 +87,31 @@ store, cross-referencing. Misrouting parks a fix in a queue that never applies i
 3. Mirror it in the originating repo as a **git-ignored**, docs-site-excluded note
    (`docs/blueprintx-lessons.md` or `docs/dotfiles-dev-lessons.md`) — *unless* the origin repo
    **is** the backport target repo, where the same-repo mirror is redundant (skip it).
+
+   **Every mirror entry MUST carry a `- **Source:** \`<filename>.md\`` field — a required
+   field alongside Tier/Area, Lesson, Why, and Origin, never a footnote.** The audit that
+   verifies mirrors (`session_capture_audit.sh`'s `check_mirrors`) joins purely by literal
+   substring — `grep -qF "<filename>.md" docs/<mirror>.md` — it never reads the heading,
+   Tier, Lesson, or Why. A complete, well-written prose section still counts as a gap if
+   that one exact string is absent. This recurred **4 of 4** times in one session
+   (2026-08-02, `mirror-entry-must-cite-its-source-filename`) even though the fix had
+   already been logged as a lesson: "write the lesson in the mirror" reads as "write full
+   prose", and the field that looks least like content is the one that gets dropped.
+   Mirror entry template (copy this shape, do not free-write the section):
+
+   ```markdown
+   ## <Title>
+
+   - **Source:** `<filename>.md`
+   - **Tier/Area:** <value>
+   - **Lesson:** <one sentence>
+   - **Why:** <one sentence>
+   - **Origin:** <repo that originated it>
+   ```
+
+   If the mirror file has a `## Source files` index near the top, append the basename
+   there too, in the same call — that index gets the same mandatory-field treatment, not
+   optional bookkeeping.
 4. Later, apply the captured lessons to the backport target so future work inherits them.
 
 Full conventions: `~/.claude/memory/lessons/README.md` and

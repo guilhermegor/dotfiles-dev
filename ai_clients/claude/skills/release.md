@@ -86,21 +86,47 @@ released rather than picking one.
 
 Load the matching arm and ask it for the floor, then `next = bump(floor)`.
 
-## 5. Propose, and wait for confirmation
+## 5. Announce the computed version, then cut
 
-Present:
+🔴 **CUT IT. Do not ask.** Standing decision, 2026-08-30 (dotfiles-dev#171): *"sempre seguir com
+a release quando possível, prefiro que sempre que possível seja publicado mediante o código estar
+funcional."*
 
-> **Release proposal**
+⚠️ **This step used to end in a question, and the question added no information.** By the time it
+runs, step 2 has already found a non-empty shipped diff on the default branch — which means the
+change cleared every required check. "Is the code functional" is answered before you get here.
+Asking converted *working code, published* into *working code, unpublished, pending an answer
+nobody was waiting to give*: six releases in one day, each preceded by a proposal answered "sim".
+
+**Announce, do not ask.** The bump is computed in step 3 from the commit signals, so there is no
+judgment left to confirm — but state it, so a wrong bump table becomes visible rather than silent:
+
+> **Cutting `<next>`**
 > - Shipped change since `<last-tag>`: `<n>` files (`<list>`)
-> - Highest commit signal: `<breaking|feat|fix>`
+> - Highest commit signal: `<breaking|feat|fix>` → `<bump>` (pre-1.0 rules)
 > - Ecosystem: `<pypi | workflow-dispatch | …>` (detected from `<signal>`)
-> - Current floor: `<what the arm reported>`
-> - **Proposed version: `<next>`** (`<bump>`, pre-1.0 rules)
->
-> Publish this? (yes / a different version / no)
+> - Floor: `<what the arm reported>`
 
-Wait for an explicit answer. This human gate is the point — the automation removes the *wrong*
-releases, not the oversight.
+Then go straight to step 6.
+
+### The one thing that still holds a release
+
+**A known defect in the shipped diff** — and only this one, because it is the only input that is
+not derivable from the repository. The measured precedent: a vendor-allowlist PR merged at 01:11Z
+with an `import(variable)` bypass, and the issue describing that bypass was opened at 01:35Z,
+*before* the cut. Shipping it would have put a deny-by-default gate with a documented hole into
+every generated project, and **a gate that creates false confidence is worse than none.**
+
+⚠️ **Do not automate this by searching issues for the shipped paths.** Measured: that search
+returned **6 matches for a 2-file diff**, none of them a fault in those files — issues mention a
+path for context far more often than they report a defect in it. A veto on that signal would
+block nearly every release; trusting it would be theatre. Surface the issues as **context, never
+a verdict**, and hold only when a defect is known to be *in the shipped code* — which is
+something this session knows, not something a query answers.
+
+🎯 The test that separates the two: does the check answer from **data**, or from something **the
+session knows**? Breaking-change detection is data. "Did something I already learned make this
+artifact wrong" is memory, and no query reaches it.
 
 ## 6. Publish via the arm
 
@@ -167,6 +193,7 @@ asymmetric — do not reach for the obvious "just run it again":
 - Do not trust the Python default shipped paths on a non-Python repo — check the packaging manifest.
 - Do not assume the ecosystem; detect it, and stop and ask when nothing matches.
 - Do not hard-code one ecosystem's mechanics into this skill — that is what the arms are for.
-- Do not publish without the explicit user confirmation in step 5.
+- Do not hold a release for a confirmation — step 5 announces the computed version and cuts.
+  The only thing that holds one is a defect KNOWN to be in the shipped diff.
 - Do not treat a green run as proof; verify jobs, tag, and draft state.
 - Do not keep stacking release dispatches; one version per shipped change.

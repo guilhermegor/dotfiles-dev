@@ -314,7 +314,8 @@ and match the project titled exactly **`<repo> kanban`** (e.g. `filings-cvm kanb
   > Do **not** enable **Pull request linked to issue** — the `kanban_lifecycle` hook already
   > moves the card to *In review* when the PR opens, and enabling this native workflow would
   > fire at the same moment and race it (it defaults to *In progress*, dragging the card
-  > backwards).
+  > backwards). This is the same defect class the hook itself guards against (#131): a card
+  > must never move backwards once its issue's real state has passed that point.
 
 Add the card (parents and children both):
 `rtk gh project item-add <project-number> --owner <owner> --url <issue-url>`

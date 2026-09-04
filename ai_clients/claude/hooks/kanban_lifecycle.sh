@@ -21,6 +21,15 @@
 # repos for free). A cached id gone stale (board recreated / columns renamed) self-heals: a failed
 # move refreshes the cache once and retries.
 #
+# A CLOSED issue is a no-op (#131): a branch/PR that merely REFERENCES an already-closed issue
+# (a follow-up ledger, a docs pass) must not drag its card backwards out of Done — Done is native
+# (see above) and fires on the close EVENT, which already happened, so nothing re-corrects a wrong
+# move afterwards. Checked via `gh issue view --json state` — the real invariant — not by having
+# `card_item_id` also return the current column and refusing backward moves: that alternative
+# reads right for the common case but is wrong for a legitimately REOPENED issue sitting in Done,
+# which it would then refuse to ever move forward again. One more `gh` call per lifecycle verb is
+# the honest cost of asking the actual question.
+#
 # Hook I/O contract: PostToolUse, so the tool already ran — this never blocks. It fails OPEN
 # everywhere (no gh/jq, no repo, no board, no card, any gh error) by exiting 0 silently; on a
 # successful move it emits an additionalContext note. Never exits non-zero.
@@ -52,6 +61,8 @@ main() {
     # runs from it), and issue.md names branches `<type>/<N>-<slug>`, so the branch carries the ref.
     issue="$(issue_from_head)" || exit 0
     [[ -n "$issue" ]] || exit 0
+
+    [[ "$(issue_state "$owner" "$repo" "$issue")" != "CLOSED" ]] || exit 0
 
     read -r project_number project_node status_field option_id \
         < <(board_config "$owner" "$repo" "$target") || exit 0
@@ -97,6 +108,13 @@ issue_from_head() {
     branch="$(git symbolic-ref --short HEAD 2>/dev/null)" || return 1
     [[ "$branch" =~ (^|[^0-9])([0-9]+)([^0-9]|$) ]] || return 1
     printf '%s' "${BASH_REMATCH[2]}"
+}
+
+issue_state() {
+    # "OPEN"/"CLOSED" for issue <issue> in <owner>/<repo>, or empty on any gh error (fails open —
+    # the caller's `!= "CLOSED"` then lets a state we could not resolve through, same as today).
+    local owner="$1" repo="$2" issue="$3"
+    gh issue view "$issue" --repo "$owner/$repo" --json state -q '.state' 2>/dev/null
 }
 
 cache_file() {

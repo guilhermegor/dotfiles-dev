@@ -43,6 +43,65 @@ strip_heredoc_bodies() {
     done
 }
 
+# Parse ONE statement as a `git commit`/`git push` invocation (optionally rtk-prefixed) AND
+# resolve which repo it actually targets — the root-cause fix for issue #97, folded into a single
+# function per the issue's ask (a third instance of "the guard decided on the SESSION, not the
+# ACTION's target" in this hook family; extract once, not another point patch).
+#
+# Two things a naive `grep '^git[[:space:]]+commit'` gets wrong, both fixed by tokenizing instead:
+#   1. Verb detection: `git -C <path> commit` has flags BETWEEN `git` and `commit` — an anchored
+#      regex never matches it, silently failing OPEN on exactly the commands #97 is about.
+#   2. Target: `-C <path>` / `--git-dir=` / `--work-tree=` redirect git at a different repo than
+#      the hook's own $PWD (the session's checkout) — the ONLY thing prior code ever inspected.
+#
+# `-C`/`--git-dir`/`--work-tree` always win (git honors them regardless of $PWD); otherwise the
+# target is `tracked_dir` (the last `cd` seen so far in this command, from split_statements'
+# caller), or "" to mean "the hook's own $PWD" — the session repo, still correct when nothing
+# redirected the command. Prints "<verb> <target>" on a match; returns 1 if this statement isn't a
+# `git commit`/`git push` at all (mirrors old behaviour: git as anything but the FIRST token is a
+# mere mention, not a command, and is ignored).
+parse_git_statement() {
+    local stmt="$1" tracked_dir="$2"
+    local -a toks
+    read -ra toks <<< "$stmt"                           # split on IFS without globbing
+    local i=0 tok target="$tracked_dir" verb=""
+
+    [[ "${toks[0]:-}" == "rtk" ]] && i=1
+    [[ "${toks[i]:-}" == "git" ]] || return 1
+    (( i++ ))
+
+    for (( ; i < ${#toks[@]}; i++ )); do
+        tok="${toks[i]}"
+        case "$tok" in
+            -C)            target="${toks[i+1]:-}"; (( i++ )) ;;
+            -C?*)          target="${tok#-C}" ;;
+            --git-dir=*)   target="${tok#--git-dir=}" ;;
+            --git-dir)     target="${toks[i+1]:-}"; (( i++ )) ;;
+            --work-tree=*) target="${tok#--work-tree=}" ;;
+            --work-tree)   target="${toks[i+1]:-}"; (( i++ )) ;;
+            -c)            (( i++ )) ;;                 # `-c key=val` takes a value; skip it
+            -*)            ;;                            # some other global flag we don't track
+            *)             verb="$tok"; break ;;         # first non-flag token IS the subcommand
+        esac
+    done
+
+    [[ "$verb" == "commit" || "$verb" == "push" ]] || return 1
+    printf '%s %s' "$verb" "$target"
+}
+
+# Split one physical line into `&&`/`;`-separated statements so a single-line `cd <path> && git
+# commit` is judged as two statements (cd updates the tracked dir, THEN git runs in it) instead of
+# missing the verb because "git" isn't the first token on the line.
+# ponytail: a literal && or ; inside a quoted string (e.g. a commit message) mis-splits here — same
+# heuristic-scan ceiling strip_heredoc_bodies already accepts for this hook. Upgrade path: a real
+# shell tokenizer if that ever produces a false split in practice.
+split_statements() {
+    local line="$1"
+    line="${line//&&/$'\n'}"
+    line="${line//;/$'\n'}"
+    printf '%s\n' "$line"
+}
+
 # Return 0 iff a `git push` ONLY deletes non-protected ref(s) — safe even on a protected branch,
 # because it writes nothing there (it is the normal post-merge cleanup, always run from main).
 # Decide on the TARGET refspec, never on "we happen to be on a protected branch".
@@ -65,7 +124,7 @@ push_is_safe_deletion() {
 }
 
 main() {
-    local payload tool command branch verb
+    local payload tool command line stmt verb branch target_dir parsed
 
     payload="$(cat)"
     tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
@@ -77,43 +136,67 @@ main() {
     # A `git push`/`git commit` inside a heredoc body is prose, not a command — strip bodies first.
     command="$(printf '%s\n' "$command" | strip_heredoc_bodies)"
 
-    # Only guard an actual `git commit` / `git push` (optionally rtk-prefixed), anchored to a line
-    # start so a mere mention inside another argument does not trip the guard.
-    if printf '%s' "$command" \
-        | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+commit([[:space:]]|$)'; then
-        verb="commit"
-    elif printf '%s' "$command" \
-        | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+push([[:space:]]|$)'; then
-        verb="push"
-    else
-        exit 0
-    fi
+    # cwd tracks the directory a `cd` earlier IN THIS SAME COMMAND leaves us in (issue #97): a
+    # multi-line/`&&`-chained Bash command runs sequentially in one shell, so a `cd /other/repo`
+    # two statements up is still in effect when `git commit` runs. "" means "no cd seen yet" ->
+    # parse_git_statement falls back to the hook's own $PWD (the session repo).
+    local cwd=""
 
-    # symbolic-ref resolves the current branch name even on an unborn branch (before the first
-    # commit); it fails on a detached HEAD, which we treat as "unknown" -> fail open.
-    branch="$(git symbolic-ref --short HEAD 2>/dev/null)" || exit 0
-    [[ -n "$branch" ]] || exit 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        while IFS= read -r stmt || [[ -n "$stmt" ]]; do
+            [[ -n "${stmt//[[:space:]]/}" ]] || continue
 
-    printf '%s' "$branch" | grep -Eq "$PROTECTED_BRANCHES" || exit 0   # feature branch -> allow
+            if [[ "$stmt" =~ ^[[:space:]]*(rtk[[:space:]]+)?cd[[:space:]]+([^[:space:]]+) ]]; then
+                cwd="${BASH_REMATCH[2]}"
+                continue
+            fi
 
-    # ponytail: refspec-aware exception (issue #54). Deleting a NON-protected ref never writes the
-    # protected branch. Upgrade path: parse src:dst destinations too if pushing OTHER branches from
-    # a protected branch ever needs allowing (today those stay blocked — a rare, safe false-block).
-    if [[ "$verb" == "push" ]] && push_is_safe_deletion "$command"; then
-        exit 0
-    fi
+            # Only guard an actual `git commit` / `git push` (optionally rtk-prefixed): `git` must
+            # be the first token of the statement, so a mere mention inside another argument does
+            # not trip the guard. parse_git_statement also resolves the TARGET repo (issue #97).
+            parsed="$(parse_git_statement "$stmt" "$cwd")" || continue
+            verb="${parsed%% *}"
+            target_dir="${parsed#* }"
 
-    {
-        echo "BLOCKED: refusing to git ${verb} on protected branch '${branch}'."
-        echo
-        echo "This repo protects '${branch}' — a direct ${verb} must go through a feature branch + PR."
-        echo "Create one first, then re-run the SAME command:"
-        echo
-        echo "  git pull --ff-only && git checkout -b <type>/<short-desc>"
-        echo
-        echo "(A commit already staged/made on '${branch}' carries onto the new branch losslessly.)"
-    } >&2
-    exit 2
+            # symbolic-ref resolves the current branch name even on an unborn branch (before the
+            # first commit); it fails on a detached HEAD OR an unresolvable/nonexistent target ->
+            # fail open for THIS statement rather than falsely attributing the session's branch to
+            # a target we could not actually inspect (issue #97 scope: never report the wrong repo).
+            if [[ -n "$target_dir" ]]; then
+                branch="$(git -C "$target_dir" symbolic-ref --short HEAD 2>/dev/null)" || continue
+            else
+                branch="$(git symbolic-ref --short HEAD 2>/dev/null)" || continue
+            fi
+            [[ -n "$branch" ]] || continue
+
+            printf '%s' "$branch" | grep -Eq "$PROTECTED_BRANCHES" || continue   # feature -> allow
+
+            # ponytail: refspec-aware exception (issue #54). Deleting a NON-protected ref never
+            # writes the protected branch. Upgrade path: parse src:dst destinations too if pushing
+            # OTHER branches from a protected branch ever needs allowing (today those stay blocked
+            # — a rare, safe false-block).
+            if [[ "$verb" == "push" ]] && push_is_safe_deletion "$stmt"; then
+                continue
+            fi
+
+            {
+                echo "BLOCKED: refusing to git ${verb} on protected branch '${branch}'."
+                echo
+                if [[ -n "$target_dir" ]]; then
+                    echo "Target repo: ${target_dir}"
+                fi
+                echo "This repo protects '${branch}' — a direct ${verb} must go through a feature branch + PR."
+                echo "Create one first, then re-run the SAME command:"
+                echo
+                echo "  git pull --ff-only && git checkout -b <type>/<short-desc>"
+                echo
+                echo "(A commit already staged/made on '${branch}' carries onto the new branch losslessly.)"
+            } >&2
+            exit 2
+        done < <(split_statements "$line")
+    done <<< "$command"
+
+    exit 0
 }
 
 main "$@"

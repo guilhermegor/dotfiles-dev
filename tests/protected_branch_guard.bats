@@ -169,3 +169,61 @@ CMD
     run run_guard "git push"
     [ "$status" -eq 0 ]
 }
+
+# --- issue #97: resolve the TARGET repo, not the session's cwd ---------------------------------
+#
+# `git symbolic-ref --short HEAD` (no -C) always reads $PWD, which is the session's checkout
+# (TEST_TMP, here). These pin the fix: a command that redirects at ANOTHER repo (`git -C <path>`,
+# `cd <path> &&`) must be judged against THAT repo's HEAD, not the session's.
+
+@test "false positive (#97): session on main, target on a feature branch -> allows" {
+    OTHER="$(mktemp -d)"
+    git init -q -b feat/other "$OTHER"
+    git -C "$OTHER" config user.email t@t && git -C "$OTHER" config user.name t
+    git -C "$OTHER" commit -q --allow-empty -m init
+    # session (TEST_TMP, cwd) is on main from setup() -- unchanged.
+    run run_guard "git -C $OTHER commit -m wip"
+    [ "$status" -eq 0 ]
+    rm -rf "$OTHER"
+}
+
+@test "false negative (#97): session on feature, target on main (git -C) -> blocks" {
+    OTHER="$(mktemp -d)"
+    git init -q -b main "$OTHER"
+    git -C "$OTHER" config user.email t@t && git -C "$OTHER" config user.name t
+    git -C "$OTHER" commit -q --allow-empty -m init
+    git checkout -q -b feat/x            # session moves OFF main
+    run run_guard "git -C $OTHER commit -m wip"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"Target repo: $OTHER"* ]]
+    rm -rf "$OTHER"
+}
+
+@test "false negative (#97): session on feature, target on main (cd && git) -> blocks" {
+    OTHER="$(mktemp -d)"
+    git init -q -b main "$OTHER"
+    git -C "$OTHER" config user.email t@t && git -C "$OTHER" config user.name t
+    git -C "$OTHER" commit -q --allow-empty -m init
+    git checkout -q -b feat/x            # session moves OFF main
+    run run_guard "cd $OTHER && git commit -m wip"
+    [ "$status" -eq 2 ]
+    rm -rf "$OTHER"
+}
+
+@test "false negative (#97): session on feature, target on main (multi-line cd) -> blocks" {
+    OTHER="$(mktemp -d)"
+    git init -q -b main "$OTHER"
+    git -C "$OTHER" config user.email t@t && git -C "$OTHER" config user.name t
+    git -C "$OTHER" commit -q --allow-empty -m init
+    git checkout -q -b feat/x            # session moves OFF main
+    cmd="$(printf 'cd %s\ngit commit -m wip' "$OTHER")"
+    run run_guard "$cmd"
+    [ "$status" -eq 2 ]
+    rm -rf "$OTHER"
+}
+
+@test "irresolvable target (#97): nonexistent -C path fails open, never blames session branch" {
+    # session (TEST_TMP) is on main from setup() -- would block a same-repo commit.
+    run run_guard "git -C /nonexistent/path/xyz commit -m wip"
+    [ "$status" -eq 0 ]
+}

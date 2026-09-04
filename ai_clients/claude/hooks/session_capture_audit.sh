@@ -109,6 +109,14 @@ check_lessons() {
 			if [ "$kind" = "blueprintx" ] && ! grep -qE '^[[:space:]]*([-*][[:space:]]+)?\*\*Tier:\*\*' "$file"; then
 				add_gap "[lessons] '$name' has no **Tier:** line"
 			fi
+
+			# Status is what tells emit_completeness a lesson landed (delivered/advisory/
+			# superseded) versus is still owed (queued/tracked) — the same missing-field
+			# blindness the Tier check above catches, so it gets the same treatment: flag
+			# only a MISSING line, never an unrecognized value.
+			if ! grep -qE '^[[:space:]]*([-*][[:space:]]+)?\*\*Status:\*\*' "$file"; then
+				add_gap "[lessons] '$name' has no **Status:** line"
+			fi
 		done
 	done
 }
@@ -192,29 +200,40 @@ emit_completeness() {
 
 	# Row 1 — lessons → issues (store text; no network).
 	#
-	# What counts as accounted-for is a `Status:` line, not merely a number somewhere in the
-	# prose. A citation says which issue exists; only a status says whether the work LANDED,
-	# so keying on the number alone makes every already-shipped lesson debt forever. Measured
-	# blueprintx 2026-08-16: 170 of 243 lessons "unaccounted", of which 156 were in fact
-	# delivered — the metric was reporting the store's age, not its debt.
-	local total=0 declared=0 queued=0 file name
+	# A citation says which issue exists; only a Status: VALUE says whether the work LANDED —
+	# so a lesson with no PR citation is debt ONLY when its Status is queued/tracked/missing.
+	# delivered/advisory/superseded mean the work shipped (or was never scaffold-shaped) with
+	# no PR to cite (dotfiles-dev#138: pre-PR-flow direct commits, or advisory-only guidance).
+	# Counting those as debt reports the store's age, not its debt (measured blueprintx
+	# 2026-08-16: 170/243 "unaccounted", 156 delivered; dotfiles-dev 2026-08-23: 19/268, 15
+	# delivered + 4 advisory — zero of the 19 were actually owed).
+	local total=0 no_ref=0 delivered=0 advisory=0 superseded=0 file name
 	local -a unaccounted=()
 	for file in "$store"/*.md; do
 		[ -e "$file" ] || continue
 		name="$(basename "$file")"
 		[ "$name" = "README.md" ] && continue
 		total=$((total + 1))
-		if grep -qE '^- \*\*Status:\*\*' "$file"; then
-			declared=$((declared + 1))
-			grep -qE '^- \*\*Status:\*\* queued' "$file" && queued=$((queued + 1))
-		elif grep -qE "${repo}#[0-9]+" "$file"; then
-			declared=$((declared + 1))
+
+		# A direct citation accounts for the lesson regardless of its Status value.
+		grep -qE "${repo}#[0-9]+" "$file" && continue
+		no_ref=$((no_ref + 1))
+
+		if grep -qE '^[[:space:]]*([-*][[:space:]]+)?\*\*Status:\*\* *delivered' "$file"; then
+			delivered=$((delivered + 1))
+		elif grep -qE '^[[:space:]]*([-*][[:space:]]+)?\*\*Status:\*\* *advisory' "$file"; then
+			advisory=$((advisory + 1))
+		elif grep -qE '^[[:space:]]*([-*][[:space:]]+)?\*\*Status:\*\* *superseded' "$file"; then
+			superseded=$((superseded + 1))
 		else
+			# queued, tracked, an unrecognized status, or no Status: line at all — every
+			# one of these is genuinely still owed (a missing line defaults to owed, never
+			# to "probably delivered" — check_lessons() flags the missing line separately).
 			unaccounted+=("$name")
 		fi
 	done
-	printf '  lessons → issues : %d in store, %d declared (%d still queued), %d undeclared\n' \
-		"$total" "$declared" "$queued" "${#unaccounted[@]}"
+	printf '  lessons → issues : %d in store, %d without a PR ref — %d delivered, %d advisory, %d superseded, %d genuinely unaccounted\n' \
+		"$total" "$no_ref" "$delivered" "$advisory" "$superseded" "${#unaccounted[@]}"
 
 	# Row 2 — issues → lessons (live issue list; report mode + gh only, fails open).
 	local slug="" issues="" n sourced=0 icount=0
@@ -254,7 +273,7 @@ emit_completeness() {
 		printf '  ! open issues with no lesson — write one or mark not-lesson-worthy: %s\n' "${orphans[*]}"
 	fi
 	if [ "${#unaccounted[@]}" -gt 0 ]; then
-		printf '  ! lessons with no Status: line — record delivered/tracked/queued/advisory: %s\n' \
+		printf '  ! lessons genuinely unaccounted (no PR ref, no delivered/advisory/superseded Status): %s\n' \
 			"${unaccounted[*]}"
 	fi
 }
@@ -286,8 +305,8 @@ emit_report() {
 	printf '%s\n' "--- verify manually or via /wrap-up (need judgment) ---"
 	printf '%s\n' "  - [ ] Superseded rules: did this session CHANGE a standing rule? grep tracked docs/README/ledgers for the OLD rule — a tracked doc outranks memory next session."
 	printf '%s\n' "  - [ ] Issues/PRs: every issue created this session is on the board and its card is in the right column; open PRs are accounted for."
-	printf '%s\n' "  - [ ] Completeness BOTH ways (above): resolve each 'orphan' open issue (write its lesson or list it under the store README's 'Issues not born of a lesson') and each 'undeclared' lesson (record a Status: line) — a one-directional check hides the B-side orphan."
-	printf '%s\n' "  - [ ] 'still queued' above is the debt that is real: lessons declared owed with no issue filed. Zero is expected only right after a triage."
+	printf '%s\n' "  - [ ] Completeness BOTH ways (above): resolve each 'orphan' open issue (write its lesson or list it under the store README's 'Issues not born of a lesson') and each 'genuinely unaccounted' lesson (file the issue or record a delivered/advisory/superseded Status:) — a one-directional check hides the B-side orphan."
+	printf '%s\n' "  - [ ] 'genuinely unaccounted' above is the debt that is real: no PR ref and no delivered/advisory/superseded Status. Zero is expected only right after a triage."
 	printf '%s\n' "  - [ ] Checkpoint: project memory has a resume point covering this session's work."
 	printf '%s\n' "  - [ ] Lessons: every generalizable finding is captured in the right store (BlueprintX vs dotfiles-dev) — routed by where the fix lands."
 }

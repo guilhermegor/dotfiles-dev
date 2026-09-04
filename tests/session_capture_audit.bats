@@ -67,39 +67,59 @@ run_report() {
 }
 
 # --- row 1: lessons → issues (store-internal, no network) ---------------------------------------
+#
+# dotfiles-dev#138: a lesson with a `delivered`/`advisory`/`superseded` Status and no PR
+# citation is NOT debt — only `queued`/`tracked`/a missing Status line is genuinely owed.
+# The old behaviour lumped every Status value (including queued) into "declared" and only
+# flagged the true no-Status-no-ref case; these tests pin the corrected buckets.
 
-@test "row 1 flags a lesson with no Status and no reference as undeclared" {
+@test "row 1 flags a lesson with no Status and no reference as genuinely unaccounted" {
 	lesson "orphan-lesson.md" ""
 	run_report ""
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"lessons → issues : 1 in store, 0 declared (0 still queued), 1 undeclared"* ]]
-	[[ "$output" == *"lessons with no Status: line"*"orphan-lesson.md"* ]]
+	[[ "$output" == *"lessons → issues : 1 in store, 1 without a PR ref — 0 delivered, 0 advisory, 0 superseded, 1 genuinely unaccounted"* ]]
+	[[ "$output" == *"genuinely unaccounted"*"orphan-lesson.md"* ]]
+	[[ "$output" == *"[lessons] 'orphan-lesson.md' has no **Status:** line"* ]]
 }
 
-@test "row 1 counts a lesson that references its issue as declared" {
+@test "row 1 counts a lesson that references its issue as accounted for" {
 	lesson "tracked-lesson.md" "42"
 	run_report ""
-	[[ "$output" == *"lessons → issues : 1 in store, 1 declared (0 still queued), 0 undeclared"* ]]
-	[[ "$output" != *"lessons with no Status: line"* ]]
+	[[ "$output" == *"lessons → issues : 1 in store, 0 without a PR ref — 0 delivered, 0 advisory, 0 superseded, 0 genuinely unaccounted"* ]]
+	[[ "$output" != *"genuinely unaccounted"*"tracked-lesson.md"* ]]
 }
 
-@test "row 1 accepts a delivered Status with no issue number as declared" {
+@test "row 1 excludes a delivered Status with no issue number from the debt count" {
 	# The whole point of the field: work that shipped before issues existed is not debt.
 	lesson_status "shipped.md" "delivered — pre-PR (abc1234)"
 	run_report ""
-	[[ "$output" == *"lessons → issues : 1 in store, 1 declared (0 still queued), 0 undeclared"* ]]
+	[[ "$output" == *"lessons → issues : 1 in store, 1 without a PR ref — 1 delivered, 0 advisory, 0 superseded, 0 genuinely unaccounted"* ]]
 }
 
-@test "row 1 counts a queued Status separately as the debt still owed" {
-	lesson_status "owed.md" "queued — no issue filed (target absent)"
-	run_report ""
-	[[ "$output" == *"lessons → issues : 1 in store, 1 declared (1 still queued), 0 undeclared"* ]]
-}
-
-@test "row 1 does not count advisory as queued" {
+@test "row 1 excludes an advisory Status from the debt count" {
 	lesson_status "judgment.md" "advisory — no scaffold target"
 	run_report ""
-	[[ "$output" == *"lessons → issues : 1 in store, 1 declared (0 still queued), 0 undeclared"* ]]
+	[[ "$output" == *"lessons → issues : 1 in store, 1 without a PR ref — 0 delivered, 1 advisory, 0 superseded, 0 genuinely unaccounted"* ]]
+}
+
+@test "row 1 excludes a superseded Status from the debt count" {
+	lesson_status "old-rule.md" "superseded — replaced by the newer rule"
+	run_report ""
+	[[ "$output" == *"lessons → issues : 1 in store, 1 without a PR ref — 0 delivered, 0 advisory, 1 superseded, 0 genuinely unaccounted"* ]]
+}
+
+@test "row 1 negative control: a queued Status with no PR reference still counts as debt" {
+	lesson_status "owed.md" "queued — no issue filed (target absent)"
+	run_report ""
+	[[ "$output" == *"lessons → issues : 1 in store, 1 without a PR ref — 0 delivered, 0 advisory, 0 superseded, 1 genuinely unaccounted"* ]]
+	[[ "$output" == *"genuinely unaccounted"*"owed.md"* ]]
+}
+
+@test "row 1 negative control: a tracked Status with no PR reference still counts as debt" {
+	lesson_status "tracked.md" "tracked — awaiting scheduling"
+	run_report ""
+	[[ "$output" == *"lessons → issues : 1 in store, 1 without a PR ref — 0 delivered, 0 advisory, 0 superseded, 1 genuinely unaccounted"* ]]
+	[[ "$output" == *"genuinely unaccounted"*"tracked.md"* ]]
 }
 
 # --- row 2: issues → lessons (the B-side orphan the old audit could not see) --------------------

@@ -44,7 +44,10 @@ business rule)?
       → dotfiles-dev store ~/.claude/memory/lessons-dotfiles/ + repo
       docs/dotfiles-dev-lessons.md
   Save one file per lesson + update that store's README index + the git-ignored
-  repo mirror.
+  repo mirror. The mirror entry MUST include this exact field (mandatory, not a
+  footnote — the audit joins by this literal string, never by heading/prose):
+      - **Source:** `<filename>.md`
+  A complete prose section without that literal line still counts as a gap.
 - If NO: say so in one line and continue. Do not skip the decision silently.
 EOF
 )"

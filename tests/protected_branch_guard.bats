@@ -227,3 +227,43 @@ CMD
     run run_guard "git -C /nonexistent/path/xyz commit -m wip"
     [ "$status" -eq 0 ]
 }
+
+# --- issue #141: a `\`-newline shell line continuation is ONE logical statement -----------------
+#
+# `git push origin \`<newline>`--delete <ref>` is a single statement split across two physical
+# lines by a real shell line continuation. Before the fix, the per-line loop in main() treated the
+# continuation as a SEPARATE statement: verb detection saw only line 1 (`push`, no flag), and
+# push_is_safe_deletion -- reading the same truncated statement -- never saw `--delete`/the ref
+# either, so this legitimate cleanup was falsely BLOCKED. These pin both directions: the safe
+# delete must be ALLOWED, and a real push (or a delete of the protected branch itself) written the
+# same way must still be BLOCKED -- widening the tokeniser must never open a hole.
+
+@test "issue #141: allows a backslash-continued safe deletion on main" {
+    cmd=$'git push origin \\\n    --delete fix/release-pypi-dist-glob-102'
+    run run_guard "$cmd"
+    [ "$status" -eq 0 ]
+}
+
+@test "issue #141: allows a backslash-continued safe deletion (-d short flag)" {
+    cmd=$'git push origin \\\n    -d feat/foo'
+    run run_guard "$cmd"
+    [ "$status" -eq 0 ]
+}
+
+@test "issue #141: STILL blocks a backslash-continued push that targets main" {
+    cmd=$'git push origin \\\n    main'
+    run run_guard "$cmd"
+    [ "$status" -eq 2 ]
+}
+
+@test "issue #141: STILL blocks a backslash-continued delete of the protected branch itself" {
+    cmd=$'git push origin \\\n    --delete main'
+    run run_guard "$cmd"
+    [ "$status" -eq 2 ]
+}
+
+@test "issue #141: allows a backslash-continued rtk-prefixed safe deletion" {
+    cmd=$'rtk git push origin \\\n    --delete fix/foo'
+    run run_guard "$cmd"
+    [ "$status" -eq 0 ]
+}

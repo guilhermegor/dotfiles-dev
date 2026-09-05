@@ -30,6 +30,10 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          # OWNER and REPO come from the env: block above. actionlint lints this
+          # run: script in isolation, so shellcheck cannot see them assigned and
+          # reports SC2153 (possible misspelling of `owner`/`repo`).
+          # shellcheck disable=SC2153
           # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
           source ai_clients/claude/hooks/lib/review_thread_gate.sh
 

@@ -49,8 +49,11 @@ list_drives() {
 # Select drive
 select_drive() {
     while true; do
-        read -p "$(echo -e ${CYAN}"Enter the drive to test (e.g. sdc): "${NC})" drive
-        
+        read -rp "$(echo -e ${CYAN}"Enter the drive to test (e.g. sdc): "${NC})" drive || {
+            print_status "info" "No input (stdin closed); exiting."
+            exit 0
+        }
+
         # Check if drive exists
         if [ ! -e "/dev/$drive" ]; then
             print_status "error" "Drive /dev/$drive does not exist."
@@ -78,8 +81,11 @@ select_drive() {
         
         # Confirm selection
         drive_size=$(lsblk -d -n -o SIZE "/dev/$drive")
-        read -p "$(echo -e ${CYAN}"You selected /dev/$drive (${drive_size}). Is this correct? [y/N]: "${NC})" confirm
-        
+        read -rp "$(echo -e ${CYAN}"You selected /dev/$drive (${drive_size}). Is this correct? [y/N]: "${NC})" confirm || {
+            print_status "info" "No input (stdin closed); exiting."
+            exit 0
+        }
+
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
             break
         fi

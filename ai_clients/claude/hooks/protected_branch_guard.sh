@@ -136,6 +136,16 @@ main() {
     # A `git push`/`git commit` inside a heredoc body is prose, not a command — strip bodies first.
     command="$(printf '%s\n' "$command" | strip_heredoc_bodies)"
 
+    # Join `\`-newline shell line continuations BEFORE splitting into lines/statements (issue #141):
+    # a `rtk git push origin \`<newline>`--delete <ref>` is ONE logical statement, but the per-line
+    # loop below treats every physical line as a statement boundary. Without this join, verb
+    # detection sees only line 1 (finds `push`, no `--delete`) and push_is_safe_deletion — reading
+    # the SAME truncated statement — never sees the flag/ref on the continuation line, so a safe
+    # multi-line delete is falsely BLOCKED. Removing the literal `\<newline>` mirrors real shell
+    # continuation semantics (which discard both bytes) and keeps every downstream check reading
+    # identical text.
+    command="${command//$'\\\n'/}"
+
     # cwd tracks the directory a `cd` earlier IN THIS SAME COMMAND leaves us in (issue #97): a
     # multi-line/`&&`-chained Bash command runs sequentially in one shell, so a `cd /other/repo`
     # two statements up is still in effect when `git commit` runs. "" means "no cd seen yet" ->

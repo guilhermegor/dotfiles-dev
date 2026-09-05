@@ -1,0 +1,44 @@
+name: review_retry
+
+# Re-asks CodeRabbit after an account-level rate-limit refusal. The quota is
+# shared across accounts (dotfiles-dev competes with blueprintx for the same
+# ~2 reviews/hour), and the refusal declares its own wait ("your next
+# included review will be available in N minutes" — windows measured at
+# 31/34/35/36 min). Reads that declared number instead of guessing a
+# cooldown: guessing low means asking early, being refused again, and
+# pushing the window further out (ported post blueprintx#272, v0.16.9).
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  retry:
+    name: retry rate-limited review
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request != null
+    steps:
+      - name: Detect rate-limit refusal and re-ask after the declared wait
+        env:
+          GH_TOKEN: ${{ secrets.CODERABBIT_TRIGGER_PAT }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          if [ "$COMMENT_AUTHOR" != "coderabbitai[bot]" ]; then
+            echo "not a CodeRabbit comment, nothing to do"
+            exit 0
+          fi
+
+          minutes=$(printf '%s' "$COMMENT_BODY" \
+            | grep -oE 'available in [0-9]+ minutes?' \
+            | grep -oE '[0-9]+' | head -1) || true
+          if [ -z "$minutes" ]; then
+            echo "not a rate-limit refusal, nothing to do"
+            exit 0
+          fi
+
+          echo "declared wait: ${minutes} minutes — sleeping before retry"
+          sleep "$((minutes * 60))"
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "@coderabbitai full review"

@@ -1,0 +1,32 @@
+name: coderabbit_trigger
+
+# Asks CodeRabbit for a review on every new PR. Required because CodeRabbit
+# does not auto-review a repo with fewer than 10 stars (dotfiles-dev#157),
+# and this repo is at 0 — without this ask, no PR here is ever reviewed.
+on:
+  pull_request:
+    types: [opened]
+    # Selective, not full-parity (dotfiles-dev#157): review is scarce and
+    # account-level (shared with blueprintx, ~2/hour), so it is spent where a
+    # defect is invisible — hooks/settings that silently change behaviour in
+    # every project — not uniformly on every PR.
+    paths:
+      - "ai_clients/claude/hooks/**"
+      - "ai_clients/claude/settings.json"
+
+jobs:
+  trigger:
+    name: ask CodeRabbit for a full review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request full review
+        # Must come from a user PAT, never GITHUB_TOKEN: CodeRabbit silently
+        # ignores bot-authored comments (dotfiles-dev#130). Must say "full
+        # review", not "review" — a plain "review" answers "already reviewed"
+        # for commits CodeRabbit has already seen on another PR (a reopen, a
+        # rebase, a re-PR); only the full form disregards that history.
+        env:
+          GH_TOKEN: ${{ secrets.CODERABBIT_TRIGGER_PAT }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: gh pr comment "$PR_NUMBER" --repo "$REPO" --body "@coderabbitai full review"

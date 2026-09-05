@@ -1,0 +1,8 @@
+# Reviewer roster for this repo — read by
+# ai_clients/claude/hooks/lib/review_thread_gate.sh (and the review_threads
+# workflow) to decide which accounts count as "a reviewer" versus "the PR
+# author", so a comment from a listed login does not need its own human reply.
+#
+# Not a copy of blueprintx's roster — one list per repo (dotfiles-dev#157).
+reviewers:
+  - login: coderabbitai[bot]

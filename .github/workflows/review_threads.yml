@@ -1,0 +1,61 @@
+name: review_threads
+
+# The review gate: a finding needs BOTH a REPLY (why it changed) and then a
+# RESOLVE — resolving alone records the bot's satisfaction, never the
+# reasoning, and the reasoning is what the next session reads.
+#
+# ⚠️ Triggers on pull_request_review / pull_request_review_comment, NEVER on
+# pull_request: a verdict computed at push time goes stale the instant a
+# review lands (blueprintx#180 merged with two threads open, all green).
+# ⚠️ Also fails when NO reviewer has reported at all, not only when a thread
+# is left open (blueprintx#213 merged unreviewed with every check green).
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited]
+
+jobs:
+  gate:
+    name: Review threads answered
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check review-thread state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
+          source ai_clients/claude/hooks/lib/review_thread_gate.sh
+
+          # Selective, not full-parity (dotfiles-dev#157): pull_request_review
+          # and pull_request_review_comment events carry no `paths:` filter,
+          # so the scope decision is re-checked here at runtime instead.
+          changed=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
+            --json files --jq '.files[].path')
+          if ! printf '%s\n' "$changed" | grep -qE '^ai_clients/claude/hooks/|(^|/)settings\.json$'; then
+            echo "no hooks/ or settings.json changes — gate not required (selective policy)"
+            exit 0
+          fi
+
+          # No review at all is a distinct failure from "thread left open" —
+          # the shared gate reports "clean" on zero threads, which is correct
+          # for its own soft-nudge callers but wrong for a required check.
+          review_count=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
+            --json reviews --jq '.reviews | length')
+          if [ "$review_count" -eq 0 ]; then
+            echo "::error::no reviewer has reported on this PR yet"
+            exit 1
+          fi
+
+          gate_pr_thread_state "$OWNER" "$REPO" "$PR_NUMBER" ".review-bots.yaml"
+          echo "$GATE_DETAIL"
+          if [ "$GATE_STATUS" != "clean" ]; then
+            echo "::error::review gate status=$GATE_STATUS"
+            exit 1
+          fi

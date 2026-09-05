@@ -926,7 +926,7 @@ main() {
         "")
             while true; do
                 show_menu
-                read -r choice
+                read -r choice || { print_status "info" "No input (stdin closed); exiting."; exit 0; }
 
                 case "$choice" in
                     1)

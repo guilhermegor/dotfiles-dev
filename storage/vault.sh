@@ -35,7 +35,10 @@ fi
 # warn about data loss
 print_status error "WARNING: This will erase ALL data on /dev/$device!"
 while true; do
-    read -p "$(print_status warning "Are you sure you want to continue? (y/n): ")" confirm
+    read -rp "$(print_status warning "Are you sure you want to continue? (y/n): ")" confirm || {
+        print_status info "No input (stdin closed); exiting."
+        exit 0
+    }
     case $confirm in
         [Yy]* ) break;;
         [Nn]* ) 

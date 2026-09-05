@@ -30,16 +30,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          # OWNER and REPO come from the env: block above. actionlint lints this
-          # run: script in isolation, so shellcheck cannot see them assigned and
-          # reports SC2153 (possible misspelling of `owner`/`repo`).
-          # shellcheck disable=SC2153
           # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
           source ai_clients/claude/hooks/lib/review_thread_gate.sh
 
           # Selective, not full-parity (dotfiles-dev#157): pull_request_review
           # and pull_request_review_comment events carry no `paths:` filter,
           # so the scope decision is re-checked here at runtime instead.
+          # OWNER and REPO come from the env: block above, which actionlint
+          # cannot see when it lints this run: script standalone — hence SC2153.
+          # shellcheck disable=SC2153
           changed=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
             --json files --jq '.files[].path')
           if ! printf '%s\n' "$changed" | grep -qE '^ai_clients/claude/hooks/|(^|/)settings\.json$'; then

@@ -90,3 +90,67 @@ payload() {
     run bash -c "payload 'gh pr edit 5 --title x' | '$GUARD'"
     [ "$status" -eq 0 ]
 }
+
+@test "ignores gh issue create even with a body flag (dotfiles-dev#154 defect 1)" {
+    # An issue has no PR-template obligation; the anchored 'gh pr create|edit' match must not
+    # widen to any gh create/edit carrying a body.
+    run bash -c "payload 'gh issue create --repo guilhermegor/dotfiles-dev --title x --body \"nothing useful\"' | '$GUARD'"
+    [ "$status" -eq 0 ]
+}
+
+# --- --repo resolution: dotfiles-dev#154 defect 2 -----------------------------------------------
+#
+# These override HOME to a throwaway directory so ~/github/<name> resolves to a fixture repo
+# instead of the real checkout tree, keeping the tests hermetic.
+
+@test "judges a gh pr create --repo TARGET against TARGET's template, not the session cwd's" {
+    local fake_home target
+    fake_home="$(mktemp -d)"
+    target="$fake_home/github/other-repo"
+    mkdir -p "$target/.github"
+    git init -q "$target"
+    printf '## Sign-off\n' > "$target/.github/PULL_REQUEST_TEMPLATE.md"
+
+    # $REPO (session cwd) requires Description/Testing; a body satisfying ONLY the target
+    # repo's Sign-off section must still pass — proving the target's template was used.
+    run env HOME="$fake_home" bash -c "payload 'gh pr create --repo someowner/other-repo --title x --body \"## Sign-off\"' | '$GUARD'"
+    [ "$status" -eq 0 ]
+    rm -rf "$fake_home"
+}
+
+@test "blocks against the --repo TARGET's sections even when cwd's template would pass" {
+    local fake_home target
+    fake_home="$(mktemp -d)"
+    target="$fake_home/github/other-repo"
+    mkdir -p "$target/.github"
+    git init -q "$target"
+    printf '## Sign-off\n' > "$target/.github/PULL_REQUEST_TEMPLATE.md"
+
+    # This body satisfies $REPO's own Description/Testing template but NOT the target's
+    # Sign-off — must block, proving the cwd's template was not the one enforced.
+    run env HOME="$fake_home" bash -c "payload 'gh pr create --repo someowner/other-repo --title x --body \"## Description\\n## Testing\"' | '$GUARD'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"Sign-off"* ]]
+    rm -rf "$fake_home"
+}
+
+@test "reports unresolvable (not non-compliant) when --repo has no local checkout" {
+    local fake_home
+    fake_home="$(mktemp -d)"
+    run env HOME="$fake_home" bash -c "payload 'gh pr create --repo someowner/ghost-repo --title x --body \"whatever\"' | '$GUARD'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"could not"* ]]
+    [[ "$output" != *"Missing required sections"* ]]
+    rm -rf "$fake_home"
+}
+
+@test "passes when the resolved --repo target has no PR template of its own" {
+    local fake_home target
+    fake_home="$(mktemp -d)"
+    target="$fake_home/github/no-template-repo"
+    mkdir -p "$target"
+    git init -q "$target"
+    run env HOME="$fake_home" bash -c "payload 'gh pr create --repo someowner/no-template-repo --title x --body \"whatever\"' | '$GUARD'"
+    [ "$status" -eq 0 ]
+    rm -rf "$fake_home"
+}

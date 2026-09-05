@@ -982,6 +982,49 @@ install_rust() {
 }
 
 # ============================================================================
+# POETRY (Python package manager, via pipx)
+# ============================================================================
+
+install_poetry() {
+    print_status "section" "POETRY (PYTHON PACKAGE MANAGER)"
+
+    if command_exists poetry; then
+        print_status "info" "poetry already installed: $(poetry --version 2>/dev/null)"
+        return 0
+    fi
+
+    # pipx installs the CLI in an isolated venv — the correct path on PEP 668
+    # distros (see install_gitlint above). The install_pipx bootstrapper
+    # normally provides pipx before this step runs.
+    if ! command_exists pipx; then
+        print_status "warning" "pipx not found — run the 'Python CLI tooling (pip + pipx)' step first"
+        return 1
+    fi
+
+    print_status "info" "Installing poetry via pipx..."
+    run_or_echo pipx install poetry &>> "$LOG_FILE"
+
+    if ! command_exists poetry; then
+        print_status "error" "poetry install failed — check $LOG_FILE"
+        return 1
+    fi
+
+    # Poetry 2.x dropped the built-in `shell` command; restore it via the
+    # official plugin so `poetry shell` (still documented in generated
+    # READMEs) keeps working. pipx's venv is isolated, so a plain `pip
+    # install` cannot reach it — inject is the supported path.
+    print_status "info" "Restoring 'poetry shell' via poetry-plugin-shell..."
+    run_or_echo pipx inject poetry poetry-plugin-shell &>> "$LOG_FILE"
+
+    # Puts each project's venv in its own .venv/ instead of the shared
+    # ~/.cache/pypoetry/virtualenvs — discoverable by editors and by
+    # `poetry run` from any subdirectory. Global + idempotent, safe to re-run.
+    run_or_echo poetry config virtualenvs.in-project true
+
+    print_status "success" "poetry installed: $(poetry --version 2>/dev/null)"
+}
+
+# ============================================================================
 # BLUEPRINTX (project scaffolding)
 # ============================================================================
 
@@ -1098,6 +1141,7 @@ INSTALL_REGISTRY+=(
     "install_typescript:TypeScript::"
     "install_nestjs:NestJS CLI::"
     "install_rust:Rust (asdf)::"
+    "install_poetry:Poetry (Python Package Manager)::"
     "install_blueprintx:BlueprintX (Project Scaffolding)::"
     "sync_globals_to_all_nvm_versions:Sync npm globals to all nvm versions::"
 )

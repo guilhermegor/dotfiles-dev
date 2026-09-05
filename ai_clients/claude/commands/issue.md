@@ -2,7 +2,7 @@
 name: c:issue
 allowed-tools: Bash(rtk gh issue*), Bash(rtk gh project*), Bash(rtk gh repo*), Bash(rtk gh api*), Bash(rtk git*), Bash(rtk proxy curl*), AskUserQuestion, Read, Grep
 description: Create or resume a tracked issue (assigned to you), add it to the kanban, and open a linked recommended-name branch
-argument-hint: "<description | #number | issue-url> [--new] [--parent <n>] [--work <type>] [--label <name>] [--project <name|number>] [--tracker <github|linear>]"
+argument-hint: "<description | #number | issue-url> [--new] [--quick] [--parent <n>] [--work <type>] [--label <name>] [--project <name|number>] [--tracker <github|linear>]"
 ---
 
 You are taking a work item end to end: an issue, its kanban card, and a linked branch — the
@@ -17,6 +17,16 @@ authoring half of a Linear-style flow. This command only sets the card's *starti
 
 Follow these steps exactly. `$ARGUMENTS` holds an issue reference *or* a work description,
 plus optional flags.
+
+**`--quick`** exists for the by-product case: an issue that surfaces mid-round, not the
+task at hand (dotfiles-dev#179 — measured 14/14 such issues on one session bypassing this
+command entirely via bare `gh issue create`, so step 4's classification table never ran
+and no card was ever placed). `--quick` keeps that classification reachable without the
+full interactive cost: it requires `--work <type>` (step 4's ask is already skipped by
+`--work` alone), forces a flat issue (step 5's ask never fires), and skips step 8 (no
+branch — you are not switching context to this work now). Title/slug inference, the
+issue create, and the board-card column set (step 7) all still run. If `--quick` is
+passed without `--work`, stop and ask for the work type — never default it silently.
 
 ## Three axes — never conflate them
 
@@ -112,6 +122,9 @@ Then:
   Order by relevance as returned; prefer open over closed when scores are close.
 - **Zero hits** → say so in one line and fall through to the create path.
 
+**`--quick`** skips this whole search-and-confirm dance — go straight to the create path
+unless `$ARGUMENTS` is itself an explicit reference (`#N`, a bare number, or an issues URL).
+
 Once resolved to an existing issue:
 
 - If it is closed, ask whether to reopen (`rtk gh issue reopen <N>` / `issueUpdate` with the
@@ -201,6 +214,8 @@ missing with `issueLabelCreate(input:{teamId:…,name:…})` before attaching th
 Default to a single flat issue. Ask about a parent/sub-issue split **only** when at least one
 of these holds — otherwise do not raise it at all:
 
+- `--quick` was passed → always flat; skip the ask entirely regardless of the other
+  triggers below.
 - `--parent <n>` was passed → file directly as a sub-issue of `<n>`; skip the ask entirely.
 - The **Escopo** section you are about to write would carry more than 3 bullets.
 - The description names two or more independently shippable deliverables.
@@ -338,6 +353,9 @@ Resolve the ids and set it:
 (`item-add` prints the item id; if not, get it from `rtk gh project item-list … --format json`.)
 
 ## 8. Open the linked branch — leaf issues only
+
+**`--quick` → skip this step entirely.** No branch is opened; report
+`Branch:  (skipped — --quick)` in step 9 instead of a ref.
 
 **Never cut a branch for a parent issue.** `branch_requires_issue_guard.sh` would allow it (the
 ref is real), but a parent is a container: a PR closing it would close the children's tracking

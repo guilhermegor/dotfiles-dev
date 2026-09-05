@@ -57,6 +57,16 @@ paths:
   durability are. Assume "do it properly and completely" unless told otherwise.
   (This does not license scope creep: keep the *change* minimal per *Simplicity
   first*, but make it a real fix, not a patch over the symptom.)
+  ⚠️ **A failing test is a finding, not an obstacle.** When a test fails, the
+  default is to fix the code, never the expectation. Changing an assertion to
+  match current behaviour is legitimate *only* when the expectation itself is
+  provably wrong — and then it is a change that must be stated and justified,
+  never made silently in the same commit that touches the code under test. The
+  same applies to deleting a test, marking it `skip`/`xfail`, broadening a
+  `pytest.raises`, or weakening an operator (`==` → `in`, `assertEqual` →
+  `assertTrue`). Editing an assertion is indistinguishable from correcting one
+  by diff shape alone — that is exactly why it needs a stated reason, not a
+  silent edit.
 - **Reproducibility:** prefer automated, deterministic solutions over manual steps.
 - Keep functions/methods small and single-purpose (SRP).
 - Immutability by default; mutate only at well-defined boundaries.

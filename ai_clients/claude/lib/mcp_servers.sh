@@ -19,6 +19,7 @@ install_mcp_servers() {
     _install_playwright_mcp
     _install_notesnook "$env_file"
     _install_linear
+    _install_notion
 }
 
 _install_linear() {
@@ -38,6 +39,27 @@ _install_linear() {
 
     print_status "success" "linear MCP registered (SSE transport, user scope)"
     print_status "info" "Run /mcp in Claude Code to complete Linear OAuth login"
+}
+
+_install_notion() {
+    # Notion ships a hosted remote MCP server authenticated via OAuth — no API
+    # key, so nothing is read from .env. Same shape as _install_linear. Notion's
+    # docs (developers.notion.com/guides/mcp/build-mcp-client) recommend
+    # Streamable HTTP as primary with SSE as fallback; we use SSE here to match
+    # the transport already proven by _install_linear. The browser OAuth flow
+    # runs on first use inside Claude Code (`/mcp` → notion → authenticate).
+    if claude mcp list 2>/dev/null | grep -q '^notion'; then
+        print_status "info" "notion MCP already registered — skipping"
+        return 0
+    fi
+
+    claude mcp add --scope user \
+        --transport sse \
+        notion \
+        "https://mcp.notion.com/sse"
+
+    print_status "success" "notion MCP registered (SSE transport, user scope)"
+    print_status "info" "Run /mcp in Claude Code to complete Notion OAuth login"
 }
 
 _install_tavily() {

@@ -1,13 +1,17 @@
 #!/bin/bash
-# PostToolUse (Bash matcher) hook: after syncing `main`, nudge when a release is DUE — the release
-# that gets FORGOTTEN.
+# PostToolUse (Bash matcher) hook: nudge when a release is DUE — the release that gets FORGOTTEN.
 #
 # Why this exists, and why it is separate from release_dispatch_guard.sh: the guard is a PreToolUse
 # on the release *dispatch*, so it only fires once you are ALREADY publishing. It stops the WRONG
 # release (a byte-identical wheel); it cannot stop the MISSING one — if a feat: landed in the shipped
-# package and nobody remembered to publish, no tool call happens and nothing warns. A hook also
-# CANNOT fire on "a PR was merged" (that is a GitHub event, not a tool call). So the closest
-# actionable moment to the merge is the next `main` sync — this hook.
+# package and nobody remembered to publish, no tool call happens and nothing warns. So this hook
+# watches for the two Bash tool calls that put a release in the DUE state:
+#
+#   1. A local `main`/`master` sync (`git pull`/`checkout`/`switch`) — the historical trigger.
+#   2. A `gh pr merge` — the NORMAL way work lands (dotfiles-dev#156). It runs server-side and never
+#      touches local HEAD, so it needed its own detection instead of falling under (1). A merge done
+#      through the GitHub web UI still can't be observed here (not a tool call at all) — that gap is
+#      real but out of scope for a hook.
 #
 # It reads the SAME shipped-paths source as the guard and the s:release skill (.claude/release.conf,
 # default src/ + pyproject.toml): if the three lists diverge they contradict each other — the
@@ -16,7 +20,7 @@
 # in the skill (it needs the network). This hook just points at the gap.
 #
 # Hook I/O contract: PostToolUse, so the tool already ran — this never blocks. It fails OPEN
-# everywhere (no jq, not a main sync, not on main, no tags, not a publishable repo, any error) by
+# everywhere (no jq, no gh, not a watched command, no tags, not a publishable repo, any error) by
 # exiting 0 silently; when a release is due (or clearly not) it emits an additionalContext note.
 # Never exits non-zero.
 
@@ -25,8 +29,7 @@ set -u
 command -v jq >/dev/null 2>&1 || exit 0
 
 main() {
-    local payload tool command root branch last_tag signal next
-    local -a paths
+    local payload tool command root
 
     payload="$(cat)"
     tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
@@ -35,39 +38,102 @@ main() {
     command="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
     [[ -n "$command" ]] || exit 0
 
-    is_main_sync "$command" || exit 0
-
     root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
-
-    # Only nudge once we are actually ON main/master — a `git pull` on a feature branch, or a
-    # `checkout -b`, matches the verb but is not a main sync. The current-branch check filters those
-    # instead of brittle-parsing the command's arguments.
-    branch="$(git symbolic-ref --short HEAD 2>/dev/null)" || exit 0
-    [[ "$branch" == "main" || "$branch" == "master" ]] || exit 0
 
     # "Publishable repo" gate: a package to release has an explicit release.conf or a pyproject.toml.
     # Without either, this repo ships no wheel (dotfiles-dev itself is one) — stay silent.
     [[ -r "$root/.claude/release.conf" || -e "$root/pyproject.toml" ]] || exit 0
 
-    last_tag="$(git describe --tags --abbrev=0 2>/dev/null)" || exit 0   # no tags → nothing to diff
-
-    mapfile -t paths < <(shipped_paths "$root")
-    if shipped_diff_empty "$last_tag" "${paths[@]}"; then
-        announce_none
-        exit 0
+    if is_main_sync "$command"; then
+        nudge_from_local_sync "$root"
+    elif is_pr_merge "$command"; then
+        nudge_from_pr_merge "$root" "$command"
     fi
-
-    signal="$(highest_signal "$last_tag")"
-    next="$(next_version "$last_tag" "$signal")" || { announce_none; exit 0; }
-    announce_due "$next" "$signal"
 }
 
 is_main_sync() {
     # A sync of `main`: `git pull`, or `git checkout|switch` (both optionally rtk-prefixed). The
-    # on-main check in main() confirms this actually landed us on main/master.
+    # on-main check in nudge_from_local_sync confirms this actually landed us on main/master.
     local cmd="$1"
     printf '%s' "$cmd" \
         | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+(pull|checkout|switch)([[:space:]]|$)'
+}
+
+is_pr_merge() {
+    # `gh pr merge`, optionally rtk-prefixed. Matches with or without an explicit PR number, any
+    # merge-method flag (--squash/--merge/--rebase), and --repo — those are all trailing args.
+    local cmd="$1"
+    printf '%s' "$cmd" \
+        | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'
+}
+
+nudge_from_local_sync() {
+    # Only nudge once we are actually ON main/master — a `git pull` on a feature branch, or a
+    # `checkout -b`, matches the verb but is not a main sync. The current-branch check filters those
+    # instead of brittle-parsing the command's arguments.
+    local root="$1" branch
+    branch="$(git symbolic-ref --short HEAD 2>/dev/null)" || exit 0
+    [[ "$branch" == "main" || "$branch" == "master" ]] || exit 0
+    check_release_due "$root" "HEAD"
+}
+
+nudge_from_pr_merge() {
+    # `gh pr merge` runs server-side: it never moves local HEAD, and the caller isn't necessarily on
+    # main. So instead of the branch check above, ask GitHub what actually happened — the merge
+    # state and its base branch — rather than assume success from the command having been run.
+    local root="$1" command="$2" number base
+    command -v gh >/dev/null 2>&1 || exit 0
+
+    number="$(pr_number_from_command "$command")"
+    base="$(merged_pr_base "$number")" || exit 0
+    [[ "$base" == "main" || "$base" == "master" ]] || exit 0
+
+    # The local main/master may not have been synced in a long time, or ever, under worktrees — never
+    # trust it. Force-update the remote-tracking ref to the real thing and diff against THAT: a stale
+    # local main would otherwise make the shipped-diff check report a false "nothing changed".
+    git fetch --quiet origin "+refs/heads/$base:refs/remotes/origin/$base" 2>/dev/null || exit 0
+    check_release_due "$root" "origin/$base"
+}
+
+pr_number_from_command() {
+    # First bare integer token in the command is the PR number; empty when omitted, which leaves
+    # merged_pr_base() to resolve the PR the same way `gh pr merge` itself does with no number: the
+    # PR associated with the current branch.
+    local cmd="$1"
+    printf '%s' "$cmd" | grep -Eo '[0-9]+' | head -1
+}
+
+merged_pr_base() {
+    # Ground truth from the API: MERGED state + its base branch, or failure if not merged / not
+    # resolvable (no PR context, network, auth) — never inferred from the Bash command having run.
+    local number="$1" json
+    local -a args=(pr view)
+    [[ -n "$number" ]] && args+=("$number")
+    # gh's --json flag takes ONE comma-separated field list, not multiple array elements.
+    # shellcheck disable=SC2054
+    args+=(--json state,baseRefName)
+
+    json="$(gh "${args[@]}" 2>/dev/null)" || return 1
+    [[ -n "$json" ]] || return 1
+    [[ "$(printf '%s' "$json" | jq -r '.state')" == "MERGED" ]] || return 1
+    printf '%s' "$json" | jq -r '.baseRefName'
+}
+
+check_release_due() {
+    local root="$1" ref="$2" last_tag signal next
+    local -a paths
+
+    last_tag="$(git describe --tags --abbrev=0 "$ref" 2>/dev/null)" || exit 0   # no tags → nothing
+
+    mapfile -t paths < <(shipped_paths "$root")
+    if shipped_diff_empty "$last_tag" "$ref" "${paths[@]}"; then
+        announce_none
+        exit 0
+    fi
+
+    signal="$(highest_signal "$last_tag" "$ref")"
+    next="$(next_version "$last_tag" "$signal")" || { announce_none; exit 0; }
+    announce_due "$next" "$signal"
 }
 
 shipped_paths() {
@@ -83,16 +149,16 @@ shipped_paths() {
 }
 
 shipped_diff_empty() {
-    local last_tag="$1"; shift
+    local last_tag="$1" ref="$2"; shift 2
     local out
-    out="$(git diff --name-only "$last_tag"..HEAD -- "$@" 2>/dev/null)" || return 1
+    out="$(git diff --name-only "$last_tag".."$ref" -- "$@" 2>/dev/null)" || return 1
     [[ -z "$out" ]]
 }
 
 highest_signal() {
     # breaking > feat > fix > none, over commit subjects+bodies since the tag.
-    local last_tag="$1" log
-    log="$(git log "$last_tag"..HEAD --format='%s%n%b' 2>/dev/null)" || { printf 'none'; return; }
+    local last_tag="$1" ref="$2" log
+    log="$(git log "$last_tag".."$ref" --format='%s%n%b' 2>/dev/null)" || { printf 'none'; return; }
     printf '%s' "$log" | grep -Eq 'BREAKING[ -]CHANGE|^[a-z]+(\([^)]*\))?!:' && { printf 'breaking'; return; }
     printf '%s' "$log" | grep -Eq '^feat(\([^)]*\))?:' && { printf 'feat'; return; }
     printf '%s' "$log" | grep -Eq '^fix(\([^)]*\))?:' && { printf 'fix'; return; }

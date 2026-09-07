@@ -219,7 +219,7 @@ of these holds — otherwise do not raise it at all:
 - `--parent <n>` was passed → file directly as a sub-issue of `<n>`; skip the ask entirely.
 - The **Escopo** section you are about to write would carry more than 3 bullets.
 - The description names two or more independently shippable deliverables.
-- A `s:shape-up` artifact for this work exists with more than one scope.
+- A `s:problem-framing` artifact for this work exists with more than one scope.
 
 When you do ask, offer: one flat issue, or a parent plus one sub-issue per deliverable (list the
 deliverables you inferred so the user can correct them).

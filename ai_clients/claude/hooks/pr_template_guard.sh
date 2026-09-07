@@ -72,7 +72,7 @@ main() {
     if [[ -n "$bodyfile" && -r "$bodyfile" ]]; then
         body_source="$(cat "$bodyfile")"
     elif has_body_file_flag "$command"; then
-        block_unresolved_body_file "$command"
+        block_unresolved_body_file "$command" "$root"
     else
         body_source="$command"
     fi
@@ -172,23 +172,40 @@ has_body_file_flag() {
 }
 
 block_unresolved_body_file() {
-    # A PreToolUse hook sees the command BEFORE shell expansion, so `--body-file "$SP/body.md"`
-    # arrives as the literal string `$SP/body.md` — unreadable. That unexpanded-variable case is
-    # the common real trigger (dotfiles-dev#78), so name it in the diagnostic.
+    # A PreToolUse hook sees the command BEFORE shell expansion, AND runs sandboxed to the
+    # project directory — either fact alone can make an otherwise-fine --body-file unreadable
+    # HERE while the file is perfectly readable everywhere else. A generic "check the path" then
+    # sends the author chasing a typo or permission bug that does not exist (dotfiles-dev#109),
+    # so name the actual cause: an unexpanded shell variable, a path outside the project
+    # directory (this hook's filesystem view is sandboxed to the project — dotfiles-dev#109), or
+    # the file genuinely not existing yet (dotfiles-dev#78, e.g. create-and-consume in one call).
+    local cmd="$1" root="${2:-}" path
+    path="$(extract_body_file_raw "$cmd")"
+
     {
         echo "BLOCKED: the --body-file could not be read, so the PR body was never verified."
         echo
         echo "A --body-file/-F was passed but does not resolve to a readable file. A template"
         echo "verdict derived from any other source (the command line, the --title) would be a"
         echo "guess, not a check — so this fails loud instead of rescanning silently."
-        if printf '%s' "$1" | grep -Eq -- '(--body-file[[:space:]=]|-F[[:space:]])[^[:space:]]*[$`]'; then
+        if [[ "$path" == *'$'* || "$path" == *'`'* ]]; then
             echo
             echo "The path contains an unexpanded shell variable or \$(…) — this hook sees the"
             echo "command before the shell expands it. Pass a literal path, or inline the body"
             echo "with --body \"\$(cat file.md)\" (the substituted text then reaches the hook)."
+        elif [[ -n "$root" && "$path" == /* && "$path" != "$root"/* ]]; then
+            echo
+            echo "The path is outside the project directory ($root), which this hook cannot"
+            echo "read — its filesystem view is sandboxed to the project. Move the file inside"
+            echo "the repo (e.g. $root/.git/, which stays out of the worktree and any commit),"
+            echo "then re-run the SAME gh command with the new path."
+        else
+            echo
+            echo "If the file is created and consumed in the same command (e.g. \`cat >file &&"
+            echo "gh pr create --body-file file\`), this hook still sees the pre-write state —"
+            echo "write the file in a prior, separate step, then re-run this command. Otherwise"
+            echo "check the path exists and is readable, then re-run the SAME gh command."
         fi
-        echo
-        echo "Check the path exists and is readable, then re-run the SAME gh command."
     } >&2
     exit 2
 }
@@ -219,6 +236,20 @@ extract_body_file() {
         s="${s#*"$matched"}"  # advance past this candidate, keep looking
     done
     return 0
+}
+
+# Echo the FIRST --body-file/-F candidate value, unfiltered by readability. Used only for
+# diagnostics once every candidate in extract_body_file has already failed the readable check —
+# it needs the literal, as-written path to tell "unexpanded shell var" from "outside the project
+# dir" apart, which a readability-filtered result (always empty at that point) cannot do.
+extract_body_file_raw() {
+    local s="$1" re val
+    re='(--body-file[[:space:]=]+|-F[[:space:]]+)("[^"]+"|'\''[^'\'']+'\''|[^[:space:]]+)'
+    [[ "$s" =~ $re ]] || return 0
+    val="${BASH_REMATCH[2]}"
+    val="${val#[\"\']}"   # strip a leading quote, if any
+    val="${val%[\"\']}"   # strip a trailing quote, if any
+    printf '%s' "$val"
 }
 
 main "$@"

@@ -69,6 +69,41 @@ skips its own prompt during a `run` invocation to avoid asking twice. This helpe
 is **not** a `claude/main.sh` STEPS-registry step — it is client-agnostic and
 must run before client discovery.
 
+## Agent-agnostic bridge (`ai_clients/shared/AGENTS.md`)
+
+| | |
+|---|---|
+| **Source** | `ai_clients/shared/AGENTS.md` |
+| **Installs to** | `~/.claude/AGENTS.md` (Claude, via `@AGENTS.md` import in `~/.claude/CLAUDE.md`) |
+| **Lib script** | `ai_clients/claude/lib/shared_agents_md.sh` → `install_shared_agents_md()`, step key `shared_agents_md` |
+
+**The seam: `AGENTS.md` is the source; each tool's config is a generated
+view (or an import) of it, never a second hand-authored copy.** One
+authored file plus N generated/imported views cannot drift; two authored
+files covering the same policy always will. Concretely:
+
+- `ai_clients/claude/config/CLAUDE.md` carries `@AGENTS.md` as an import —
+  Claude Code's own import mechanism, already proven by the existing
+  `@RTK.md` import — so the shared content is never re-typed there. Only
+  genuinely Claude-Code-specific mechanics (hook names, tool names,
+  `dangerouslyDisableSandbox`, ...) stay inline in `config/CLAUDE.md`.
+- Any tool whose global-instructions format has no import syntax deploys
+  its own literal copy of the same source file (see
+  `ai_clients/codex/config/AGENTS.md` / `ai_clients/codex/lib/agents_md.sh`
+  for the existing example of that deploy pattern — that file is
+  hand-authored today, a follow-up should point it at this shared source
+  instead of maintaining independent prose).
+- Content belongs in `ai_clients/shared/AGENTS.md` only if it holds for any
+  agent driving this machine (RTK proxy policy, verifying git writes
+  landed, Conventional Commits, `Decimal` policy). Anything that names a
+  hook, a skill, a subagent, plan mode, or a memory path is Claude-Code-
+  specific and stays under `ai_clients/claude/`.
+
+Do not symlink the deployed copies to the source — a symlink degrades to a
+broken plain-text file on a Windows checkout without Developer Mode
+(measured on the repo-level sibling of this mechanism, blueprintx#273), and
+these dotfiles are installed across machines.
+
 ## Three artifact types
 
 ### 1. Commands (slash commands)

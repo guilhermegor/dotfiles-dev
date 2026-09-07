@@ -1,67 +1,31 @@
 @RTK.md
+@AGENTS.md
 
-## CLI Commands — Always Use RTK Proxy
+The shared `AGENTS.md` import above carries the agent-agnostic core (RTK
+proxy policy, verifying git writes landed, Conventional Commits, `Decimal`
+policy) — it is read by every AI agent driving this machine, not just
+Claude Code. The Claude-Code-specific mechanics behind those same policies
+live here:
 
-For any command RTK supports (`git`, `gh`, `find`, `grep`, `ls`, `curl`,
-`docker`, `pytest`, `cargo`, etc.), write the `rtk` prefix explicitly in
-agents, skills, and commands — never the bare binary. See RTK.md for the
-full list.
-
-Why: the `PreToolUse` hook rewrites at execution time, but the approval
-prompt shows the pre-hook command, so "don't ask again" creates a wrong
-allowlist entry (`Bash(git *)` instead of `Bash(rtk git *)`).
-
-Commands RTK does not wrap run bare as normal (`sqlite3`, `jq`, `make`,
-`python3`, `node`, etc.).
-
-Exceptions where bare binary is always correct:
-- `command -v <tool>` availability checks
-- Install instructions (`sudo apt install ...`)
-- Prohibition examples in "Do Not" sections
-
-### Never infer existence from rtk-proxied `ls`/`find` output
-
-The rtk proxy can collapse real `ls`/`find`/`grep` results to `(empty)` to save
-tokens — so an empty-looking result is **"unknown", never "absent"**. Acting on a
-false negative silently skips real files (PR templates, populated stores, lessons
-files) and has repeatedly produced wrong "this is empty / does not exist" claims.
-
-- To check whether a path exists, use the **Read** or **Glob** tool — never
-  rtk-proxied `ls`/`find`.
-- To list a directory reliably, use **Glob** (`dir/**`) or the raw escape hatch
-  **`rtk proxy ls <dir>`** / **`rtk proxy find <dir>`** (RTK.md: "execute raw
-  command without filtering").
-- If a result looks empty but anything (a memory, an index, prior knowledge) says
-  the path should exist, verify with `Read`/`Glob` before concluding absence. A
-  negative from a lossy channel is not evidence.
-
-### Git writes run under the sandbox — verify HEAD, never `| tail` a commit
-
-A `git commit`/`push`/`tag`/`branch -d/-D` run through the Bash tool executes in the
-**default sandbox** overlay. It can print full success — every pre-commit hook `Passed`,
-`[branch abc123] N files changed` — while **the ref update is discarded on teardown and HEAD
-never moves**. A push then ships a branch missing the "committed" work. The rtk proxy is
-orthogonal here: it only rewrites `git …` → `rtk git …`; the sandbox overlay, a Claude Code
-harness behaviour, is what drops the write. So **leaving git writes unproxied is not the fix**
-(evaluated for dotfiles-dev#79 — cosmetic, the proxy is not the persistence culprit).
-
-One symptom, **two** independent causes — check for both:
-
-1. **Sandbox overlay non-persistence** → run every git write with
-   `dangerouslyDisableSandbox: true`.
-2. **A pre-commit hook rejected the commit and `| tail`/`| grep` hid the failure line.** The
-   hook list is long, so a tailed commit shows only trailing `Passed` lines while the rejection
-   (`codespell`, `gitlint`, `ruff E501`) scrolled off — HEAD is unchanged because the commit
-   really failed.
-
-Robust practice:
-
-- Run git writes with `dangerouslyDisableSandbox: true`.
-- **Never pipe `git commit` through `tail`/`head`/`grep`.** Use full output, then in the same
-  call: `echo "===EXIT=$?===" ; git log --oneline -1`. A non-zero exit or an unmoved HEAD means
-  it did **not** land. If output must be trimmed, `grep -nE 'Failed|error|rejected'`, never `tail`.
-- **Ground truth when unsure:** `Read` `.git/refs/heads/<branch>` (or `.git/logs/HEAD`) directly
-  — a proxied `git log`/`rev-parse` can read the same overlay and lie.
+- **RTK rewrite hook.** The `PreToolUse` hook rewrites `git …` → `rtk git …`
+  at execution time, but the approval prompt shows the pre-hook command, so
+  "don't ask again" creates a wrong allowlist entry (`Bash(git *)` instead
+  of `Bash(rtk git *)`) unless the `rtk` form is what was typed.
+- **Filtered-listing checks.** Use the **Read** or **Glob** tool — never
+  rtk-proxied `ls`/`find` — to confirm a path exists. List a directory
+  reliably with **Glob** (`dir/**`) or the raw escape hatch
+  `rtk proxy ls <dir>` / `rtk proxy find <dir>`.
+- **Git writes run under the sandbox.** A `git commit`/`push`/`tag`/
+  `branch -d/-D` run through the Bash tool executes in the **default
+  sandbox** overlay, which can print full success while the ref update is
+  discarded on teardown and HEAD never moves. This is a Claude Code harness
+  behaviour, not an RTK proxy issue (evaluated for dotfiles-dev#79 —
+  cosmetic, the proxy is not the persistence culprit). Run every git write
+  with `dangerouslyDisableSandbox: true`, then apply the shared AGENTS.md
+  verification steps above. A rejected pre-commit hook is the other cause
+  of the same symptom — never pipe `git commit` through `tail`/`head`/
+  `grep`, since a rejection (`codespell`, `gitlint`, `ruff E501`) can scroll
+  off past trailing `Passed` lines.
 
 ## Author Claude artifacts in dotfiles-dev, never only in live `~/.claude/`
 
@@ -117,13 +81,6 @@ NOT built: there is no remaining-context-window signal readable from the hook
 environment, and a wall-clock/token-percentage alarm was evaluated and rejected — a
 90%-alarm narrows the window in which the damage happens without shrinking the damage
 itself, and it fires exactly when there is least room left to act.
-
-## Version Control
-
-- Conventional Commits: `feat:`, `fix:`, `chore:`, `test:`, `docs:`, `refactor:`.
-- Atomic commits: one logical change per commit.
-- Never commit secrets, credentials, or local config files.
-- `.gitignore` before first commit.
 
 ## Tutoring — resume before replacing
 

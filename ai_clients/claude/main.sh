@@ -20,6 +20,7 @@ source "$SCRIPT_DIR/lib/slash_commands.sh"
 source "$SCRIPT_DIR/lib/skills.sh"
 source "$SCRIPT_DIR/lib/agents.sh"
 source "$SCRIPT_DIR/lib/claude_md.sh"
+source "$SCRIPT_DIR/lib/shared_agents_md.sh"
 source "$SCRIPT_DIR/lib/rules.sh"
 source "$SCRIPT_DIR/lib/mcp_servers.sh"
 source "$SCRIPT_DIR/lib/profiles.sh"
@@ -87,6 +88,7 @@ STEPS=(
     "skills|Install user skills"
     "agents|Install pipeline agents"
     "claude_md|Install global CLAUDE.md"
+    "shared_agents_md|Install shared agent-agnostic AGENTS.md"
     "rules|Install language rules (python.md, ...)"
     "marketplaces|Register plugin marketplaces"
     "plugins|Promote plugins to user scope"
@@ -106,6 +108,7 @@ dispatch_step() {
         skills)         install_skills ;;
         agents)         install_agents ;;
         claude_md)      install_claude_md ;;
+        shared_agents_md) install_shared_agents_md ;;
         rules)          install_rules ;;
         marketplaces)   print_status "section" "REGISTERING MARKETPLACES"    && run_marketplaces ;;
         plugins)        print_status "section" "PROMOTING PLUGINS TO USER SCOPE" && run_plugins ;;

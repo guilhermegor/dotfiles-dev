@@ -852,6 +852,175 @@ install_veracrypt_appimage() {
 }
 
 # ============================================================================
+# OPENLOGI (Logitech HID++ device manager — replaces Solaar, see issue #235)
+# ============================================================================
+# Local-first alternative to Logitech Options+. No apt/dnf/pacman repo exists
+# (see distro_config CLAUDE.md "App Installation Preference Order" #1 —
+# official .deb from vendor); the vendor's own download page 302-redirects
+# "linux-<arch>" to the current release asset, so it doubles as a poor man's
+# "latest" channel without a GitHub API call.
+#
+# Only one HID++ manager may hold a receiver at a time, so this repo never
+# installs openlogi alongside Solaar (Solaar is fully removed — see #237).
+
+# Verify the downloaded .deb against the release's own SHA256SUMS before it is handed to
+# `sudo apt-get install`. The vendor's "latest" URL deliberately hides both the version and
+# the asset name, so the redirect has to be resolved first — SHA256SUMS is published beside
+# the asset it covers, in the same release directory.
+#
+# Fails CLOSED: an unverifiable download is not installed. A .deb is unpacked as root, so
+# "could not check" and "checksum did not match" earn the same answer.
+_verify_openlogi_deb() {
+    local deb_file="$1" deb_url="$2"
+    local effective_url asset_name sums_url sums_file actual
+
+    if [ "${DRY_RUN:-0}" = "1" ]; then
+        print_status "info" "[dry-run] would verify $deb_file against the release SHA256SUMS"
+        return 0
+    fi
+
+    if ! command_exists sha256sum; then
+        print_status "warning" "sha256sum unavailable — cannot verify the openlogi .deb"
+        return 1
+    fi
+
+    effective_url=$(curl -fLs -o /dev/null -w '%{url_effective}' "$deb_url" 2>>"$LOG_FILE") \
+        || effective_url=""
+    if [ -z "$effective_url" ] || [ "$effective_url" = "$deb_url" ]; then
+        print_status "warning" "Could not resolve the openlogi release asset URL for verification"
+        return 1
+    fi
+
+    asset_name="${effective_url##*/}"
+    sums_url="${effective_url%/*}/SHA256SUMS"
+    sums_file="$(dirname "$deb_file")/SHA256SUMS"
+
+    if ! curl -fLs -o "$sums_file" "$sums_url" 2>>"$LOG_FILE"; then
+        print_status "warning" "Could not download SHA256SUMS from $sums_url"
+        return 1
+    fi
+
+    actual=$(sha256sum "$deb_file" | awk '{print $1}')
+    if grep -qiE "^${actual}[[:space:]]+\*?${asset_name}\$" "$sums_file"; then
+        print_status "success" "openlogi .deb verified against $asset_name"
+        return 0
+    fi
+
+    print_status "error" "Checksum mismatch — $asset_name not matched in SHA256SUMS"
+    return 1
+}
+
+install_openlogi() {
+    print_status "section" "OPENLOGI"
+
+    if command_exists openlogi; then
+        print_status "info" "openlogi already installed"
+    else
+        print_status "info" "Installing openlogi (Logitech HID++ manager)..."
+
+        local arch download_arch
+        arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
+        case "$arch" in
+            amd64|x86_64)  download_arch="amd64" ;;
+            arm64|aarch64) download_arch="arm64" ;;
+            *)
+                print_status "warning" "openlogi has no prebuilt package for architecture: $arch"
+                print_status "info" "Install manually from: https://openlogi.org/download/linux"
+                return 1
+                ;;
+        esac
+
+        case "$PACKAGE_MANAGER" in
+            apt)
+                local tmp_dir deb_url
+                tmp_dir=$(mktemp -d)
+                deb_url="https://openlogi.org/download/linux-${download_arch}"
+
+                if run_or_echo curl -fL -o "$tmp_dir/openlogi.deb" "$deb_url" 2>>"$LOG_FILE"; then
+                    if _verify_openlogi_deb "$tmp_dir/openlogi.deb" "$deb_url"; then
+                        if run_or_echo sudo apt-get install -y "$tmp_dir/openlogi.deb"; then
+                            print_status "success" "openlogi installed from official .deb"
+                        else
+                            print_status "warning" "openlogi .deb installation failed"
+                        fi
+                    else
+                        print_status "error" "openlogi .deb failed checksum verification — NOT installing"
+                    fi
+                else
+                    print_status "warning" "Failed to download openlogi .deb from $deb_url"
+                fi
+                rm -rf "$tmp_dir"
+                ;;
+            dnf|yum|pacman|zypper)
+                print_status "warning" "openlogi has no $PACKAGE_MANAGER repository; only the .deb download is automated"
+                print_status "info" "Download the .rpm / .pkg.tar.zst manually from: https://openlogi.org/download/linux"
+                return 1
+                ;;
+            *)
+                print_status "warning" "openlogi installation is not automated for $PACKAGE_MANAGER"
+                print_status "info" "Install manually from: https://openlogi.org/download/linux"
+                return 1
+                ;;
+        esac
+    fi
+
+    _link_openlogi_config
+
+    if command_exists systemctl; then
+        print_status "info" "Enabling openlogi-agent user service..."
+        run_or_echo systemctl --user enable --now openlogi-agent.service 2>>"$LOG_FILE" \
+            || print_status "warning" "Could not enable openlogi-agent.service — enable manually after next login"
+    fi
+
+    verify_openlogi
+}
+
+# Symlink the repo-tracked config.toml into ~/.config/openlogi/ so button/DPI/
+# SmartShift bindings survive a reinstall. Any pre-existing non-symlink file
+# is backed up rather than clobbered (bindings don't auto-migrate from Solaar
+# — see #237).
+_link_openlogi_config() {
+    local repo_root source_file config_dir target_file
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || return 1
+    source_file="$repo_root/distro_config/dotfiles/openlogi/config.toml"
+    config_dir="$HOME/.config/openlogi"
+    target_file="$config_dir/config.toml"
+
+    if [ ! -f "$source_file" ]; then
+        print_status "warning" "Tracked openlogi config.toml not found at $source_file"
+        return 1
+    fi
+
+    run_or_echo mkdir -p "$config_dir"
+
+    if [ -L "$target_file" ] && [ "$(readlink -f "$target_file")" = "$(readlink -f "$source_file")" ]; then
+        print_status "info" "openlogi config.toml already symlinked"
+        return 0
+    fi
+
+    if [ -e "$target_file" ] && [ ! -L "$target_file" ]; then
+        print_status "info" "Backing up existing openlogi config.toml..."
+        run_or_echo mv "$target_file" "$target_file.bak.$(date +%Y%m%d%H%M%S)"
+    fi
+
+    run_or_echo ln -sf "$source_file" "$target_file"
+    print_status "success" "openlogi config.toml symlinked from repo"
+}
+
+verify_openlogi() {
+    print_status "info" "Verifying openlogi installation..."
+
+    if command_exists openlogi; then
+        print_status "success" "openlogi is ready"
+        print_status "info" "openlogi: Logitech HID++ manager — GUI: 'openlogi-desktop', CLI: 'openlogi'"
+        print_status "info" "Bindings live in ~/.config/openlogi/config.toml (tracked in this repo)"
+    else
+        print_status "warning" "openlogi could not be verified"
+        print_status "info" "Install manually from: https://openlogi.org/download/linux"
+    fi
+}
+
+# ============================================================================
 # UTILITIES ROLLUP (calls fastfetch + 4k_video_downloader)
 # ============================================================================
 # install_4k_video_downloader lives in media.sh; it'll be available at call time
@@ -868,7 +1037,6 @@ install_utilities() {
         "p7zip-full:p7zip:p7zip-full:p7zip"
         "timeshift:timeshift:timeshift:timeshift"
         "kdeconnect:kdeconnect:kdeconnect:kdeconnect"
-        "solaar:solaar:solaar:solaar"
         "flameshot:flameshot:flameshot:flameshot"
         "lynx:lynx:lynx:lynx"
     )
@@ -923,7 +1091,6 @@ install_utilities() {
     esac
 
     print_status "success" "System utilities installed"
-    print_status "info" "Solaar: Logitech device manager - launch with 'solaar' command"
     print_status "info" "Piper: Gaming device configuration tool"
     print_status "info" "Flameshot: Screenshot tool - launch with 'flameshot' command"
     print_status "info" "Lynx: Terminal-based web browser - launch with 'lynx' command"
@@ -937,6 +1104,7 @@ install_utilities() {
 
 INSTALL_REGISTRY+=(
     "install_utilities:System Utilities::"
+    "install_openlogi:openlogi (Logitech HID++ manager):Sistema:"
     "install_fastfetch:fastfetch (system info):Sistema:fastfetch.desktop"
     "install_flameshot:Flameshot Screenshot Tool:Utilitarios:org.flameshot.Flameshot.desktop"
     "install_rofi:Rofi Launcher:Utilitarios:rofi.desktop"

@@ -411,8 +411,7 @@ organize_app_folders() {
         'nvidia-settings.desktop' 'software-properties-drivers.desktop'
         'gnome-firmware-panel.desktop' 'gnome-firmware.desktop' 'firmware-updater.desktop'
         'org.gnome.firmware.desktop' 'org.gnome.Firmware.desktop' 'fwupd.desktop'
-        'solaar.desktop' 'io.github.pwr_solaar.solaar.desktop'
-        
+
         # Language & Locale
         'gnome-language-selector.desktop' 'language-selector.desktop'
         

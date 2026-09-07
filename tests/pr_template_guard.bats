@@ -53,6 +53,26 @@ payload() {
     [[ "$output" == *"unexpanded shell variable"* ]]
 }
 
+@test "fails loud and names the cause for a literal --body-file outside the project dir (#109)" {
+    # A literal, absolute path that is genuinely outside the repo root this hook resolves
+    # (dotfiles-dev#109): the old message said "check the path exists and is readable", which
+    # is false and sends the author chasing a typo that isn't there. Must name the real cause.
+    run bash -c "payload 'gh pr create --title x --body-file /tmp/outside-repo-109/body.md' | '$GUARD'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"outside the project directory"* ]]
+    [[ "$output" != *"unexpanded shell variable"* ]]
+}
+
+@test "still names the create-and-consume/typo cause for a literal path inside the repo (#78)" {
+    # A literal, absolute path INSIDE the repo root that simply does not exist yet must keep the
+    # #78 behaviour (fail loud) without being misdiagnosed as "outside the project directory".
+    run bash -c "payload 'gh pr create --title x --body-file $REPO/never-written.md' | '$GUARD'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"could not be read"* ]]
+    [[ "$output" != *"outside the project directory"* ]]
+    [[ "$output" != *"unexpanded shell variable"* ]]
+}
+
 @test "passes a readable compliant --body-file" {
     printf '## Description\nx\n## Testing\ny\n' > "$REPO/body.md"
     run bash -c "payload 'gh pr create --title x --body-file $REPO/body.md' | '$GUARD'"

@@ -1,0 +1,18 @@
+# OpenAI Codex CLI configuration.
+# Deployed to $CODEX_HOME/config.toml (defaults to ~/.codex/config.toml) by
+# `./ai_clients/main.sh codex config`. Edit this source file, never the
+# deployed copy — it is overwritten on every deploy.
+#
+# Full schema: https://github.com/openai/codex/blob/main/codex-rs/config/src/config_toml.rs
+
+# Prompt before approving commands that need one, but do not re-prompt for
+# every read-only action — mirrors the "ask on writes/network, allow reads"
+# posture already used for Claude Code in ai_clients/claude/settings.json.
+approval_policy = "on-request"
+
+# Allow writes inside the current workspace without a sandbox escape prompt;
+# still blocks network access and access outside the project directory.
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false

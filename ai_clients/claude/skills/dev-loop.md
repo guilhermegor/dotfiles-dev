@@ -150,8 +150,35 @@ its own terms, and blind.
 running **6 times in 21 hours** — GitHub throttles scheduled workflows on low-activity repos,
 hardest where the mechanism is most needed. `schedule:` is the one trigger GitHub is free to skip.
 
-1. **Is the slot free?** Read the newest roster notice per PR: a rate-limit notice means turned
-   away, a completion means it ran. Busy → **say so** and move on.
+1. **Classify the slot, three states plus an escape hatch — never a binary busy/free.** Read the
+   newest roster notice, querying `is:pr` **without** `is:open`: a PR that merged since its last
+   notice still spent the same account-level quota, and scoping to open PRs alone makes that spend
+   invisible.
+
+   | state | discriminator | means |
+   |---|---|---|
+   | `REVIEW-LIMITED` | body matches `rate limit`, no `chat message` | busy — honour the stated wait ("Please wait 4 minutes and 37 seconds") when the notice carries one; fixed-window only when it doesn't |
+   | `CHAT-LIMITED` | body contains `chat message` | a **different** quota was hit — review slot untouched, treat as free |
+   | `OK` | no rate-limit notice newer than the last completed review | free |
+   | `UNKNOWN` | matches `rate limit` but neither phrase is conclusive | **not** free — treat as busy and say so; an unrecognised notice must never default to OK |
+
+   🔴 Measured on blueprintx, 562 notices over 7 days: 89.5% REVIEW, 10.5% CHAT — and the *newest*
+   notice decides, so one CHAT notice landing last must not read as an hour-long block when the real
+   wait was 4m37s (blueprintx#363, 2026-08-30 18:44:28Z).
+
+   ⚠️ **A push this round is an ask too, even with no notice.** CodeRabbit re-reviews on push, and a
+   push-triggered re-review posts no roster comment — the notice can read `OK` while the quota is
+   already spent. If RESCUE or THREADS pushed to any open PR earlier **this round**, treat the slot
+   as already contended and **re-read the roster note immediately before step 3 below**, not from a
+   read taken at the top of the round. Measured 2026-09-03: pushes at 12:25 and 12:32 (thread fixes)
+   each triggered a silent re-review, and the deliberate ask at 12:33 was refused with "next included
+   review will be available in 49 minutes" — a window that had grown from 8 minutes an hour earlier,
+   priced by pushes nobody counted. ⚠️ Do not fix this with a `sleep`: the window is an account-level
+   quota, not elapsed-time-since-last-ask, and sleeping into it stops the loop doing the other six
+   things. 🎯 Whether THREADS should run *after* this step is a real question — a deliberate ask
+   beats a push to the quota if issued first — but **measure before reordering**: THREADS unblocks
+   merges directly and may be worth more than one ask. Keep the current order until that trade-off
+   has a number behind it.
 2. **Pick the candidate — blast radius first, age second.**
    - **Filter to PRs whose ONLY blocker is the review gate** (`BLOCKED`, and the review check is
      the sole red). ⚠️ A `DIRTY` PR is not a candidate: a review cannot resolve a merge conflict,
@@ -176,8 +203,21 @@ hardest where the mechanism is most needed. `schedule:` is the one trigger GitHu
    🎯 **Before spending the ask, check whether a cheaper lever exists.** A `DIRTY` PR holding a
    contended file is unblocked by a rebase — free, no slot, no waiting. Resolving those first
    raises the value of the *next* ask instead of consuming this one.
-3. **At most one ask per round.** A burst genuinely trips the account limit — 12 rate-limit notices
-   in 11 minutes, measured.
+3. **At most one ask per round — comment or push, whichever came first.** A burst genuinely trips
+   the account limit — 12 rate-limit notices in 11 minutes, measured.
+
+   🔴 **Then stop reading the ack.** CodeRabbit edits the acknowledgement **in place**: measured on
+   blueprintx#330, 2026-09-01, the same comment id read `"Full review triggered"` at +10s and
+   `"⚠️ Action not completed — Review rate limited."` after an edit at +8s post-create —
+   `createdAt` unchanged, comment id unchanged, nothing about its identity revealing the swap. A
+   poller that reads once and stops cannot tell an acceptance from a refusal-in-progress, and no
+   fixed wait is safe against an edit that landed at +8s.
+
+   The durable evidence is a **submitted review attributed to the head commit**, which step 4's gate
+   already computes and cannot be edited away. So: **post the ask, report "requested — verdict
+   pending," and let step 4 settle it next round.** Do not poll the ack — a refusal and an
+   acceptance-then-refusal are the same outcome, and the ack only answers a question the gate answers
+   more reliably.
 
 Report **time-to-first-review per PR**, never requests per hour: a PR sitting unreviewed is the
 user-visible cost, and that is the number this step must move.

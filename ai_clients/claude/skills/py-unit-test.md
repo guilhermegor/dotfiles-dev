@@ -38,12 +38,15 @@ State which dependencies were detected at the top of the generated test file as 
 
 ## Coding standards
 
-Before writing any code, read the shared standards document:
+Before writing any code, read the shared standards documents:
 
+    Read ~/.claude/skills/test/SKILL.md
     Read ~/.claude/skills/py-standards/SKILL.md
 
-Apply every rule in that document to the test code you produce. The sections
-below are additional standards specific to test files.
+`s:test` owns the language-agnostic vocabulary — AAA/GWT/setup-exercise-teardown,
+why phase-naming matters, the SUT definition, the independence rule, and the
+EBT-vs-PBT boundary. Do not restate that vocabulary here; apply it to pytest. The
+sections below are additional standards specific to pytest test files.
 
 ## Test structure
 
@@ -82,6 +85,33 @@ def test_something() -> None:
     ...
 ```
 
+### Name the SUT
+
+Per `s:test`, the `act` line must have **one line and one subject** — the reader
+must be able to point at the system under test in under two seconds. Isolate
+construction into a single `make_sut()` (or `<class>_factory`) helper instead of
+repeating setup per test:
+
+```python
+def make_sut(**overrides: object) -> MyClass:
+    """Build the system under test with sane defaults, override only what varies."""
+    defaults: dict[str, object] = {"param1": "default", "param2": 0}
+    defaults.update(overrides)
+    return MyClass(**defaults)
+
+
+def test_something() -> None:
+    """Test that … """
+    sut = make_sut(param2=5)
+
+    result = sut.do_thing()  # <- the entire act phase, one line, one subject
+
+    assert result == expected
+```
+
+If a test needs more than one line to exercise the SUT, it is usually exercising
+more than one behaviour — split it into two tests instead of widening the act phase.
+
 ## Do Not
 
 - **Do not test private methods directly** (`_method`, `__method`). Test them
@@ -95,6 +125,30 @@ def test_something() -> None:
   `time.time()` unconditionally.
 - **Do not import from `typing` when primitives suffice.** `list[str]` not `List[str]`.
 - **Do not leave unused imports.** Every import must be referenced (Ruff F401).
+
+## Test independence (pytest specifics)
+
+`s:test` states the rule: no test may depend on execution order or on state left
+behind by another test. In pytest, that means:
+
+- **Fixture scope**: default to `scope="function"` — the fixture is rebuilt for
+  every test. Only use `scope="module"`/`scope="session"` for fixtures that are
+  read-only for the whole suite; a shared fixture that any test mutates
+  reintroduces the exact cross-test dependency the rule forbids.
+- **`monkeypatch` undoes itself automatically** at test teardown for everything it
+  touches through its own API (`setattr`, `setenv`, `delenv`, `syspath_prepend`,
+  `chdir`). It does **not** undo state a test mutates through some other path —
+  module-level caches, singletons, or a file written to a real filesystem path
+  outside `monkeypatch`'s reach. Route every such mutation through `monkeypatch`
+  or an explicit fixture teardown; do not rely on "the next test will overwrite it."
+- **Prefer `tmp_path` over a fixed path string.** A fixed path (`/tmp/test.txt`,
+  `"output.csv"`) is shared filesystem state — two tests (or two parallel runs)
+  racing on it is exactly the ordering dependency the rule bans. `tmp_path` gives
+  each test call its own directory, so independence is structural, not a promise.
+- **Gate check**: run the suite with `pytest -p randomly` (or
+  `pytest-randomly`/`--random-order` from whichever plugin the project already
+  uses) — a test that only passes in a fixed order fails immediately under
+  shuffling, turning "independent" from a claim into a fact.
 
 ## Test Quality Standards
 - **100% coverage**: Line, branch, and function coverage of the target module.
@@ -359,6 +413,28 @@ def test_empty_array_x(
 - Mock `time.sleep`, `datetime.now()`, `time.time()` to eliminate delays
 - Use `autouse=True` fixtures to set up shared mocks across a class
 - **Use fixtures for common responses** to avoid repetitive mocking
+
+## When to hand off to `s:py-hypothesis`
+
+`s:test` owns the EBT-vs-PBT decision; this is the pytest-specific trigger for it.
+Stop writing `@pytest.mark.parametrize` and hand off when:
+
+- The case you are about to add is the **Nth hand-picked value** trying to cover a
+  range or invariant, rather than a specific named scenario — `parametrize` widens
+  the table, it does not widen what gets checked.
+- The assertion is a property that must hold for **every** input of a type
+  (`sort(x) == sort(sort(x))`, `parse(serialize(x)) == x`), not a fact about one
+  chosen value.
+- The module under test is a parser, validator, or serializer over user-controlled
+  input — the class of bug this skill's example lists structurally cannot find.
+
+When any of these hold, stop and load `s:py-hypothesis` instead of writing another
+`parametrize` row:
+
+    Read ~/.claude/skills/py-hypothesis/SKILL.md
+
+Do not duplicate Hypothesis strategies, decorators, or examples in this skill — that
+content is owned by `s:py-hypothesis`.
 
 ## Assertion patterns
 

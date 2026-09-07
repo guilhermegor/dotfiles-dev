@@ -22,6 +22,31 @@ so in one line** — silence is indistinguishable from a step that never ran.
 
 ---
 
+## 0. ARM — the skill arms its own schedules on invocation
+
+Invoking this skill should be enough to make the loop run; remembering to arm the crons by hand
+is the gap this step closes. The owner asking *"eu precisaria ter pedido ou já tem algo agendado
+que rode?"* is the measurement that it didn't.
+
+1. **`CronList` first.** Invoking the skill twice in one session must not produce four jobs
+   firing in duplicate against the same PRs — check what already exists before creating anything.
+2. **`CronCreate` whatever is missing:**
+   - the round (all six steps below) at `:23`;
+   - a thread sweep at `:53`.
+3. **Say what you armed**, or that both already existed. A step that runs silently is
+   indistinguishable from one that never ran.
+
+### What triggers the round — and its limits
+
+- **The session, and only the session.** These are `CronCreate` jobs, not a host timer — they
+  die when the session ends. That is the requirement (*"enquanto dev-loop estiver ativo na
+  sessão"*), not a defect to patch over with something more durable.
+- **Recurring jobs expire after 7 days.** A session that outlives that window needs to re-arm;
+  step 1 above already catches this, because `CronList` will show the gap.
+- **Not GitHub Actions `schedule:`.** Disqualified by measurement, not preference — see step 4b:
+  a `*/10` cron ran 6 times in 21 hours, because GitHub throttles scheduled workflows hardest on
+  the low-activity repos that need them most.
+
 ## 1. RESCUE — before anything new
 
 An agent killed mid-flight leaves work in its worktree. A worktree is torn down; the work is gone.
@@ -259,6 +284,8 @@ Every brief carries:
 - Do not conclude a path is clean from rtk-proxied `git status` / `ls` / `find`.
 - Do not force-merge past a red required check, or remove one to unblock a PR.
 - Do not ask permission to run this, and do not ask before cutting a release — see step 5.
+- Do not arm a host-level timer (systemd, a durable cron) for the round. `CronCreate` jobs dying
+  with the session is the requirement from step 0, not a gap to fill with something durable.
 
 ⚠️ **The one standing ask, and it is scoped narrowly on purpose:** an outward-facing action that is
 **hard to reverse and not this loop's own work** — changing branch protection or required checks,

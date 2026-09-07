@@ -863,6 +863,53 @@ install_veracrypt_appimage() {
 # Only one HID++ manager may hold a receiver at a time, so this repo never
 # installs openlogi alongside Solaar (Solaar is fully removed — see #237).
 
+# Verify the downloaded .deb against the release's own SHA256SUMS before it is handed to
+# `sudo apt-get install`. The vendor's "latest" URL deliberately hides both the version and
+# the asset name, so the redirect has to be resolved first — SHA256SUMS is published beside
+# the asset it covers, in the same release directory.
+#
+# Fails CLOSED: an unverifiable download is not installed. A .deb is unpacked as root, so
+# "could not check" and "checksum did not match" earn the same answer.
+_verify_openlogi_deb() {
+    local deb_file="$1" deb_url="$2"
+    local effective_url asset_name sums_url sums_file actual
+
+    if [ "${DRY_RUN:-0}" = "1" ]; then
+        print_status "info" "[dry-run] would verify $deb_file against the release SHA256SUMS"
+        return 0
+    fi
+
+    if ! command_exists sha256sum; then
+        print_status "warning" "sha256sum unavailable — cannot verify the openlogi .deb"
+        return 1
+    fi
+
+    effective_url=$(curl -fLs -o /dev/null -w '%{url_effective}' "$deb_url" 2>>"$LOG_FILE") \
+        || effective_url=""
+    if [ -z "$effective_url" ] || [ "$effective_url" = "$deb_url" ]; then
+        print_status "warning" "Could not resolve the openlogi release asset URL for verification"
+        return 1
+    fi
+
+    asset_name="${effective_url##*/}"
+    sums_url="${effective_url%/*}/SHA256SUMS"
+    sums_file="$(dirname "$deb_file")/SHA256SUMS"
+
+    if ! curl -fLs -o "$sums_file" "$sums_url" 2>>"$LOG_FILE"; then
+        print_status "warning" "Could not download SHA256SUMS from $sums_url"
+        return 1
+    fi
+
+    actual=$(sha256sum "$deb_file" | awk '{print $1}')
+    if grep -qiE "^${actual}[[:space:]]+\*?${asset_name}\$" "$sums_file"; then
+        print_status "success" "openlogi .deb verified against $asset_name"
+        return 0
+    fi
+
+    print_status "error" "Checksum mismatch — $asset_name not matched in SHA256SUMS"
+    return 1
+}
+
 install_openlogi() {
     print_status "section" "OPENLOGI"
 
@@ -890,10 +937,14 @@ install_openlogi() {
                 deb_url="https://openlogi.org/download/linux-${download_arch}"
 
                 if run_or_echo curl -fL -o "$tmp_dir/openlogi.deb" "$deb_url" 2>>"$LOG_FILE"; then
-                    if run_or_echo sudo apt-get install -y "$tmp_dir/openlogi.deb"; then
-                        print_status "success" "openlogi installed from official .deb"
+                    if _verify_openlogi_deb "$tmp_dir/openlogi.deb" "$deb_url"; then
+                        if run_or_echo sudo apt-get install -y "$tmp_dir/openlogi.deb"; then
+                            print_status "success" "openlogi installed from official .deb"
+                        else
+                            print_status "warning" "openlogi .deb installation failed"
+                        fi
                     else
-                        print_status "warning" "openlogi .deb installation failed"
+                        print_status "error" "openlogi .deb failed checksum verification — NOT installing"
                     fi
                 else
                     print_status "warning" "Failed to download openlogi .deb from $deb_url"
@@ -1053,7 +1104,7 @@ install_utilities() {
 
 INSTALL_REGISTRY+=(
     "install_utilities:System Utilities::"
-    "install_openlogi:openlogi (Logitech HID++ manager)::"
+    "install_openlogi:openlogi (Logitech HID++ manager):Sistema:"
     "install_fastfetch:fastfetch (system info):Sistema:fastfetch.desktop"
     "install_flameshot:Flameshot Screenshot Tool:Utilitarios:org.flameshot.Flameshot.desktop"
     "install_rofi:Rofi Launcher:Utilitarios:rofi.desktop"

@@ -76,7 +76,7 @@ No separate `/epic` command: it would duplicate the repo-context, board and bran
 - `--parent <n>` was passed (file directly as a sub-issue of `<n>`; skip the ask entirely);
 - the derived **Escopo** section would carry more than 3 bullets;
 - the description names two or more independently shippable deliverables;
-- a `s:shape-up` artifact for this work exists with more than one scope.
+- a `s:problem-framing` artifact for this work exists with more than one scope.
 
 Otherwise it creates one flat issue, as today.
 
@@ -90,7 +90,7 @@ closing it would close the children's tracking with work outstanding.
 
 | Wayfinder idea | Why not |
 |---|---|
-| The `wayfinder:map` issue as canonical artifact | `s:shape-up` already owns "what are we building and how big"; a parent issue with sub-issues owns the tracking half. Two overlapping planners is the bloat. |
+| The `wayfinder:map` issue as canonical artifact | `s:problem-framing` already owns "what are we building and how big"; a parent issue with sub-issues owns the tracking half. Two overlapping planners is the bloat. |
 | "Never resolve more than one ticket per session" | `branch_requires_issue_guard.sh` already enforces one branch per issue. |
 | `--blocked-by` / `--blocking` wiring | Native and cheap, but nothing consumes the relation yet. Add when something reads it. |
 
@@ -196,7 +196,7 @@ The `Closes #<N>` PR snippet stays.
 | `hooks/kanban_lifecycle.sh` | **none.** It already no-ops when no `<repo> kanban` board exists, which is exactly the Linear case. |
 | `hooks/branch_requires_issue_guard.sh` | **none.** Branch shapes produced here are already covered by `github_ref_in` and `linear_ref_in`. |
 | `~/.claude/issue-trackers.conf` | No format change. It currently has no active lines — `ditto  linear` needs uncommenting for that repo to route to the Linear arm. |
-| `skills/shape-up.md` | No change; the seam is unaltered. Worth a one-line cross-reference: a shaped scope becomes a parent issue whose scopes become sub-issues. |
+| `skills/problem-framing.md` | No change; the seam is unaltered. Worth a one-line cross-reference: a shaped scope becomes a parent issue whose scopes become sub-issues. |
 
 ## Verification
 

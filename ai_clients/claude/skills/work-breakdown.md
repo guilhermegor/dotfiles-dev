@@ -1,6 +1,6 @@
 ---
 name: s:work-breakdown
-description: Use when a problem has already been bounded (an `s:shape-up` artifact exists, or scope is otherwise clear) and needs to become a set of issues ready to dispatch to parallel subagents. Orchestrates discovery, conditional prototyping, epic/issue decomposition, blast-radius partitioning (file collision AND file count), test-case enrichment, and handoff to `s:dev-loop`. Also use when the user says "break this into issues", "turn this into tickets I can parallelize", or "what can go out as separate PRs".
+description: Use when a problem has already been bounded (an `s:problem-framing` artifact exists, or scope is otherwise clear) and needs to become a set of issues ready to dispatch to parallel subagents. Orchestrates discovery, conditional prototyping, epic/issue decomposition, blast-radius partitioning (file collision AND file count), test-case enrichment, and handoff to `s:dev-loop`. Also use when the user says "break this into issues", "turn this into tickets I can parallelize", or "what can go out as separate PRs".
 effort: high
 argument-hint: [<shaped problem | issue #>]
 allowed-tools: Read Glob Grep Bash AskUserQuestion
@@ -18,13 +18,13 @@ proving it rather than assuming it.
 
 | Piece | Owner | This skill |
 |---|---|---|
-| Bound the problem (appetite, scope cuts, out-of-scope) | `s:shape-up` | starts where it ends |
+| Bound the problem (appetite, scope cuts, out-of-scope) | `s:problem-framing` | starts where it ends |
 | Create one issue + card + branch (work type, `hitl`/`afk`, assignee, column) | `/issue` | calls it per leaf, never reimplements it |
 | Test conventions (AAA, `parametrize`, fixtures, properties) | `s:test` / `s:py-unit-test` / `s:py-hypothesis` | decides *which* apply, not *how* |
 | Execute (quality gate, CI, review, merge, release) | `s:dev-loop` | hands off the finished set |
 
 If a shaping artifact for this problem does not exist and the request looks like a persona-plus-
-goal with no appetite set, load `s:shape-up` first. Do not shape inline here.
+goal with no appetite set, load `s:problem-framing` first. Do not shape inline here.
 
 ---
 
@@ -173,7 +173,7 @@ to `s:dev-loop`. The boundary is hard: this skill decides **what** and **in what
 
 ## Do Not
 
-- Do not reimplement `s:shape-up`, `/issue`, the test skills, or `s:dev-loop` — call them.
+- Do not reimplement `s:problem-framing`, `/issue`, the test skills, or `s:dev-loop` — call them.
 - Do not partition by directory. Only exact file paths prove non-collision (dotfiles-dev#194).
 - Do not treat wiring files as an ordinary collision — they serialize a whole batch if missed.
 - Do not stop at collision-free. A collision-free batch can still fail the reviewer's file-count

@@ -2,7 +2,7 @@
 # Session capture audit — the deterministic "did I capture everything?" check.
 #
 # Two consumers, one script:
-#   1. The `/wrap-up` skill runs it WHILE the session is live and FIXES what it
+#   1. The `/session-closeout` skill runs it WHILE the session is live and FIXES what it
 #      finds (writes the missing lesson, files the missing issue, updates the
 #      checkpoint). That is where the value is — default (no-arg) mode prints the
 #      findings to stdout for the skill to act on.
@@ -16,7 +16,7 @@
 # Every check here is DETERMINISTIC (git / lesson-index integrity / mirror
 # presence) — no LLM judgment. The judgment-only checks (superseded rules,
 # checkpoint freshness, board columns) are emitted as a checklist for a human or
-# for `/wrap-up` to act on; the script never decides them.
+# for `/session-closeout` to act on; the script never decides them.
 #
 # I/O contract (matching session_start_context.sh / lesson_capture_checkpoint.sh):
 # the findings ARE this script's stdout payload, so they are printed with `printf`
@@ -184,12 +184,12 @@ store_dir_for_repo() {
 # Direction split by cost, matching this script's contract:
 #   Row 1 (lessons → issues) is store-internal text — always computed, no network.
 #   Row 2 (issues → lessons) needs the live issue list, so it runs ONLY in report mode
-#   (under /wrap-up, interactive) and only when gh is present; at SessionEnd it is
+#   (under /session-closeout, interactive) and only when gh is present; at SessionEnd it is
 #   skipped so a network hang can never stall the exit. Fails OPEN.
 #
 # Orphans/unaccounted are JUDGMENT candidates, not add_gap()s: not every issue is
 # lesson-born and not every lesson maps to an issue, so a hard gap would cry wolf (and
-# fire at SessionEnd). They are surfaced for /wrap-up to resolve consciously.
+# fire at SessionEnd). They are surfaced for /session-closeout to resolve consciously.
 emit_completeness() {
 	local cwd="$1" mode="$2" repo store
 	repo="$(basename "$cwd")"
@@ -299,10 +299,10 @@ emit_report() {
 	emit_completeness "$cwd" "$mode"
 
 	# Judgment-only checks: the script cannot decide these — it hands them to a
-	# human or to `/wrap-up`. The superseded-rule grep is the highest-value one and
+	# human or to `/session-closeout`. The superseded-rule grep is the highest-value one and
 	# the one nobody remembers (a real audit found a revoked release rule still
 	# living in a tracked ledger).
-	printf '%s\n' "--- verify manually or via /wrap-up (need judgment) ---"
+	printf '%s\n' "--- verify manually or via /session-closeout (need judgment) ---"
 	printf '%s\n' "  - [ ] Superseded rules: did this session CHANGE a standing rule? grep tracked docs/README/ledgers for the OLD rule — a tracked doc outranks memory next session."
 	printf '%s\n' "  - [ ] Issues/PRs: every issue created this session is on the board and its card is in the right column; open PRs are accounted for."
 	printf '%s\n' "  - [ ] Completeness BOTH ways (above): resolve each 'orphan' open issue (write its lesson or list it under the store README's 'Issues not born of a lesson') and each 'genuinely unaccounted' lesson (file the issue or record a delivered/advisory/superseded Status:) — a one-directional check hides the B-side orphan."

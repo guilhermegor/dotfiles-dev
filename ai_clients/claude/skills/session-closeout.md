@@ -1,5 +1,5 @@
 ---
-name: s:wrap-up
+name: s:session-closeout
 description: Use when ending or wrapping up a work session — before /exit or /clear, or when the user asks "did I capture everything?", "safe to end?", "wrap up", "anything I forgot?". Runs the deterministic capture audit and FIXES the gaps (writes the missing lesson, indexes and mirrors it, files the missing issue, updates the checkpoint) while the session is still live — the SessionEnd hook can only report a gap forward, it cannot fix one.
 effort: high
 argument-hint: [none]
@@ -58,7 +58,7 @@ issues  → lessons: <I> open, <S> sourced by a lesson, <O> orphan
   never scheduled or linked. Add the issue/PR reference to the lesson's `**PR:**` line, or file the
   issue via `/issue` if the work is still open.
 - Row 2 prints `skipped` at SessionEnd or without `gh` — that is by design (no network on exit).
-  Under `/wrap-up` it runs live; if it shows `skipped` here, note it rather than claiming clean.
+  Under `/session-closeout` it runs live; if it shows `skipped` here, note it rather than claiming clean.
 
 ## 4. Work the judgment checklist
 

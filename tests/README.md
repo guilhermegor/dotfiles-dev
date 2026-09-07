@@ -25,6 +25,7 @@ act -W .github/workflows/tests.yml
 | `destructive_command_guard.bats` | `ai_clients/claude/hooks/destructive_command_guard.sh` — pipe-to-shell / unscoped-delete / history-rewrite blocks |
 | `protected_branch_guard.bats` | `ai_clients/claude/hooks/protected_branch_guard.sh` — refspec-aware push guard on protected branches (deletes of other refs allowed; heredoc bodies ignored) |
 | `branch_requires_issue_guard.bats` | `ai_clients/claude/hooks/branch_requires_issue_guard.sh` — branch-creation → tracked-issue guard (per-segment match; no false positive from a chained `-c` or a heredoc body) |
+| `settings_env_deny.bats` | `ai_clients/claude/settings.json` (`permissions.deny`) — enumerated `.env*` secret-suffix globs deny real secrets while leaving `.env.example`/`.env.sample`/`.env.template`/`.env.dist` readable |
 
 ## How the mocking works
 

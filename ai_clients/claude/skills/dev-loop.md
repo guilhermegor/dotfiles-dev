@@ -78,6 +78,59 @@ Why first: four agents were killed holding **662 / 694 / 256 / 305** uncommitted
 rescue happened only because a human asked. The one agent whose brief said *commit at the first
 coherent point* lost **0 of 699**.
 
+### Quota kill: detect it, resume it, don't re-dispatch it
+
+A session-limit kill is silent by construction — a killed agent is `idle`, byte-identical to one
+that finished, and a worktree-isolated agent can **disappear from `ListAgents` entirely**. Measured
+2026-09-04: five subagents died mid-flight to `HTTP 429 rate_limit`. Three had **already finished**
+— one had even opened its PR — and died at the commit/push/PR step; their own completion text read
+"task remains complete, stopping" / "No action needed," which is **misleading in both directions**.
+The only reliable signal was inspecting the worktree and asking the forge for PR state.
+
+1. **Compare `ListAgents` against the set dispatched this session.** Dispatched **and** absent from
+   the list = killed, not finished. Never infer "finished" from silence or from `idle` alone.
+2. **Decide "finished" vs "killed" from data, never from the agent's own sign-off text:**
+   - `/usr/bin/git -C <worktree> status --short` + `git log --oneline origin/<branch>..HEAD` —
+     uncommitted or unpushed work means it died mid-flight.
+   - `gh pr list --head <branch> --state all` — the **forge**, never `git`, is the oracle for
+     whether work already shipped: a squash-merged branch is never an ancestor of the base, so a
+     git-only check reports "unmerged" for work that already merged.
+3. **Resume with `SendMessage` to the agent's name/id — never a fresh `Agent` call.** `SendMessage`
+   preserves the transcript, so the agent continues at zero re-reading cost; a new `Agent` starts
+   from nothing and **re-does work already committed** — exactly the cost an exhausted quota cannot
+   afford. Measured: four agents resumed by `SendMessage` continued cleanly from where they died.
+4. **Brief the resumed agent on what moved underneath it while it was dead** — commits or pushes
+   landed on its behalf, files or surfaces another agent has since taken, PRs opened or merged. An
+   agent resumes assuming its pre-death world still holds; measured twice that assumption was false
+   (189 lines it would have rewritten, three files that had left circulation).
+5. **Resume the whole interrupted set, staggered, on either trigger** — the declared quota reset
+   time, **or** the next successful call after the user switches accounts (an account switch does
+   not wait for the stated reset; both triggers are needed). Stagger the resumes: firing every
+   killed agent back in at once into a freshly-reset quota is how it was exhausted the first time —
+   measured twice, three agents each.
+
+🎯 **A dedicated `CronCreate` poll for "are they still alive?" was evaluated and skipped.** A tick
+that only asks that question spends session quota from the very budget that is under limit, which
+can worsen the failure it is meant to catch. The comparison in step 1 above, run at each round
+boundary the loop already has, is the cheaper form of the same check.
+
+### The stash stack is shared — read it too
+
+`git stash` is scoped to the **repository**, not the worktree. Agents in separate worktrees push
+onto the same stack, so `stash@{0}` means "whatever any agent stashed last," and a stash/pop to
+reach a "clean" tree can silently move another agent's work onto your branch.
+
+- **Read `git stash list` alongside `git status`.** A clean `git status` is no longer evidence that
+  nothing is pending: zero uncommitted files plus a stash stack full of "not mine" entries is the
+  pattern to look for. Measured 2026-09-04: an agent checked out its own branch inside a sibling's
+  worktree, stashing the sibling's 189-line WIP to reach a clean tree — the sibling's worktree then
+  reported clean, and a rescue sweep that only reads `git status` found nothing. The work was
+  recovered only by reading `stash@{1}` by hand.
+- **Never `git stash`, and never `git checkout <other-branch>`, inside a worktree you did not
+  create, while other agents are running.** Both reach for a "clean tree" by moving shared state.
+  The house alternative already exists: copy the file(s) you need out of the way to the scratchpad
+  instead of stashing.
+
 ## 2. SWEEP the board
 
 Residue · unresolved threads · branch-without-PR · unarmed auto-merge · PR behind base · real CI
@@ -280,17 +333,53 @@ erroring. `.claude/release.conf` is the declared list where one exists.
 
 ## 6. DISPATCH — the loop's other half
 
-Compute the free surface: the files the open PRs touch, versus the open issues. Dispatch agents for
-what does not collide.
+Compute the free surface: the exact files the open PRs touch, versus the exact files each open
+issue would touch. Dispatch agents for what does not collide.
 
-🔴 **First: is an open PR already closing this issue?** A file-collision check compares PR files
-against PR files and **cannot see an issue that is already claimed** — so it reports a free surface
-for work that is already done.
+⚠️ **Collision is exact-path, file by file — never a directory prefix.** Measured 2026-09-04:
+reading a "concentration by top-5-directory" summary instead of the exact path list reported 9 of
+11 candidate issues as colliding; the exact recount showed 43 files held by 14 PRs, and a directory
+holding 6 of 200 files was 97% free the whole time. Three more agents were dispatched in the same
+minute once the check switched to exact paths. An aggregate over a per-item constraint always
+overestimates it — same family as the rtk-proxy `(empty)` collapse and a `wc -l` counting an empty
+line: a lossy summary read as field truth. If a sweep tool hands you a directory-level
+"concentration" figure, treat it as a human-reading aid only, never as the collision verdict.
+
+Name three states, not two — collapsing the third into "blocked" is the failure:
+- **free** — no open PR's exact file list intersects this issue's files.
+- **held** — an open PR's exact file list intersects this issue's files.
+- **would-need-a-held-file** — the issue's natural solution touches one file another PR holds, but
+  the rest is free. Not a "no": it is usually one trivial line (e.g. an added `cp` line) — dispatch
+  it anyway and land the small conflict as its own commit at the end, the house pattern for trivial
+  overlaps.
+
+🔴 **Before dispatching anything, confirm it is not already done.** A file-collision check only
+sees PR-vs-PR overlap; it cannot see an issue already satisfied by code that already merged.
+Measured 2026-09-04: 2 of 3 issues grouped into one agent were already shipped (one predated the
+repo's own first commit), and a second issue's own reproduction no longer reproduced against
+current `master`. The rule is symmetric:
+- **Feature-shaped issue:** confirm the thing does not already exist — read the file/config it
+  asks for before writing a duplicate line.
+- **Defect-shaped issue:** confirm it still reproduces against current `master` — a sibling PR
+  merged since filing may have already changed the behaviour.
+
+State the command and its output in the PR (or in the issue, if closing without one). If already
+satisfied, **stop and report — do not open a PR.** Closing an already-satisfied issue with
+`git log -S` / `gh pr view` evidence is cheaper and more honest than a no-op PR, and it leaves the
+reason in the thread. An issue's age is a decay signal worth weighing, not a decision by itself.
+
+🔴 **The open-PR-already-claims-it check must also catch a merged PR that forgot the `Closes #N`
+link.** `is:pr is:open` is invisible to a PR that shipped the fix and merged without declaring it —
+measured: a dispatched agent spent ~104k tokens confirming blueprintx#135 was already done by PR
+#292, merged days earlier, which closed two sibling issues and silently forgot this one. Drop
+`is:open` from the query so merged PRs are visible too, and when a match or a suspicion surfaces,
+confirm by reading the code on `main`/`master`, never by the PR's title alone — then close the
+orphaned issue so the next round does not dispatch the same agent again.
 
 ```bash
-gh api graphql -f query='{search(query:"repo:OWNER/REPO is:pr is:open",type:ISSUE,first:60){
-  nodes{... on PullRequest{number closingIssuesReferences(first:5){nodes{number}}}}}}' \
-  --jq '.data.search.nodes[]|.number as $p|.closingIssuesReferences.nodes[]|"\(.number) <- PR #\($p)"'
+gh api graphql -f query='{search(query:"repo:OWNER/REPO is:pr",type:ISSUE,first:60){
+  nodes{... on PullRequest{number state closingIssuesReferences(first:5){nodes{number}}}}}}' \
+  --jq '.data.search.nodes[]|.number as $p|.state as $s|.closingIssuesReferences.nodes[]|"\(.number) <- PR #\($p) (\($s))"'
 ```
 
 ⚠️ **Do not trust the branch-name heuristic for this.** Matching a trailing `-<issue>` in the branch
@@ -303,7 +392,11 @@ on at merge time.
 ⚠️ **If the free surface is empty, state it.** That is information, not silence.
 
 Every brief carries:
+- 🔴 **confirm before writing** — the feature/defect check above; state the command and its output;
 - 🔴 **commit and push at the first coherent point, then keep committing** (the measurement above);
+- 🔴 **never `git stash`, and never `git checkout` of another branch, inside a worktree you did not
+  create** — the stash stack and the checkout are both shared across worktrees; copy to the
+  scratchpad instead (step 1);
 - `dangerouslyDisableSandbox: true` on every git write — the sandbox overlay silently discards ref
   updates on teardown;
 - `git add` and `git commit` as **separate** calls — a blocked hook kills a whole compound call;

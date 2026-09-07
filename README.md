@@ -123,6 +123,33 @@ make install_coding   # installs gitlint (among other dev tools)
 make git_hooks        # points core.hooksPath at .githooks (gitlint commit-msg)
 ```
 
+### 🔐 Machine Secrets (never in this public repo)
+
+This repo is **public**, so no credential value ever lives in it — only the
+*mechanism* to reproduce one on a fresh machine. `make run` (via
+`distro_config/setup_env.sh`) appends a guarded block to `~/.bashrc` that
+sources `~/.claude/.env` and exports every key it finds, so a value set once
+there is visible to `gh`, to scaffolded projects, and to any tool that reads
+the environment. `~/.claude/.env` itself is untracked — it lives outside
+every repo's working tree, so it is not merely git-ignored, it is
+structurally impossible for any repo's git to commit it.
+
+| Key | Purpose | Scopes | Consumers |
+|---|---|---|---|
+| `CODERABBIT_TRIGGER_PAT` | User PAT so CodeRabbit answers a review request — it silently ignores bot-authored (`GITHUB_TOKEN`) comments | Fine-grained PAT, **All repositories**, `Pull requests: Read and write` | `.github/workflows/coderabbit_trigger.yml` in `blueprintx` and every project it scaffolds |
+| `CLAUDE_BACKUP_DIR` | Default target dir for `/backup-env` / `/restore-env` | n/a (local path) | `ai_clients/claude/commands/backup-env.md`, `restore-env.md` |
+
+**Re-minting `CODERABBIT_TRIGGER_PAT` on a new/lost machine** (a PAT is re-minted,
+not restored — a backed-up value may already be expired):
+1. github.com/settings/tokens → generate a new fine-grained token with the
+   scopes above.
+2. `echo 'CODERABBIT_TRIGGER_PAT=<value>' >> ~/.claude/.env` (create the file
+   if it doesn't exist yet).
+3. `source ~/.bashrc` (or open a new shell).
+4. Verify: `[ -n "$CODERABBIT_TRIGGER_PAT" ] && echo "set"` — and that
+   `gh secret set CODERABBIT_TRIGGER_PAT --body "$CODERABBIT_TRIGGER_PAT"` on
+   the target repo succeeds.
+
 ### Alternative Installation Methods
 
 **Option 1: Step-by-Step with Makefile**

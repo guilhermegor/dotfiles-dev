@@ -1,0 +1,11 @@
+# openlogi config — Logitech HID++ device manager (replaces Solaar, see #235).
+#
+# Tracked here and symlinked to ~/.config/openlogi/config.toml by
+# install_openlogi() in distro_config/install_lib/system_utils.sh, so button
+# remaps, DPI steps, and SmartShift settings survive a reinstall.
+#
+# Bindings do NOT auto-migrate from Solaar's ~/.config/solaar/config.yaml (the
+# Options+ importer is still in progress upstream — see #237). Populate this
+# file with real device bindings via `openlogi-desktop` or `openlogi` CLI,
+# then commit the result: openlogi writes back to whatever this file resolves
+# to, i.e. this repo copy through the symlink.

@@ -38,12 +38,12 @@ emit_cross_project_context() {
 	# When present: the capture-audit handoff written by session_capture_audit.sh at
 	# the LAST session's end (it can only report forward — the session was over). Surface
 	# the unresolved gaps as the first thing this session sees, then clear the file so it
-	# fires once. The fixer is /wrap-up, run live.
+	# fires once. The fixer is /session-closeout, run live.
 	local slug handoff
 	slug="$(printf '%s' "$cwd" | tr '/' '-')"
 	handoff="$claude_dir/session-audit/$slug.md"
 	if [ -f "$handoff" ]; then
-		printf '%s\n' "[session-capture-audit] Unresolved capture gaps from your last session in this repo (run /wrap-up to resolve):"
+		printf '%s\n' "[session-capture-audit] Unresolved capture gaps from your last session in this repo (run /session-closeout to resolve):"
 		cat "$handoff"
 		rm -f "$handoff" 2>/dev/null || true
 	fi

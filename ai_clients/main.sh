@@ -19,6 +19,7 @@ source "$SCRIPT_DIR/lib/restore_env_prompt.sh"
 # Add an entry here for each client whose directory name does not read well when capitalised.
 declare -A CLIENT_NAMES=(
     ["claude"]="Claude Code"
+    ["codex"]="OpenAI Codex CLI"
 )
 
 # ── Discovery ──────────────────────────────────────────────────────────────────

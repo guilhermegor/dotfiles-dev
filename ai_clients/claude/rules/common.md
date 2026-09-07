@@ -220,6 +220,27 @@ the implicit coupling that arises when two classes share a module boundary.
 
 ## Documentation
 
+- **Prefer a smaller named function over a comment that explains a block.** A
+  comment restating *what* a block does is a sign the block wants a name —
+  extract it and let the function's docstring carry the *why*: a docstring
+  documents a unit with a signature, and a test can reach it; a comment is
+  prose nothing checks.
+
+  ```python
+  # Avoid — comment explains what the block does
+  # Filter out inactive users, then sort by signup date
+  active = [u for u in users if u.is_active]
+  result = sorted(active, key=lambda u: u.signup_date)
+
+  # Prefer — the name replaces the comment
+  def active_users_by_signup_date(users):
+      return sorted((u for u in users if u.is_active), key=lambda u: u.signup_date)
+  ```
+
+  ⚠️ **This does not apply to comments that explain *why*** — a design
+  decision, a workaround, or a known ceiling. Those don't restate the code,
+  so extracting a function doesn't remove the need for them; the rule above
+  is only about comments that reaffirm *what* already reads from the code.
 - Docstrings/comments explain **why**, not **what** (the code shows what).
 - Public APIs must have documented parameters, return types, and exceptions.
 - Keep README up to date with: setup, run, test, and deploy instructions.

@@ -35,7 +35,7 @@ project-specific — never hardcode them; always follow what the project already
 ## Ruff Configuration
 
 - **Line length:** 99 characters.
-- **Indent style:** tabs (not spaces).
+- **Indent style:** 4 spaces.
 - **Quote style:** double quotes.
 - **Target version:** match the project's `pyproject.toml`; never hardcode it here.
 - **Docstring convention:** NumPy style (`[lint.pydocstyle] convention = "numpy"`).
@@ -44,8 +44,6 @@ project-specific — never hardcode them; always follow what the project already
 Active lint rule sets: `UP` (pyupgrade), `E`/`F` (pycodestyle/flake8), `ANN` (annotations),
 `B` (bugbear), `SIM` (simplify), `I` (isort), `AIR` (airflow), `ERA` (eradicate),
 `S` (bandit), `PD` (pandas-vet), `D` (pydocstring).
-
-Ignored: `D206` (tab-indented docstrings conflict with indent-style = tab).
 
 ### Annotations (flake8-annotations)
 

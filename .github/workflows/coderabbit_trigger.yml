@@ -29,4 +29,14 @@ jobs:
           GH_TOKEN: ${{ secrets.CODERABBIT_TRIGGER_PAT }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-        run: gh pr comment "$PR_NUMBER" --repo "$REPO" --body "@coderabbitai full review"
+        # An absent PAT is a configuration gap, not a defect in the PR being
+        # checked, so it must not fail this PR's CI (dotfiles-dev#250). Warn
+        # loudly instead: with no PAT nothing here is reviewed, and silence
+        # would hide that on exactly the paths this workflow selects for.
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::CODERABBIT_TRIGGER_PAT is not set — skipping the CodeRabbit review request. No PR touching hooks/ or settings.json will be reviewed until it is configured (see dotfiles-dev#130)."
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "@coderabbitai full review"

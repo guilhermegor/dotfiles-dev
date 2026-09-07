@@ -26,6 +26,14 @@ jobs:
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
         run: |
           set -euo pipefail
+          # Checked BEFORE the sleep below (dotfiles-dev#250): without the PAT the
+          # retry cannot post, so sleeping first would burn ~35 minutes of runner
+          # time only to fail at the last line.
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::CODERABBIT_TRIGGER_PAT is not set — cannot re-ask for a review after a rate-limit refusal (see dotfiles-dev#130)."
+            exit 0
+          fi
+
           if [ "$COMMENT_AUTHOR" != "coderabbitai[bot]" ]; then
             echo "not a CodeRabbit comment, nothing to do"
             exit 0

@@ -1,6 +1,6 @@
 ---
 name: c:issue
-allowed-tools: Bash(rtk gh issue*), Bash(rtk gh project*), Bash(rtk gh repo*), Bash(rtk gh api*), Bash(rtk git*), Bash(rtk proxy curl*), AskUserQuestion, Read, Grep
+allowed-tools: Bash(rtk gh issue*), Bash(rtk gh project*), Bash(rtk gh repo*), Bash(rtk gh api*), Bash(rtk git*), Bash(rtk proxy curl*), AskUserQuestion, Read, Grep, Skill
 description: Create or resume a tracked issue (assigned to you), add it to the kanban, and open a linked recommended-name branch
 argument-hint: "<description | #number | issue-url> [--new] [--quick] [--parent <n>] [--work <type>] [--label <name>] [--project <name|number>] [--tracker <github|linear>]"
 ---
@@ -132,6 +132,14 @@ Once resolved to an existing issue:
 - Skip steps 3–6. Keep the existing title/body. Derive the **slug** from its title and the
   **conventional type** from its `<type>:` prefix (default `feat`). Read the **work type** and
   **mode** from its existing type field or `type:` / `hitl` / `afk` labels rather than re-asking.
+- **Check for an existing score, never left blank.** A score already present is kept — never
+  re-derived or overridden here. One that is absent runs step 5a before anything else proceeds:
+  resuming is the natural moment to close that gap, and silently leaving it blank is what makes
+  the requirement optional in practice (dotfiles-dev#178). **Linear** exposes the native
+  `estimate` on the issue already fetched above — check it right here. **GitHub** has no such
+  field on the issue itself; its `Points` value lives on the board item, so this check happens
+  in step 7 once the card is located — run step 5a there, before setting the column, if it reads
+  empty.
 - Continue at step 7 — the card and branch steps are idempotent: `item-add` on an issue already
   on the board is a no-op, and step 8 checks for an existing linked branch first.
 
@@ -228,6 +236,35 @@ Parent bodies carry **Objetivo** plus a checklist of their children; children ca
 template. There is no separate `/epic` command — it would duplicate the repo, board and branch
 logic for no gain.
 
+## 5a. Score the issue(s) — blocking
+
+*(Runs here — after hierarchy so the final subtask boundaries are known, before step 6's create
+so the score exists to write. Also entered directly from step 2's resume path when a score is
+missing.)* No issue is filed or left resumed without a score, on either tracker — see
+dotfiles-dev#178.
+
+Load `s:story-score` via Skill tool, passing the Escopo/description of each unit step 5 settled
+on as context — the single flat issue, or each child (never the parent as one lump; the scale
+scores subtasks, and a parent's score is their sum, never a number of its own). Do not restate
+or reinvent the scale here — it lives in the skill.
+
+- **A subtask lands on 1–3.** Show the point value and its justification, then confirm with
+  AskUserQuestion (`Score <n> — <justification>. Use it?` / an override to type a different
+  1–3 value). **Skip the ask under `--quick`** — accept the skill's derived score without
+  confirmation, consistent with `--quick`'s existing "skip the interactive asks" contract; the
+  score itself is still never skipped.
+- **A subtask lands on 4.** Per the skill, this is not a score — it is a split signal. Do not
+  create anything yet: take the skill's proposed decomposition back to step 5 and re-run its ask,
+  offering the new pieces as the sub-issue list (or additional siblings under the existing parent
+  if step 5 had already split). Re-enter this step for each resulting piece.
+- **No score can be derived and the operator supplies none.** Stop. Say plainly that the issue
+  cannot be filed without a score, and do not create it (or, on resume, do not proceed past this
+  step).
+
+Parent score = the sum of its already-scored children, computed here before step 6 creates
+anything — never recomputed later, since neither tracker recomputes it and children are always
+scored before the parent is written.
+
 ## 6. Create the issue(s)
 
 *(Create path only — skip if step 2 resolved an existing issue.)*
@@ -257,6 +294,7 @@ Per-tracker operations — one spine, two arms:
 | oracle | `--label oracle:strong\|oracle:weak` | label id |
 | extra label | `--label <name>` when `--label` was passed | label id |
 | parent | `--parent <n>` | `parentId` on `issueCreate` |
+| score | *(not an issue attribute — set on the board's `Points` field in step 7)* | `estimate` on `issueCreate` (native field, set here directly) |
 
 ⚠️ **On GitHub, ensure the label exists before attaching it.** `gh issue create --label <name>`
 **fails the whole create** when the label is absent from the repo — and `oracle:strong` /
@@ -316,6 +354,15 @@ and match the project titled exactly **`<repo> kanban`** (e.g. `filings-cvm kanb
   }' -F fieldId="<status-field-id>"
   ```
 
+  **Then ensure a `Points` field exists.** GitHub has no native estimate field, so the score from
+  step 5a is recorded as a project (board) `Number` field — summable in a board view, unlike a
+  `points/<n>` label (dotfiles-dev#178 weighed both and picked the field for exactly that reason).
+  Check `field-list` first; create it only if missing:
+
+  ```bash
+  rtk gh project field-create <project-number> --owner <owner> --name "Points" --data-type NUMBER
+  ```
+
   **Then tell the user to enable the Done workflows — the API cannot.** A `gh`-created board
   ships its built-in workflows **disabled**, and the GraphQL API exposes no mutation to enable
   them (only `deleteProjectV2Workflow`). So the "card → Done on merge" automation this command
@@ -339,8 +386,10 @@ Add the card (parents and children both):
 Set the column to the value **derived in step 4**. State the derivation in one line
 (`work type <x> → <column>`) and let the user override; do not re-ask the three upstreams.
 
-**On the resume path**, first read the card's current status from `item-list --format json`; if
-it is already past `Ready` (e.g. `In progress`), report it and leave it alone.
+**On the resume path**, first read the card's current status and `Points` value from
+`item-list --format json`. If status is already past `Ready` (e.g. `In progress`), report it and
+leave it alone. If `Points` is empty, run step 5a now — this is the deferred GitHub half of the
+resume-path score check from step 2 — and write the result below rather than proceeding unscored.
 
 If the board genuinely lacks the derived option (a not-yet-normalized board), fall back to the
 first not-started option.
@@ -351,6 +400,10 @@ Resolve the ids and set it:
 - `rtk gh project item-edit --project-id <project-node-id> --id <item-id> --field-id <status-field-id> --single-select-option-id <option-id>`
 
 (`item-add` prints the item id; if not, get it from `rtk gh project item-list … --format json`.)
+
+**Also set `Points`, every time** — the score from step 5a (or the sum, for a parent), never
+skipped, using the field id from the same `field-list` read:
+`rtk gh project item-edit --project-id <project-node-id> --id <item-id> --field-id <points-field-id> --number <score>`
 
 ## 8. Open the linked branch — leaf issues only
 
@@ -390,6 +443,7 @@ Mode:    created | resumed
 Tracker: github | linear
 Issue:   #<N> <url>                    (or <TEAM>-<n>)
 Type:    <conventional> / <work-type> (<hitl|afk>)
+Score:   <n> (<justification>)         (parent: <n> = sum of children)
 Parent:  #<P>                          (omit when flat)
 Board:   <project> → <column>          (omit for linear)
 Branch:  <type>/<ref>-<slug> (checked out)   (omit for parents)

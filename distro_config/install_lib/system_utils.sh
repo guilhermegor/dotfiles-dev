@@ -834,6 +834,25 @@ install_pinta() {
     fi
 }
 
+install_gimp() {
+    print_status "section" "GIMP IMAGE EDITOR"
+
+    if command_exists gimp || flatpak list --app 2>/dev/null | grep -q "org.gimp.GIMP"; then
+        print_status "info" "GIMP already installed"
+        return 0
+    fi
+
+    setup_flatpak
+
+    # No official .deb from the GIMP project (distro packages exist but lag
+    # the 3.x series). Flatpak is the vendor-recommended channel on Linux —
+    # method #2 in the "App Installation Preference Order" below.
+    print_status "info" "Installing GIMP via Flatpak..."
+    run_or_echo flatpak install -y flathub org.gimp.GIMP
+    print_status "success" "GIMP installed via Flatpak"
+    print_status "config" "Launch with: flatpak run org.gimp.GIMP"
+}
+
 install_veracrypt_appimage() {
     print_status "section" "VERACRYPT APPIMAGE"
 
@@ -1109,6 +1128,7 @@ INSTALL_REGISTRY+=(
     "install_flameshot:Flameshot Screenshot Tool:Utilitarios:org.flameshot.Flameshot.desktop"
     "install_rofi:Rofi Launcher:Utilitarios:rofi.desktop"
     "install_pinta:Pinta Image Editor:Utilitarios:com.github.PintaProject.Pinta.desktop"
+    "install_gimp:GIMP Image Editor:Utilitarios:org.gimp.GIMP.desktop"
     "install_veracrypt_appimage:VeraCrypt AppImage::"
     "install_slack:Slack:Social:com.slack.Slack.desktop"
     "install_snap_apps:Snap Applications::"

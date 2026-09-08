@@ -126,13 +126,17 @@ make git_hooks        # points core.hooksPath at .githooks (gitlint commit-msg)
 ### 🔐 Machine Secrets (never in this public repo)
 
 This repo is **public**, so no credential value ever lives in it — only the
-*mechanism* to reproduce one on a fresh machine. `make run` (via
-`distro_config/setup_env.sh`) appends a guarded block to `~/.bashrc` that
-sources `~/.claude/.env` and exports every key it finds, so a value set once
-there is visible to `gh`, to scaffolded projects, and to any tool that reads
-the environment. `~/.claude/.env` itself is untracked — it lives outside
-every repo's working tree, so it is not merely git-ignored, it is
-structurally impossible for any repo's git to commit it.
+*mechanism* to reproduce one on a fresh machine. The project-root `.env`
+(git-ignored, documented by `.env.example`) is the **single authored source
+of truth**. `make run` / `make setup_env` (via `distro_config/setup_env.sh`)
+**generates** `~/.claude/.env` from it — a derived copy, never hand-edited —
+then appends a guarded block to `~/.bashrc` that sources `~/.claude/.env` and
+exports every key it finds, so a value set once in the project `.env` is
+visible to `gh`, to scaffolded projects, and to any tool that reads the
+environment. `~/.claude/.env` keeps its own path (outside every repo's
+working tree) so the shell still works if this repo moves or is deleted; it
+is regenerated on every `setup_env.sh` run, so it cannot drift from the
+project `.env`. Both files are written mode `600`.
 
 | Key | Purpose | Scopes | Consumers |
 |---|---|---|---|
@@ -143,9 +147,10 @@ structurally impossible for any repo's git to commit it.
 not restored — a backed-up value may already be expired):
 1. github.com/settings/tokens → generate a new fine-grained token with the
    scopes above.
-2. `echo 'CODERABBIT_TRIGGER_PAT=<value>' >> ~/.claude/.env` (create the file
-   if it doesn't exist yet).
-3. `source ~/.bashrc` (or open a new shell).
+2. `echo 'CODERABBIT_TRIGGER_PAT=<value>' >> .env` (project-root `.env` —
+   create it first with `cp .env.example .env` if it doesn't exist yet).
+3. `make setup_env` to regenerate `~/.claude/.env` from it, then
+   `source ~/.bashrc` (or open a new shell).
 4. Verify: `[ -n "$CODERABBIT_TRIGGER_PAT" ] && echo "set"` — and that
    `gh secret set CODERABBIT_TRIGGER_PAT --body "$CODERABBIT_TRIGGER_PAT"` on
    the target repo succeeds.

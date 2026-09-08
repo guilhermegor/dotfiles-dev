@@ -516,6 +516,57 @@ install_codex() {
 }
 
 # ============================================================================
+# KIMI CODE CLI (Moonshot AI)
+# ============================================================================
+
+# Channel verified 2026-09-08 (dotfiles-dev#149): official Moonshot AI package
+# @moonshot-ai/kimi-code on the public npm registry (author "Moonshot AI",
+# https://registry.npmjs.org/@moonshot-ai/kimi-code, latest 0.41.0 at time of
+# writing). Docs: https://platform.kimi.ai/docs/guide/claude-code-kimi and
+# https://kimi.com/code/docs/. Installs a `kimi` binary; needs Node.js
+# 22.19.0+. Not to be confused with the legacy Python `kimi-cli` (PyPI
+# package `kimi-code` is an unrelated meta-package for that legacy tool) or
+# any third-party `kimi-cli`/`kimiai-cli` packages — those are different
+# projects with the same name and were deliberately not chosen here.
+install_kimi() {
+    print_status "section" "KIMI CODE CLI INSTALLATION (Moonshot AI)"
+
+    if command_exists kimi; then
+        print_status "info" "Kimi Code CLI is already installed ($(timeout 10 kimi --version 2>/dev/null | head -n1 || echo "unknown"))"
+
+        echo -e "\n${YELLOW}Do you want to reinstall/update Kimi Code CLI? (y/n):${NC}"
+        read -r update_kimi
+        if [[ ! "$update_kimi" =~ ^[Yy]$ ]]; then
+            print_status "info" "Keeping existing Kimi Code CLI installation"
+            return 0
+        fi
+    fi
+
+    if ! command_exists npm; then
+        print_status "error" "npm is not available. Please ensure Node.js is properly installed."
+        return 1
+    fi
+
+    print_status "info" "Installing @moonshot-ai/kimi-code globally via npm..."
+    run_or_echo npm install -g @moonshot-ai/kimi-code &>> "$LOG_FILE"
+
+    print_status "info" "Verifying Kimi Code CLI installation..."
+    if command_exists kimi; then
+        print_status "success" "Kimi Code CLI installed successfully"
+        print_status "success" "Kimi version: $(timeout 10 kimi --version 2>/dev/null | head -n1 || echo "Not available")"
+
+        echo ""
+        print_status "info" "Kimi Code CLI usage:"
+        print_status "config" "  Login: kimi, then /login (Kimi Code OAuth or a Moonshot API key — never store the key in this repo)"
+        print_status "config" "  Run in project: cd /path/to/project && kimi"
+        print_status "config" "  Update: npm update -g @moonshot-ai/kimi-code"
+    else
+        print_status "error" "Kimi Code CLI installation failed — check $LOG_FILE"
+        return 1
+    fi
+}
+
+# ============================================================================
 # CLAUDESTATUS (+ display/api/cli patches)
 # ============================================================================
 
@@ -1075,6 +1126,7 @@ INSTALL_REGISTRY+=(
     "install_github_copilot_cli:GitHub Copilot CLI::"
     "install_qwen:Qwen Code::"
     "install_codex:OpenAI Codex CLI::"
+    "install_kimi:Kimi Code CLI (Moonshot AI)::"
     "install_claudestatus:claudestatus (Claude Usage Dashboard)::"
     "install_rtk:RTK (Rust Token Killer)::"
     "install_faster_whisper:faster-whisper (Speech-to-Text CLI)::"

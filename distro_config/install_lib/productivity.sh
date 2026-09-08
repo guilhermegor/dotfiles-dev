@@ -420,6 +420,66 @@ install_miro() {
 }
 
 # ============================================================================
+# DESIGN
+# ============================================================================
+
+# figma-linux (publisher: Chugunov Roman / "youdonthavepermissiony", GPL-2.0,
+# description literally "Unofficial desktop application for linux") — there is
+# no official Figma desktop client for Linux. This is a community snap, not a
+# Figma Inc. product. Keep it as snap (method #4 in the "App Installation
+# Preference Order" below), NOT the PWA (#5): the PWA has no Linux font
+# helper, and the local-fonts symlink below is the entire reason to prefer
+# this over the browser tab. Do not "fix" this to the PWA without re-reading
+# this comment.
+install_figma() {
+    print_status "section" "FIGMA (figma-linux snap — unofficial community client)"
+
+    if command_exists figma-linux || snap list 2>/dev/null | grep -q "^figma-linux "; then
+        print_status "info" "figma-linux already installed"
+    else
+        if ! command_exists snap; then
+            print_status "error" "snap not found. figma-linux requires snapd."
+            print_status "info" "Install snapd first and re-run this step."
+            return 1
+        fi
+
+        print_status "info" "Installing figma-linux via Snap..."
+        run_or_echo sudo snap install figma-linux
+        print_status "success" "figma-linux installed via Snap"
+    fi
+
+    _link_figma_fonts
+}
+
+# The snap's $HOME/snap/figma-linux/current symlink (to the current revision
+# dir) is created by snapd only after the app's FIRST launch, so this cannot
+# run immediately after `snap install` — it no-ops until figma-linux has been
+# opened once, and is safe to re-run afterward (ln -sfn is idempotent). No
+# sudo: the target lives inside the user's own $HOME, and a root-owned
+# symlink there is a footgun for later.
+_link_figma_fonts() {
+    local snap_current="$HOME/snap/figma-linux/current"
+    local target_dir="$snap_current/.local/share"
+    local target="$target_dir/fonts"
+    local source="$HOME/.local/share/fonts"
+
+    if [ ! -d "$snap_current" ]; then
+        print_status "info" "figma-linux snap has not been launched yet — skipping local-fonts symlink"
+        print_status "config" "Launch figma-linux once, then re-run install_figma to link $source"
+        return 0
+    fi
+
+    if [ -L "$target" ] && [ "$(readlink -f "$target")" = "$(readlink -f "$source")" ]; then
+        print_status "info" "figma-linux fonts already symlinked"
+        return 0
+    fi
+
+    run_or_echo mkdir -p "$target_dir"
+    run_or_echo ln -sfn "$source" "$target"
+    print_status "success" "Linked $source into the figma-linux snap sandbox"
+}
+
+# ============================================================================
 # MESSAGING
 # ============================================================================
 
@@ -628,6 +688,7 @@ INSTALL_REGISTRY+=(
     "install_valor_digital:Valor Digital (Valor Econômico):Newsletter:valor-digital.desktop"
     "install_linear:Linear (Project Management):DEV:linear.desktop"
     "install_miro:Miro Collaboration Tool:DEV:miro.desktop"
+    "install_figma:Figma (via figma-linux snap, unofficial):Utilitarios:figma-linux.desktop"
     "install_mousam:Mousam Weather App:OrgPessoal:io.github.amit9838.mousam.desktop"
     "install_espanso:Espanso (Text Expander)::"
 )

@@ -53,28 +53,40 @@ is_unscoped_rm() {
 }
 
 # 3. History rewrite / force push. `--force-with-lease` is the safe form and is allowed through.
+#
+# ⚠️ Anchored to a command START (line start or right after `;`/`&&`/`|`), same as
+# is_network_fetch/is_unscoped_rm above. The unanchored form this replaced (dotfiles-dev#217)
+# matched "git push -f" / "git filter-branch" ANYWHERE in the raw string — including inside a
+# quoted commit message, a test fixture, or another program's argument that merely mentions the
+# phrase — which is a false-block on text that never runs as a command. Matching the command WORD
+# at its actual position, not a substring of the whole line, is the same fix shape #97/#140/#141
+# already applied to protected_branch_guard.sh / branch_requires_issue_guard.sh.
 is_history_rewrite() {
     local cmd="$1"
-    if printf '%s' "$cmd" | grep -Eq 'git[[:space:]]+push([[:space:]].*)?[[:space:]](-f|--force)([[:space:]]|$)' \
+    if printf '%s' "$cmd" | grep -Eq '(^|[;&|])[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+push([[:space:]].*)?[[:space:]](-f|--force)([[:space:]]|$)' \
         && ! printf '%s' "$cmd" | grep -q -- '--force-with-lease'; then
         return 0
     fi
-    printf '%s' "$cmd" | grep -Eq 'git[[:space:]]+filter-branch([[:space:]]|$)'
+    printf '%s' "$cmd" | grep -Eq '(^|[;&|])[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+filter-branch([[:space:]]|$)'
 }
 
 # 4. `git reset --hard` / `git clean -fd` while the tree is dirty — silently destroys uncommitted
 #    work. Clean tree ⇒ harmless ⇒ allowed.
+# Anchored per the note on is_history_rewrite above — the same unanchored-substring flaw
+# (dotfiles-dev#217) applied here too.
 is_destructive_git_on_dirty_tree() {
     printf '%s' "$1" \
-        | grep -Eq 'git[[:space:]]+(reset[[:space:]]+(--hard|.*[[:space:]]--hard)|clean[[:space:]]+-[[:alnum:]]*[fd])' \
+        | grep -Eq '(^|[;&|])[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+(reset[[:space:]]+(--hard|.*[[:space:]]--hard)|clean[[:space:]]+-[[:alnum:]]*[fd])' \
         || return 1
     # Dirty tree? Non-empty porcelain output = uncommitted work at risk.
     [[ -n "$(git status --porcelain 2>/dev/null)" ]]
 }
 
 # 5. World-writable recursive chmod.
+# Anchored per the note on is_history_rewrite above — the same unanchored-substring flaw
+# (dotfiles-dev#217) applied here too (a command that merely quotes "chmod -R 777" as text).
 is_chmod_777() {
-    printf '%s' "$1" | grep -Eq 'chmod[[:space:]]+(-[[:alnum:]]*[[:space:]]+)*-?[[:alnum:]]*[rR][[:alnum:]]*[[:space:]]+777'
+    printf '%s' "$1" | grep -Eq '(^|[;&|])[[:space:]]*chmod[[:space:]]+(-[[:alnum:]]*[[:space:]]+)*-?[[:alnum:]]*[rR][[:alnum:]]*[[:space:]]+777'
 }
 
 block() {

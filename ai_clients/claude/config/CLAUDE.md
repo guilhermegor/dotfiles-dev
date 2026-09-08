@@ -60,6 +60,15 @@ whenever a source file is touched, so it stays out of the always-on context.
 Per-language rules (`python.md`, `bash.md`, …) layer on top. Only genuinely
 cross-cutting, non-file-scoped rules remain below.
 
+`rules/*.md` has no equivalent auto-load for skills — a skill is standalone
+markdown loaded verbatim by the Skill tool, with no `@import` expansion over
+its body. The comment-discipline rule ("an explanation long enough to need a
+comment is documentation in disguise") therefore has one home for
+skills too: `ai_clients/claude/skills/code-comments.md`, read by every
+code-emitting skill via a one-line pointer, the same relationship those
+skills already have with `py-standards.md`. Do not restate the rule inline
+in a new code-emitting skill — add the pointer instead.
+
 ## Dispatching subagents — brief them to commit early
 
 When a task handed to a subagent (or a worktree-isolated agent) is expected to touch

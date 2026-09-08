@@ -7,6 +7,10 @@ argument-hint: [source-file-or-directory]
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` — the
+same rule against inline explanation-as-documentation applies to any prose
+this skill writes into the generated pages.
+
 Generate mkdocs-compatible markdown pages for Python source code using
 mkdocstrings directives. The existing numpy-style docstrings are the single
 source of truth — this skill creates the pages that render them, not the

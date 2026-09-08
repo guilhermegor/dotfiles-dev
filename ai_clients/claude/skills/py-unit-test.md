@@ -7,6 +7,11 @@ argument-hint: [source-file] [output-file]
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+emitting code — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer. QA suppressions (`noqa`, `type: ignore`, …) are exempt.
+
 Generate comprehensive unit tests for the provided Python module using pytest.
 
 ## Required inputs
@@ -476,37 +481,20 @@ assert isinstance(result, ExpectedType)
 assert type(result) is ExactType  # exact type check
 assert hasattr(result, "required_method")
 
-# attribute access (AVOID Ruff B009 violation)
-# incorrect - using getattr with constant string
-run_method = getattr(instance, 'run')  # B009 violation
+# attribute access
+run_method = getattr(instance, 'run')  # avoid — Ruff B009
+run_method = instance.run              # prefer
 
-# correct - use direct attribute access
-run_method = instance.run  # no violation
+# non-generic DataFrame name
+df = b3_instance.transform_data(file=empty_content)   # avoid — Ruff PD901
+df_ = b3_instance.transform_data(file=empty_content)  # prefer
 
-# pandas dataframe declaration
-# incorrect - use of generic variable `df` (avoid Ruff PD901 violation)
-df = b3_instance.transform_data(file=empty_content)
+# test-fixture token needs an explicit suppression, not a bare literal
+b3_instance.token = "test_token"  # avoid — Ruff S105
+b3_instance.token = "test_token"  # noqa: S105
 
-# correct - use df_
-df_ = b3_instance.transform_data(file=empty_content)
-
-# when declaring a test token, please add a noqa S105 possible hardcoded password assigned
-# incorrect
-b3_instance.token = "test_token"
-
-# correct
-b3_instance.token = "test_token" # noqa S105: possible hardcoded password assigned
-
-# use a single `with` statement with multiple contexts instead of nested `with` statements
-# incorrect - SIM117 Ruff violation
-with pytest.raises(ValueError, match="Token not available\\. Call get_token\\(\\) first\\."):
-        # Mock backoff to prevent retry delays
-        with pytest.MonkeyPatch().context() as m:
-            m.setattr("backoff.on_exception", lambda *args, **kwargs: lambda func: func)
-            b3_instance.get_response(timeout=(12.0, 12.0), bool_verify=False)
-
-# correct
-with pytest.raises(ValueError, match="Token not available\\. Call get_token\\(\\) first\\."), \
+# one `with`, not nested — Ruff SIM117
+with pytest.raises(ValueError, match="Token not available"), \
     pytest.MonkeyPatch().context() as m:
     m.setattr("backoff.on_exception", lambda *args, **kwargs: lambda func: func)
     b3_instance.get_response(timeout=(12.0, 12.0), bool_verify=False)

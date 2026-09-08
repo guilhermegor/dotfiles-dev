@@ -8,6 +8,11 @@ allowed-tools: Read Glob Grep
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+emitting a migration — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer.
+
 The Alembic + SQLAlchemy half of migration work. The reasoning that survives the tool
 changing lives in the agnostic sibling, `s:sql-migrations` — this skill is the part that
 is true of **this** tool and would be wrong advice for Flyway.

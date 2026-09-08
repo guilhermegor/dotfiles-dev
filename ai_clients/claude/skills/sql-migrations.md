@@ -8,6 +8,11 @@ allowed-tools: Read Glob Grep
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+emitting a migration — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer.
+
 Evolutionary database design: the reasoning that is true whether the tool is Alembic,
 Flyway, Liquibase, Prisma Migrate, ActiveRecord, golang-migrate, or sqlx. This skill is
 the agnostic half — the tool-specific half is `s:sql-alembic`.

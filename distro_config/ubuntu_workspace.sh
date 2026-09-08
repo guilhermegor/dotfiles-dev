@@ -130,6 +130,28 @@ configure_mouse() {
     print_status "config" "  Natural scrolling: $NATURAL_SCROLL"
 }
 
+# Merge a gsettings favorite-apps live value into a declared-favorites array,
+# by reference, so hand-pinned apps survive a `gsettings set` (which replaces
+# the key wholesale). Declared apps keep their order; any existing app not
+# already covered is appended, preserving its relative order among itself.
+# $1: name of the array variable to merge into (nameref)
+# $2: raw `gsettings get org.gnome.shell favorite-apps` output, e.g.
+#     "['org.gnome.Nautilus.desktop', 'spotify.desktop']"
+_merge_dock_favorites() {
+    local -n _merge_declared="$1"
+    local existing_str="$2"
+    local -a existing=()
+    if [ -n "$existing_str" ]; then
+        mapfile -t existing < <(grep -oE "'[^']+'" <<< "$existing_str")
+    fi
+    local item
+    for item in "${existing[@]}"; do
+        if [[ ! " ${_merge_declared[*]} " == *" ${item} "* ]]; then
+            _merge_declared+=("$item")
+        fi
+    done
+}
+
 configure_dock() {
     print_status "info" "Configuring dock..."
     
@@ -265,13 +287,21 @@ configure_dock() {
         fi
     done
     
+    # `gsettings set` replaces favorite-apps wholesale, so any app pinned by
+    # hand (and not declared above) would otherwise be silently dropped.
+    # Merge it back in — declared apps keep their canonical order, hand-pinned
+    # extras are appended in their existing relative order (see #103).
+    local current_favorites_str
+    current_favorites_str=$(gsettings get org.gnome.shell favorite-apps 2>/dev/null) || current_favorites_str=""
+    _merge_dock_favorites favorites "$current_favorites_str"
+
     # Convert array to comma-separated string
     local favorites_str
     favorites_str=$(IFS=,; echo "${favorites[*]}")
-    
-    # Set favorites (this replaces all existing favorites)
+
+    # Set favorites (declared apps + any pre-existing hand-pinned apps)
     run_or_echo gsettings set org.gnome.shell favorite-apps "[${favorites_str}]"
-    
+
     print_status "success" "Dock configured with ${#favorites[@]} favorite apps"
     print_status "info" "Apps in order: ${favorites_str}"
 }

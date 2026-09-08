@@ -133,8 +133,21 @@ reach a "clean" tree can silently move another agent's work onto your branch.
 
 ## 2. SWEEP the board
 
-Residue · unresolved threads · branch-without-PR · unarmed auto-merge · PR behind base · real CI
-failures.
+Residue · unresolved threads · branch-without-PR · unarmed auto-merge · PR behind base · free
+dispatch surface — six questions, one versioned tool, never re-derived by hand:
+
+```bash
+bash ai_clients/claude/hooks/subagent_stop_sweep.sh <<<'{}' | jq -r '.hookSpecificOutput.additionalContext'
+```
+
+This is the same script the `SubagentStop` hook already runs on every agent completion
+(dotfiles-dev#195 — it used to exist only in a session scratchpad, so the next session either
+rewrote it from scratch or skipped it). It derives the repo and default branch from `git
+remote`/`git ls-remote`, never a hardcoded owner/repo, and calls the shared
+`gate_pr_thread_state` implementation in `hooks/lib/review_thread_gate.sh` instead of re-deriving
+the review-thread verdict. Run it by hand here for the same report outside a `SubagentStop`
+trigger — a fresh round, or a manual `/s:dev-loop` invocation with no subagent having just
+finished.
 
 ⚠️ **PR behind base is not cosmetic.** CI runs a gate script **from the PR's own checkout**, so a
 gate fixed on `main` does not apply to a PR that predates the fix. Measured on a PR whose local
@@ -333,6 +346,23 @@ erroring. `.claude/release.conf` is the declared list where one exists.
 
 ## 6. DISPATCH — the loop's other half
 
+### Pre-dispatch: is there room to finish what you're about to start?
+
+🔴 **Check budget at spawn time, not at 90%.** A 90% context/quota alarm narrows the window in
+which a kill does damage without shrinking the damage itself — three subagents measured killed
+mid-flight held 662/694/256 uncommitted lines, and the loss was caused by holding work to the end,
+not by an alarm threshold (dotfiles-dev#167). An agent takes roughly 10 minutes; dispatching one
+at 85% of this session's own remaining budget is a predictable loss, not a risk to weigh.
+
+This is a judgment call the orchestrating session makes about itself, not a hook — no script can
+read another process's remaining context/quota, so unlike the checks above it stays session
+knowledge (the same decidability test the `Do Not` section applies to every exception: data →
+automate it, session knowledge → it stays a judgment, and it should say so). Before firing each
+agent this round: note the visible context/quota remaining, skip or stagger dispatch when it is
+low, and prefer a memory checkpoint over a fresh spawn when in doubt — a checkpoint is cheap and
+its entire value is existing before the window closes, the same principle step 0 already applies
+to the 7-day cron expiry.
+
 Compute the free surface: the exact files the open PRs touch, versus the exact files each open
 issue would touch. Dispatch agents for what does not collide.
 
@@ -394,6 +424,16 @@ on at merge time.
 Every brief carries:
 - 🔴 **confirm before writing** — the feature/defect check above; state the command and its output;
 - 🔴 **commit and push at the first coherent point, then keep committing** (the measurement above);
+- 🔴 **verify HEAD belongs to you and holds your diff — not just that it exists.** `git log -1`
+  shows an empty commit and a foreign commit exactly as it shows a real one; the same
+  `[branch abc1234] N files changed` success line prints regardless. Confirm with
+  `git diff <sha>^ <sha> --stat`, never `git log -1` alone. Measured: a genuinely empty commit
+  passed every hook with full "success" output, and a foreign commit leaked from a sibling agent
+  onto the wrong branch the same way (dotfiles-dev#162);
+- when `isolation: "worktree"` is in play, prefer an explicit `git worktree add <own-path>` over
+  trusting the harness-provided directory to be exclusively yours if its identity is ever in
+  doubt — two agents were measured sharing one physical worktree directory, one wiping the
+  other's files mid-task (dotfiles-dev#162);
 - 🔴 **never `git stash`, and never `git checkout` of another branch, inside a worktree you did not
   create** — the stash stack and the checkout are both shared across worktrees; copy to the
   scratchpad instead (step 1);

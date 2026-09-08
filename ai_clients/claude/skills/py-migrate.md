@@ -5,6 +5,8 @@ effort: high
 argument-hint: [source-file-or-directory] [from-version] [to-version]
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Migrate the provided Python source code between Python versions or upgrade major
 library dependencies. Apply changes to the source files and report what was modified.
 

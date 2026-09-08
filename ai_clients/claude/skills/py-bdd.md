@@ -6,6 +6,8 @@ argument-hint: [feature-file] [output-file]
 allowed-tools: Read
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Generate pytest-bdd step definitions that bind the provided Gherkin `.feature`
 file to executable pytest code. This is the pytest weapon of the BDD family —
 for Gherkin syntax, the localised-keyword rule, and the decision of *whether* a

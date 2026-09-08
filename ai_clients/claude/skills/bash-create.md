@@ -6,6 +6,8 @@ argument-hint: [description] [target-file]
 allowed-tools: Read, Glob, Grep
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Write a complete, production-ready Bash script following the conventions below.
 
 ## Required inputs

@@ -10,6 +10,8 @@ argument-hint: [brand-name] [purpose]
 allowed-tools: Read
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Read all tokens (`colors`, `typography`, `spacing`, `motion`) and component
 specs (with `states:` blocks) from conversation context. Run a structured
 audit against WCAG 2.2 AA, flag AAA opportunities, and emit findings.

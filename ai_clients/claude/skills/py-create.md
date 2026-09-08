@@ -5,6 +5,8 @@ effort: high
 argument-hint: [description] [target-file]
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Write a complete, production-ready Python module according to the rules below.
 Return only the code — no explanations, no commentary.
 

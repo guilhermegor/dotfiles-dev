@@ -6,6 +6,8 @@ argument-hint: [none]
 allowed-tools: Read Glob Grep
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Resume tutoring from in-progress work — never start a fresh curriculum until the
 discovery sequence below has failed. Prior tutoring sessions encode the user's chosen
 step ordering, completed work, accumulated feedback, and recurring-issue notes;

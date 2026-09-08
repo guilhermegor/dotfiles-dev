@@ -6,6 +6,8 @@ argument-hint: [source-file-or-directory]
 allowed-tools: Read Glob Grep
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Scan the provided Python source code for security vulnerabilities. Report
 findings as a structured list with CWE references and remediation guidance —
 do not modify any files.

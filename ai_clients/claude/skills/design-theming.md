@@ -9,6 +9,8 @@ argument-hint: [brand-name] [purpose]
 allowed-tools: Read
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Read foundation tokens (`colors`, `typography`, `spacing`) from conversation
 context. Produce **alias layers** for light/dark and density variants — not
 duplicate token sets.

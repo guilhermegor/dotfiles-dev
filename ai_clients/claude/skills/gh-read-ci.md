@@ -7,6 +7,8 @@ effort: high
 allowed-tools: Bash(gh run*)
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 You are parsing raw GitHub Actions log output to extract structured errors.
 Follow these steps exactly.
 

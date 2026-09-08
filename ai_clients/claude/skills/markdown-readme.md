@@ -5,6 +5,8 @@ effort: medium
 argument-hint: [project-name] [github-username]
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Generate a professional README.md file for a Python project following the
 structure and guidelines below.
 

@@ -6,6 +6,8 @@ argument-hint: [none]
 allowed-tools: Read Glob Grep Write Edit
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Two distinct lesson systems live here. Pick by what you are capturing.
 
 ---

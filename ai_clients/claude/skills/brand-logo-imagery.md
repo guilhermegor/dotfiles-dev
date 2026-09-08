@@ -10,6 +10,8 @@ argument-hint: [brand-name]
 allowed-tools: Read
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Read brand profile and identity (from `s:brand-identity`) from conversation
 context. Produce the visual-asset rules a designer or developer needs to
 *apply* the brand without re-deriving it — logo rules, imagery direction,

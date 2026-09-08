@@ -6,6 +6,8 @@ argument-hint: [package name, bump type, and last tag — supplied by s:release]
 allowed-tools: Bash(curl*), Bash(jq*), Bash(gh workflow*), Bash(gh run*), Bash(pip install*), Read, Grep
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 You are the **PyPI arm** of a release. `s:release` has already established that a release is
 warranted and which bump applies; you own the two things that are PyPI-specific: **the version
 floor** and **the publish/verify mechanics**.

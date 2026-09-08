@@ -6,6 +6,8 @@ argument-hint: [none — reads the repo state]
 allowed-tools: Bash(git log*), Bash(git tag*), Bash(git describe*), Bash(git diff*), Bash(git rev-parse*), Bash(rtk git log*), Bash(rtk git diff*), Bash(gh workflow*), Bash(gh run*), Bash(gh release*), Read, Glob, Grep
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 You are deciding and cutting a release for this repository. Follow these steps exactly.
 
 The governing rule: **a version is a claim about the shipped artifact — only mint one when the

@@ -6,6 +6,8 @@ argument-hint: [source-file] [output-file]
 allowed-tools: Read
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Generate property-based tests for the provided Python module using Hypothesis.
 This is the PBT weapon of the testing family — for the vocabulary that decides
 *whether* a case is EBT or PBT in the first place, and for AAA/SUT/independence,

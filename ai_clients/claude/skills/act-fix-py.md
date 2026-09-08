@@ -6,6 +6,8 @@ argument-hint: [act-output] [--plan|--fix]
 allowed-tools: Read Glob Grep Edit
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Classify Python CI failures from `act` output and delegate to the appropriate `s:py-*` sub-skill. The caller (`/c:act`) passes the raw act output and mode flag as context.
 
 ## 1. Load learned patterns

@@ -6,6 +6,8 @@ argument-hint: [none]
 allowed-tools: Read
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 This is the language-agnostic layer of the testing family. It answers *what makes a
 good test*, never *how a specific tool writes one*. Tool skills (`s:py-unit-test`,
 `s:py-hypothesis`, and any future `ts-*` equivalents) read this skill for vocabulary

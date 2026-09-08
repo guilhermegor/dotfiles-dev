@@ -6,6 +6,8 @@ argument-hint: [<shaped problem | issue #>]
 allowed-tools: Read Glob Grep Bash AskUserQuestion
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 # Work Breakdown — a problem into provably non-colliding issues
 
 You are the layer between "problem is bounded" and "one ticket per subagent." This skill

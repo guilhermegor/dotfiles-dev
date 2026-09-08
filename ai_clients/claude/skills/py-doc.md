@@ -5,6 +5,8 @@ effort: high
 argument-hint: [source-file-or-directory]
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Generate mkdocs-compatible markdown pages for Python source code using
 mkdocstrings directives. The existing numpy-style docstrings are the single
 source of truth — this skill creates the pages that render them, not the

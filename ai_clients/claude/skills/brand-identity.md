@@ -10,6 +10,8 @@ argument-hint: [brand-name]
 allowed-tools: Read
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Read the brand profile from conversation context. Derive the brand's identity
 layer — the parts of a brand book that are *about who the brand is*, not
 *about how to build with it*. This is prose-first; tokens are kept minimal.

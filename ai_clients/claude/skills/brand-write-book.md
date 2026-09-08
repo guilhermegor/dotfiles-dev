@@ -11,6 +11,8 @@ argument-hint: [brand-name]
 allowed-tools: Read Write Bash
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Assemble the approved brand-tier content into a single brand book at
 `design/brand/brand-book.md`. The brand book is the **identity** deliverable
 — prose-first, with a small seed-palette and typeface block that the

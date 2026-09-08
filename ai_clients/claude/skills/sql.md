@@ -6,6 +6,8 @@ argument-hint: [none]
 allowed-tools: Read Glob Grep
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 The database layer is where a model's plausible-looking output does the most damage,
 because SQL is the archetype of the **silent wrong answer**: a query that returns *a*
 number, just not the right one, reports nothing. A crash announces itself; a dirty read

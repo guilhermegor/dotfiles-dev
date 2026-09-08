@@ -6,6 +6,8 @@ argument-hint: [none]
 allowed-tools: Read
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 This is the language-agnostic layer of the BDD family. It answers *is this worth
 specifying as Gherkin, and if so, how* — never *how a specific runner binds a
 sentence to code*. Tool skills (`s:py-bdd`, and any future `ts-*`/`java-*`

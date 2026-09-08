@@ -6,6 +6,8 @@ argument-hint: [source-file-or-directory]
 allowed-tools: Read Glob Grep
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Review the provided Python source code for performance issues and optimisation
 opportunities. Report findings as a structured list with current pattern vs
 suggested pattern — do not modify any files.

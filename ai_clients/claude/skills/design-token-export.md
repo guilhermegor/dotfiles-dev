@@ -10,6 +10,8 @@ argument-hint: [brand-name] [purpose] [out-dir]
 allowed-tools: Read Write Bash
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Render the approved frontmatter token block into machine-readable artifacts.
 The markdown frontmatter is the **single source of truth** — exports are pure
 derivations, never hand-authored, never the place to introduce new tokens.

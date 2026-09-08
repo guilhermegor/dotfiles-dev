@@ -5,6 +5,8 @@ effort: medium
 argument-hint: [story or subtask description, or an issue reference already read into context]
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Score the given story or subtask on the **uncertainty scale** below. Follow these
 steps exactly.
 

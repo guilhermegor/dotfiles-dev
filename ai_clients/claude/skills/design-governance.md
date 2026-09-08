@@ -11,6 +11,8 @@ argument-hint: [brand-name] [purpose]
 allowed-tools: Read
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Read the component set (with `states:` blocks) from conversation context.
 If a prior `design/system/<purpose>.md` exists on disk, also read its
 existing `version` and `changelog` to compute the new version. Produce

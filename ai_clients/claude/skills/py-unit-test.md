@@ -5,6 +5,8 @@ effort: high
 argument-hint: [source-file] [output-file]
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Generate comprehensive unit tests for the provided Python module using pytest.
 
 ## Required inputs

@@ -10,6 +10,8 @@ argument-hint: [brand-name] [purpose] [depth-a|b|c]
 allowed-tools: Read WebFetch
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Ask questions **one at a time**. Never ask multiple questions in one message.
 
 You already have the brand name, design purpose, and inspiration depth from

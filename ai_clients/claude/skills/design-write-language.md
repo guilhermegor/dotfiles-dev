@@ -8,6 +8,8 @@ argument-hint: [brand-name] [purpose]
 allowed-tools: Read Write Bash
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Assemble all approved tokens and prose from conversation context into a single
 file in strict awesome-design-md format — the **design language / foundations**
 deliverable. This document is the canonical source the design-system tier

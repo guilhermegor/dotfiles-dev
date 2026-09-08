@@ -5,6 +5,8 @@ effort: high
 argument-hint: [source-file]
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Refactor the provided Python module according to the rules below. Return only the
 refactored code — no explanations, no commentary. Use `True` / `False` instead
 of `OK` / `NOK`.

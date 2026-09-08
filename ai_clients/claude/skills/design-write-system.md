@@ -11,6 +11,8 @@ argument-hint: [brand-name] [purpose]
 allowed-tools: Read Write Bash
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Assemble the approved tokens, component specs (with `states:`), theming
 aliases, accessibility findings, and governance metadata into a single
 file at `design/system/<purpose>.md` — the **full design system**

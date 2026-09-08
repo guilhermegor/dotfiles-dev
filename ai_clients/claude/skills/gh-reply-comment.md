@@ -7,6 +7,8 @@ argument-hint: <repo_owner> <repo_name> <pr_number> <comment_id> <reply_text>
 allowed-tools: Bash(rtk gh *)
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Post a reply to a GitHub pull request review comment thread.
 Follow these steps exactly.
 

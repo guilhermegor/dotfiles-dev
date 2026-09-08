@@ -6,6 +6,8 @@ argument-hint: [none]
 allowed-tools: Read Glob Grep
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 The SQLAlchemy-specific layer of the SQL skill family — one implementation, SQLAlchemy
 2.0. Raw-SQL hazards are `s:sql`; framework-agnostic ORM reasoning (including DB vs.
 application validation, which this skill only adds the SQLAlchemy validator to) is

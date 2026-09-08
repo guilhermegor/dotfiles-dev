@@ -6,6 +6,8 @@ argument-hint: [source-file] [error-or-traceback]
 allowed-tools: Read Glob Grep
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Diagnose the root cause of a Python error by reading tracebacks, tracing call
 stacks, and identifying the failing code path. Report a structured diagnosis —
 do not modify any files.

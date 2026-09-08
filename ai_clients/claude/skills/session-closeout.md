@@ -6,6 +6,8 @@ argument-hint: [none]
 allowed-tools: Bash Read Glob Grep Write Edit
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 You are closing out a work session. The question *"did I capture every lesson / issue /
 checkpoint?"* is **deterministic and checkable** — do not answer it from memory, because memory
 is exactly what is under audit. Run the audit, then **act on every finding while the session is

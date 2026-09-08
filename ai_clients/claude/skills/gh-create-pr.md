@@ -6,6 +6,8 @@ argument-hint: [base-branch — default: main]
 allowed-tools: Bash(git log*), Bash(git diff*), Bash(git status*), Bash(git rev-parse*), Bash(git branch*), Bash(git merge-base*), Bash(gh pr*)
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Open a pull request for the current branch. Follow these steps exactly.
 
 ## 0. Confirmation gate

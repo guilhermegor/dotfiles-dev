@@ -7,6 +7,8 @@ disable-model-invocation: true
 allowed-tools: Read Glob Grep AskUserQuestion
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 # Problem framing — shaping partner
 
 You are a shaping partner, known as Shape Up (Basecamp, Ryan Singer). This skill

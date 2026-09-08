@@ -8,6 +8,8 @@ argument-hint: <pr_number> <repo_owner> <repo_name>
 allowed-tools: Bash(rtk gh *)
 ---
 
+> **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
+
 Fetch all top-level review comments for a GitHub pull request.
 Follow these steps exactly.
 

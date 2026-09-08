@@ -269,7 +269,40 @@ hardest where the mechanism is most needed. `schedule:` is the one trigger GitHu
    🎯 **Before spending the ask, check whether a cheaper lever exists.** A `DIRTY` PR holding a
    contended file is unblocked by a rebase — free, no slot, no waiting. Resolving those first
    raises the value of the *next* ask instead of consuming this one.
-3. **At most one ask per round — comment or push, whichever came first.** A burst genuinely trips
+3. **Ask a human first — the bot is the fallback, not the default.** Read the Reviewers panel
+   before spending the bot ask in item 4:
+
+   ```bash
+   rtk gh pr view <n> --json reviewRequests,reviews,author \
+     --jq '{requested:[.reviewRequests[].login],
+            reviewed:[.reviews[].author.login],
+            author:.author.login}'
+   ```
+
+   | state | action |
+   |---|---|
+   | nobody requested, a non-author candidate exists | `rtk gh pr edit <n> --add-reviewer <login>` |
+   | requested, no submitted review, request older than 24h | re-request — the ⟳ button in the panel: `rtk gh api -X POST repos/{owner}/{repo}/pulls/<n>/requested_reviewers -f 'reviewers[]=<login>'` |
+   | requested and recent | leave it alone |
+   | no assignable candidate | report once, fall through to item 4 |
+
+   Candidates are `rtk gh api repos/{owner}/{repo}/collaborators --jq '.[].login'` minus the PR
+   author. `triage` permission is enough to *be requested*; `write` is needed to *approve*.
+
+   ⚠️ **GitHub rejects a review request from the PR's own author.** A repo with ONE maintainer
+   therefore has a structurally empty Reviewers panel and this branch can never fire — measured on
+   dotfiles-dev#260, which sat at `Reviewers: No reviews` with no assignable candidate. That is a
+   configuration fact, not a defect in this step, and the required behaviour is to **degrade
+   loudly**: say `no assignable reviewer (N collaborators)` exactly once, fall through to item 4,
+   and never claim a review was requested. Precondition tracked in dotfiles-dev#268 — it needs a
+   second collaborator on the repo, which is an owner action.
+
+   ⚠️ **Re-request only a stale request, never every round.** A re-ping each cycle is spam, and it
+   trains the one reviewer you have to ignore the notification — which costs more than the idle
+   slot it was meant to fix. The 24h threshold is a default, not a measurement; move it when
+   there is one.
+
+4. **At most one ask per round — comment or push, whichever came first.** A burst genuinely trips
    the account limit — 12 rate-limit notices in 11 minutes, measured.
 
    🔴 **Then stop reading the ack.** CodeRabbit edits the acknowledgement **in place**: measured on
@@ -287,6 +320,11 @@ hardest where the mechanism is most needed. `schedule:` is the one trigger GitHu
 
 Report **time-to-first-review per PR**, never requests per hour: a PR sitting unreviewed is the
 user-visible cost, and that is the number this step must move.
+
+Say **which branch fired** — human requested, re-requested, no assignable reviewer, or bot ask —
+in one line. The four outcomes look identical from outside the loop, and "no assignable reviewer"
+in particular is a standing configuration gap that stays invisible if the step only reports when
+it acted.
 
 ## 5. RELEASE — evaluate and cut
 

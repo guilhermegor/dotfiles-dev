@@ -218,6 +218,35 @@ the implicit coupling that arises when two classes share a module boundary.
 - Each test asserts one behavior.
 - Tests must be deterministic: no random seeds without explicit fixtures.
 
+## Proving a claim
+
+The failure mode each rule guards against, not the full reasoning:
+
+- **A mutation experiment is evidence only if the restore is verified and the
+  mutation is verified to have applied.** `git checkout -- <tracked> <untracked>`
+  aborts entirely on an untracked pathspec, restoring nothing — restore from a
+  pre-mutation snapshot copy instead. A mutation that silently no-ops (e.g. an
+  unmet assert) still leaves the suite green, misread as "the suite doesn't catch
+  this" — make the mutation print what it changed.
+- **A rewrite claimed to produce identical output needs a digest, not a green
+  suite.** Run every real consumer against a real artifact under both
+  implementations and compare a SHA-256 of the full serialised result plus
+  dtypes/row count — shape checks miss a dropped repeated element. Swap
+  implementations by file copy with a `trap` restore, never `git stash`.
+- **Set question → distinct values; rate question → rows.** A probe inherited
+  from a smaller dataset carries its cost model with it: validating every row
+  instead of the distinct set can turn a seconds-long check into a 10+ minute one.
+- **A number stated only in prose is unverified.** The risk isn't later drift,
+  it's being wrong the day it's written — a specific figure reads as evidence
+  someone measured it. If being wrong about it would be embarrassing, assert it;
+  if asserting it feels like overkill, it didn't need to be a number.
+- **Telemetry answering "is this safe to enable?" must fire on composition, not
+  on the success path it gates** — instrumenting only the success path means the
+  gate that keeps a feature off also keeps its own measurement off.
+- **Flipping a wrong default means removing its compensations** (the allowlist
+  excusing it, the test pinning the old value, the docs example, the cache key)
+  — leave one in place and it silently suppresses the new default.
+
 ## Documentation
 
 - **Prefer a smaller named function over a comment that explains a block.** A

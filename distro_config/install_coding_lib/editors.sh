@@ -470,8 +470,8 @@ install_warp_terminal() {
 }
 
 INSTALL_REGISTRY+=(
-    "install_vscode:VS Code:DEV:code.desktop"
-    "install_cursor:Cursor IDE:DEV:cursor.desktop"
+    "install_vscode:VS Code:Code:code.desktop"
+    "install_cursor:Cursor IDE:Code:cursor.desktop"
     "install_neovim:Neovim Text Editor::"
-    "install_warp_terminal:Warp Terminal:DEV:dev.warp.Warp.desktop"
+    "install_warp_terminal:Warp Terminal:Code:dev.warp.Warp.desktop"
 )

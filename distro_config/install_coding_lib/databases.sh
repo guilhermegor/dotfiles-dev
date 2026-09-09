@@ -141,7 +141,7 @@ install_sqlite() {
 
 INSTALL_REGISTRY+=(
     "install_postgresql:PostgreSQL::"
-    "install_pgadmin:pgAdmin4:DEV:pgadmin4.desktop"
-    "install_dbeaver:DBeaver:DEV:dbeaver-ce_dbeaver-ce.desktop"
+    "install_pgadmin:pgAdmin4:Data:pgadmin4.desktop"
+    "install_dbeaver:DBeaver:Data:dbeaver-ce_dbeaver-ce.desktop"
     "install_sqlite:SQLite::"
 )

@@ -1,8 +1,8 @@
 #!/bin/bash
-# Backs up git-ignored .env* files from all git repos under ~/github.
+# Backs up git-ignored .env* files from all git repos under ~/repos.
 # Reads CLAUDE_BACKUP_DIR from ~/.claude/.env for the backup destination.
 
-GITHUB_DIR="$HOME/github"
+GITHUB_DIR="$HOME/repos"
 
 read_backup_dir() {
     grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null \

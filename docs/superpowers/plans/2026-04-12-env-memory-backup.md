@@ -33,7 +33,7 @@ No Makefile changes — `make set_shortcuts` already runs `set_custom_shortcuts.
 
 ## Task 1: backup_env.sh
 
-Scans all git repos under `~/github` (up to 2 levels deep), finds git-ignored `.env*`
+Scans all git repos under `~/repos` (up to 2 levels deep), finds git-ignored `.env*`
 files, presents a zenity checklist, and copies selected files to
 `$CLAUDE_BACKUP_DIR/env_files/<project>.<env_name>_<timestamp>`.
 
@@ -44,10 +44,10 @@ files, presents a zenity checklist, and copies selected files to
 
 ```bash
 #!/bin/bash
-# Backs up git-ignored .env* files from all git repos under ~/github.
+# Backs up git-ignored .env* files from all git repos under ~/repos.
 # Reads CLAUDE_BACKUP_DIR from ~/.claude/.env for the backup destination.
 
-GITHUB_DIR="$HOME/github"
+GITHUB_DIR="$HOME/repos"
 
 read_backup_dir() {
     grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2-
@@ -184,7 +184,7 @@ Expected: no output (exit 0).
 
 ```bash
 git add storage/backup_env.sh
-git commit -m "feat(storage): Add backup_env zenity script for all ~/github repos"
+git commit -m "feat(storage): Add backup_env zenity script for all ~/repos repos"
 ```
 
 ---
@@ -320,10 +320,10 @@ a radio dialog (overwrite / back up first / skip), then copies and reports.
 
 ```bash
 #!/bin/bash
-# Restores git-ignored .env* files from backup to ~/github/<project>/ roots.
+# Restores git-ignored .env* files from backup to ~/repos/<project>/ roots.
 # Reads CLAUDE_BACKUP_DIR from ~/.claude/.env.
 
-GITHUB_DIR="$HOME/github"
+GITHUB_DIR="$HOME/repos"
 
 read_backup_dir() {
     grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2-
@@ -880,7 +880,7 @@ Add:
 
 After the existing `print_status $YELLOW "  - Super+J..."` line, add:
 ```bash
-    print_status $YELLOW "  - Super+Shift+E to back up .env files from all ~/github repos"
+    print_status $YELLOW "  - Super+Shift+E to back up .env files from all ~/repos repos"
     print_status $YELLOW "  - Super+Shift+M to export Claude Code memory to backup"
     print_status $YELLOW "  - Super+Alt+E to restore .env files from backup"
     print_status $YELLOW "  - Super+Alt+M to restore Claude Code memory from backup"

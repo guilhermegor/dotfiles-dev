@@ -51,7 +51,7 @@ No collision with existing custom shortcuts (`<Super>b/c/e/j/k/r/t`, `<Super><Ct
 **Flow:**
 1. Read `CLAUDE_BACKUP_DIR` → set `TARGET=$CLAUDE_BACKUP_DIR/env_files`.
 2. `mkdir -p "$TARGET"` — error + exit on failure.
-3. Find all git repos under `~/github` (dirs containing `.git/`), up to 2 levels deep.
+3. Find all git repos under `~/repos` (dirs containing `.git/`), up to 2 levels deep.
 4. For each repo: run `find <repo> -maxdepth 1 -name ".env*" ! -name "*.md"`, then
    `git -C <repo> check-ignore --quiet <file>` to keep only git-ignored files.
 5. Build a zenity checklist: columns `Repo | File | Path`. Pre-check all rows.
@@ -100,7 +100,7 @@ No collision with existing custom shortcuts (`<Super>b/c/e/j/k/r/t`, `<Super><Ct
 6. User picks subset (or cancels → exit).
 7. **Confirmation dialog:** "Restore N env file(s)? This will modify your project roots."
 8. For each selected backup:
-   - Derive git root: `~/github/<project>`.
+   - Derive git root: `~/repos/<project>`.
    - Destination: `<git_root>/.<env_name>`.
    - If destination exists → zenity --list conflict dialog:
      `Overwrite | Back up first (rename to .<env>.bak_<ts>) | Skip`.

@@ -70,8 +70,8 @@ Get your Linux system configured in seconds:
 sudo apt update && sudo apt upgrade -y && sudo apt-get update
 sudo apt install dkms git -y
 
-mkdir ~/github
-cd ~/github
+mkdir ~/repos
+cd ~/repos
 git clone https://github.com/guilhermegor/dotfiles-dev.git
 cd dotfiles-dev
 

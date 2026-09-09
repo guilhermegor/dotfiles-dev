@@ -1,8 +1,8 @@
 #!/bin/bash
-# Restores git-ignored .env* files from backup to ~/github/<project>/ roots.
+# Restores git-ignored .env* files from backup to ~/repos/<project>/ roots.
 # Reads CLAUDE_BACKUP_DIR from ~/.claude/.env.
 
-GITHUB_DIR="$HOME/github"
+GITHUB_DIR="$HOME/repos"
 
 read_backup_dir() {
     grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]'

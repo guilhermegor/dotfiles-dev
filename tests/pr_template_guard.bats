@@ -120,13 +120,13 @@ payload() {
 
 # --- --repo resolution: dotfiles-dev#154 defect 2 -----------------------------------------------
 #
-# These override HOME to a throwaway directory so ~/github/<name> resolves to a fixture repo
+# These override HOME to a throwaway directory so ~/repos/<name> resolves to a fixture repo
 # instead of the real checkout tree, keeping the tests hermetic.
 
 @test "judges a gh pr create --repo TARGET against TARGET's template, not the session cwd's" {
     local fake_home target
     fake_home="$(mktemp -d)"
-    target="$fake_home/github/other-repo"
+    target="$fake_home/repos/other-repo"
     mkdir -p "$target/.github"
     git init -q "$target"
     printf '## Sign-off\n' > "$target/.github/PULL_REQUEST_TEMPLATE.md"
@@ -141,7 +141,7 @@ payload() {
 @test "blocks against the --repo TARGET's sections even when cwd's template would pass" {
     local fake_home target
     fake_home="$(mktemp -d)"
-    target="$fake_home/github/other-repo"
+    target="$fake_home/repos/other-repo"
     mkdir -p "$target/.github"
     git init -q "$target"
     printf '## Sign-off\n' > "$target/.github/PULL_REQUEST_TEMPLATE.md"

@@ -51,7 +51,7 @@ main() {
     # template is worse than not judging it at all (it fails in the *permitting* direction too).
     target_repo="$(extract_target_repo "$command")"
     if [[ -n "$target_repo" ]]; then
-        root="$HOME/github/${target_repo##*/}"
+        root="$HOME/repos/${target_repo##*/}"
         [[ -d "$root/.git" ]] || block_unresolved_repo "$target_repo" "$root"
         template="$(find_template "$root" 0)"   # no personal-template fallback for a foreign repo
     else

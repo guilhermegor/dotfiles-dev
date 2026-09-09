@@ -58,20 +58,20 @@ lands, never by what the lesson is about.**
 
 ### Which store?
 
-- Fix edits a **scaffolding template** under `~/github/blueprintx/templates/` (changes what a
+- Fix edits a **scaffolding template** under `~/repos/blueprintx/templates/` (changes what a
   *generated project* contains — source seams, `pyproject.toml`, `.gitignore`, CI, `Makefile`,
   `.pre-commit-config.yaml`, `mkdocs.yml`, docs, a baked-in convention)
   → **BlueprintX store** `~/.claude/memory/lessons/`.
   Format: `# Title` then `Tier / Lesson / Why / Scaffold into / Origin`. Tier ∈
   `language-common`, `python-common`, `language-specific (<lang>)`, or a scaffolding tier
-  (`mvc-*`, `ddd-*`, `react-*`, …). Backport target: `~/github/blueprintx/templates/`.
+  (`mvc-*`, `ddd-*`, `react-*`, …). Backport target: `~/repos/blueprintx/templates/`.
 
-- Fix edits the **Claude/dotfiles toolchain** under `~/github/dotfiles-dev/ai_clients/claude/`
+- Fix edits the **Claude/dotfiles toolchain** under `~/repos/dotfiles-dev/ai_clients/claude/`
   (a slash command, skill, agent, rule, hook, global `CLAUDE.md` rule, `settings*.json`, or
   installer — changes how *Claude itself* behaves across every project)
   → **dotfiles-dev store** `~/.claude/memory/lessons-dotfiles/`.
   Format: `# Title` then `Area / Lesson / Why / Apply to (dotfiles-dev) / PR / Origin`.
-  Backport target: `~/github/dotfiles-dev/ai_clients/claude/`, each landing via its own PR.
+  Backport target: `~/repos/dotfiles-dev/ai_clients/claude/`, each landing via its own PR.
 
 **Decision test** — ask *"how does a fresh environment inherit this fix?"*: via **scaffolding a
 new project** → BlueprintX; via **reinstalling the Claude toolchain (`make ai_clients`)**,

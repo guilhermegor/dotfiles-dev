@@ -61,7 +61,7 @@ emit_cross_project_context() {
 		printf '%s\n' "[cross-project-context] This is a BlueprintX repo or a BlueprintX-scaffolded project:"
 		[ -f "$cwd/docs/blueprintx-lessons.md" ] && printf '%s\n' "  - This repo's git-ignored lessons mirror: $cwd/docs/blueprintx-lessons.md"
 		[ -d "$proving_mem" ] && printf '%s\n' "  - Proving-ground project memory (NOT auto-loaded here): $proving_mem"
-		printf '%s\n' "  - Do NOT edit/branch/PR ~/github/blueprintx templates unless the user explicitly asks in the current request; capture generalizable findings in docs/blueprintx-lessons.md + the global store."
+		printf '%s\n' "  - Do NOT edit/branch/PR ~/repos/blueprintx templates unless the user explicitly asks in the current request; capture generalizable findings in docs/blueprintx-lessons.md + the global store."
 	fi
 }
 

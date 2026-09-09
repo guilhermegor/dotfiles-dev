@@ -485,7 +485,7 @@ set_all_keybindings() {
     print_status warning "  - Super+C to open GNOME Characters"
     print_status warning "  - Super+B to back up external SSDs to the BKP cloud-sync drive"
     print_status warning "  - Super+J to open the shortcut cheat-sheet (rofi popup)"
-    print_status warning "  - Super+Shift+E to back up .env files from all ~/github repos"
+    print_status warning "  - Super+Shift+E to back up .env files from all ~/repos repos"
     print_status warning "  - Super+Shift+M to export Claude Code memory to backup"
     print_status warning "  - Super+Alt+E to restore .env files from backup"
     print_status warning "  - Super+Alt+M to restore Claude Code memory from backup"

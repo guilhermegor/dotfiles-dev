@@ -465,7 +465,7 @@ Every brief carries:
   `origin/<base>`, never a bare local branch or an implicit `HEAD`. The harness resets cwd after
   every Bash call, and it can reset to a **different repo** — an unqualified command then answers
   about whatever the shell happens to point at, and the wrong answer is plausible, not an error.
-  Measured 2026-09-05 twice: cwd reset mid-task from a worktree to `~/github/blueprintx` with no
+  Measured 2026-09-05 twice: cwd reset mid-task from a worktree to `~/repos/blueprintx` with no
   `cd` run, and an unref'd `git describe --tags --abbrev=0` on a stale feature-branch checkout was
   16 tags behind `origin/main` — the release step's shipped-diff gate would have cut the wrong
   version with nothing going red. `git -C <path>` does not substitute for this: it fixes the

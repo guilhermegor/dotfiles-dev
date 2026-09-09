@@ -38,9 +38,9 @@ command/skill/agent/rule/hook/config/installer change — NOT a project-specific
 business rule)?
 
 - If YES: capture it now, before moving on. Route by WHERE THE FIX LANDS:
-    * fix edits a scaffolding template (~/github/blueprintx/templates/) →
+    * fix edits a scaffolding template (~/repos/blueprintx/templates/) →
       BlueprintX store ~/.claude/memory/lessons/ + repo docs/blueprintx-lessons.md
-    * fix edits the Claude/dotfiles toolchain (~/github/dotfiles-dev/ai_clients/claude/)
+    * fix edits the Claude/dotfiles toolchain (~/repos/dotfiles-dev/ai_clients/claude/)
       → dotfiles-dev store ~/.claude/memory/lessons-dotfiles/ + repo
       docs/dotfiles-dev-lessons.md
   Save one file per lesson + update that store's README index + the git-ignored

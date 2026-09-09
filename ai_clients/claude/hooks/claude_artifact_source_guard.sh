@@ -59,7 +59,7 @@ main() {
         echo "${CLAUDE_DIR}/ is machine-local and non-symlinked — this file is lost on the next OS"
         echo "install and never recreated by the installer. Edit the version-controlled source instead:"
         echo
-        echo "  ~/github/dotfiles-dev/${src}"
+        echo "  ~/repos/dotfiles-dev/${src}"
         echo
         echo "then run 'make ai_clients' (or cp it into place) to deploy. See the \"Author Claude"
         echo "artifacts in dotfiles-dev\" rule in CLAUDE.md."

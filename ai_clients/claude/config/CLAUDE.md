@@ -33,7 +33,7 @@ live here:
   implicit `HEAD`. Same family as the two rules above: the channel lies in
   silence, so qualify. Measured 2026-09-05: the harness resets cwd after
   every Bash call and can reset it to a **different repository**
-  (`Shell cwd was reset to ~/github/blueprintx` with no `cd` having run),
+  (`Shell cwd was reset to ~/repos/blueprintx` with no `cd` having run),
   and in the same session an unref'd `git describe --tags --abbrev=0`
   described a stale feature-branch checkout 16 tags behind `origin/main` —
   the release gate would have diffed against the wrong tag and cut the
@@ -45,7 +45,7 @@ live here:
 
 Durable Claude artifacts (commands, skills, agents, rules, hooks, global
 `CLAUDE.md`, settings) must be authored in the version-controlled source under
-`~/github/dotfiles-dev/ai_clients/claude/`, then deployed with `make ai_clients`
+`~/repos/dotfiles-dev/ai_clients/claude/`, then deployed with `make ai_clients`
 (or `cp` into place). Never write them only to `~/.claude/` — it is machine-local
 and non-symlinked, so direct edits are lost on the next OS/distro install.
 

@@ -41,7 +41,7 @@ source "$SCRIPT_DIR/install_lib/_common.sh"
 create_dev_folder() {
     print_status "section" "DEVELOPMENT DIRECTORY"
 
-    local dev_dir="$HOME/dev"
+    local dev_dir="$HOME/sandbox"
     if [ -d "$dev_dir" ]; then
         print_status "info" "Development directory already exists: $dev_dir"
         return 0
@@ -176,7 +176,7 @@ shopt -u nullglob
 # ----------------------------------------------------------------------------
 
 INSTALL_REGISTRY=(
-    "create_dev_folder:Create ~/dev folder::"
+    "create_dev_folder:Create ~/sandbox folder::"
     "update_system:System Update::"
     "setup_firewall:Firewall::"
     "${INSTALL_REGISTRY[@]}"

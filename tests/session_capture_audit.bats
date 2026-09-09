@@ -7,8 +7,9 @@
 #
 # Strategy:
 #   - Point the hook's store at a throwaway CLAUDE_CONFIG_DIR so we control the lessons.
-#   - Run inside a git repo whose basename is a real store target ("dotfiles-dev") with a
-#     github origin, so store_dir_for_repo + repo_slug resolve.
+#   - Run inside a git repo with a github origin, so repo_slug resolves (dotfiles-dev#94:
+#     every LESSON_STORES entry is audited regardless of the repo's basename — there is
+#     no more repo-name gate to satisfy).
 #   - Stub `gh` on PATH to feed a deterministic open-issue list (no network).
 #
 # Run locally:  bats tests/            (install with: sudo apt-get install -y bats)
@@ -180,4 +181,41 @@ STUB
 	run bash -c "cd '$REPO' && PATH='$TEST_TMP/bin:$PATH' bash '$HOOK' </dev/null"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"issues  → lessons: skipped"* ]]
+}
+
+# --- dotfiles-dev#94: the table must emit in ANY repo, not just the two whose basename ------------
+# happens to equal a store's backport target ("blueprintx" / "dotfiles-dev"). The old
+# `store_dir_for_repo("$repo")` answered "which store backports INTO this repo?" and
+# `return 0`d silently — no header, nothing — the instant no store matched. Every other
+# repo (where the table is actually meant to help) got a bare "Mechanical checks: clean"
+# with zero signal that completeness was never computed. This is the negative control: it
+# must FAIL on the pre-#94 implementation and PASS after the fix.
+
+@test "the completeness table emits in a repo that is neither blueprintx nor dotfiles-dev" {
+	OTHER_REPO="$TEST_TMP/filings-cvm"
+	mkdir -p "$OTHER_REPO"
+	git -C "$OTHER_REPO" init -q
+	git -C "$OTHER_REPO" remote add origin https://github.com/guilhermegor/filings-cvm.git
+
+	lesson "some-lesson.md" "42"
+	run bash -c "cd '$OTHER_REPO' && PATH='$TEST_TMP/bin:$PATH' GH_ISSUES='' \
+		GH_ARGV_LOG='$TEST_TMP/gh_argv' bash '$HOOK' </dev/null"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"--- completeness (both directions, dotfiles-dev#81) ---"* ]]
+	[[ "$output" == *"[dotfiles-dev-lessons]"* ]]
+	[[ "$output" == *"lessons → issues :"* ]]
+}
+
+@test "a store absent from disk is reported as skipped, never silently omitted" {
+	# blueprintx-lessons is never created by setup(); the header for it must still
+	# print "skipped" — a missing store must never look identical to "checked and clean".
+	OTHER_REPO="$TEST_TMP/filings-cvm"
+	mkdir -p "$OTHER_REPO"
+	git -C "$OTHER_REPO" init -q
+	git -C "$OTHER_REPO" remote add origin https://github.com/guilhermegor/filings-cvm.git
+
+	lesson "some-lesson.md" "42"
+	run bash -c "cd '$OTHER_REPO' && PATH='$TEST_TMP/bin:$PATH' bash '$HOOK' </dev/null"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[blueprintx-lessons] skipped (store not on disk"* ]]
 }

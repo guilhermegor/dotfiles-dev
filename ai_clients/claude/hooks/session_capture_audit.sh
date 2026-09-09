@@ -163,19 +163,6 @@ repo_slug() {
 	esac
 }
 
-# The lesson store whose backport target is this repo (dotfiles-dev → lessons-dotfiles).
-store_dir_for_repo() {
-	local repo="$1" entry store mirror_base kind target_repo
-	for entry in "${LESSON_STORES[@]}"; do
-		IFS='|' read -r store mirror_base kind target_repo <<<"$entry"
-		[ "$target_repo" = "$repo" ] && {
-			printf '%s\n' "$store"
-			return 0
-		}
-	done
-	return 1
-}
-
 # The both-directions completeness table (dotfiles-dev#81). A one-directional
 # lessons→issues audit proves only that no lesson lacks an index entry; it never sees
 # the B-side orphan — an OPEN ISSUE with no lesson, where the rationale is already lost
@@ -190,13 +177,41 @@ store_dir_for_repo() {
 # Orphans/unaccounted are JUDGMENT candidates, not add_gap()s: not every issue is
 # lesson-born and not every lesson maps to an issue, so a hard gap would cry wolf (and
 # fire at SessionEnd). They are surfaced for /session-closeout to resolve consciously.
+#
+# dotfiles-dev#94: audit EVERY store, not the one keyed by this repo's name.
+# `target_repo` answers "where does this store backport INTO?" (it exists so
+# check_mirrors() can skip a redundant same-repo mirror) — a different question
+# than "which stores could hold a lesson that originated here?", whose answer is
+# always "all of them" (row 1's own grep, `${repo}#[0-9]+`, already scopes by
+# repo; it never needed a store-selection gate). A repo-name allowlist can only
+# ever match the repos it was written for — a property test doesn't fit either,
+# since nothing distinguishes "table-worthy" repos: any repo with lessons
+# referencing it is table-worthy, and that's exactly what the loop checks live.
+# Never return silently: a missing store prints "skipped", not nothing, so a
+# skip can never be misread as "checked and clean".
 emit_completeness() {
-	local cwd="$1" mode="$2" repo store
+	local cwd="$1" mode="$2" repo
 	repo="$(basename "$cwd")"
-	store="$(store_dir_for_repo "$repo")" || return 0
-	[ -d "$store" ] || return 0
 
 	printf '%s\n' "--- completeness (both directions, dotfiles-dev#81) ---"
+
+	local entry store mirror_base kind target_repo
+	for entry in "${LESSON_STORES[@]}"; do
+		IFS='|' read -r store mirror_base kind target_repo <<<"$entry"
+		if [ ! -d "$store" ]; then
+			printf '  [%s] skipped (store not on disk: %s)\n' "$mirror_base" "$store"
+			continue
+		fi
+		emit_completeness_store "$cwd" "$mode" "$repo" "$store" "$mirror_base"
+	done
+}
+
+# One store's both-direction rows. Split out of emit_completeness() so the
+# per-store loop above stays readable (dotfiles-dev#94).
+emit_completeness_store() {
+	local cwd="$1" mode="$2" repo="$3" store="$4" mirror_base="$5"
+
+	printf '  [%s]\n' "$mirror_base"
 
 	# Row 1 — lessons → issues (store text; no network).
 	#
@@ -232,7 +247,7 @@ emit_completeness() {
 			unaccounted+=("$name")
 		fi
 	done
-	printf '  lessons → issues : %d in store, %d without a PR ref — %d delivered, %d advisory, %d superseded, %d genuinely unaccounted\n' \
+	printf '    lessons → issues : %d in store, %d without a PR ref — %d delivered, %d advisory, %d superseded, %d genuinely unaccounted\n' \
 		"$total" "$no_ref" "$delivered" "$advisory" "$superseded" "${#unaccounted[@]}"
 
 	# Row 2 — issues → lessons (live issue list; report mode + gh only, fails open).
@@ -259,21 +274,21 @@ emit_completeness() {
 				orphans+=("#$n")
 			fi
 		done <<<"$issues"
-		printf '  issues  → lessons: %d open, %d sourced by a lesson, %d orphan\n' \
+		printf '    issues  → lessons: %d open, %d sourced by a lesson, %d orphan\n' \
 			"$icount" "$sourced" "${#orphans[@]}"
 		if [ "$icount" -ge "$issue_limit" ]; then
-			printf '  ! issue list hit the --limit (%d) — the count above is a floor, not the total\n' \
+			printf '    ! issue list hit the --limit (%d) — the count above is a floor, not the total\n' \
 				"$issue_limit"
 		fi
 	else
-		printf '  issues  → lessons: skipped (needs gh + report mode; not run at SessionEnd)\n'
+		printf '    issues  → lessons: skipped (needs gh + report mode; not run at SessionEnd)\n'
 	fi
 
 	if [ "${#orphans[@]}" -gt 0 ]; then
-		printf '  ! open issues with no lesson — write one or mark not-lesson-worthy: %s\n' "${orphans[*]}"
+		printf '    ! open issues with no lesson — write one or mark not-lesson-worthy: %s\n' "${orphans[*]}"
 	fi
 	if [ "${#unaccounted[@]}" -gt 0 ]; then
-		printf '  ! lessons genuinely unaccounted (no PR ref, no delivered/advisory/superseded Status): %s\n' \
+		printf '    ! lessons genuinely unaccounted (no PR ref, no delivered/advisory/superseded Status): %s\n' \
 			"${unaccounted[*]}"
 	fi
 }

@@ -350,6 +350,44 @@ apply_additional_tweaks() {
     print_status "success" "Additional tweaks applied"
 }
 
+# Reset the relocatable-schema state (name/apps) of any app-folder id that
+# THIS run no longer produces. `folder-children` only ever lists ids — it
+# never deletes an id's own schema entries, so a dropped id survives in
+# dconf carrying its stale name/apps until something re-adds it (#293).
+# $1: name of the array holding the ids this run produced (nameref, quoted
+#     entries like "'Sistema'", e.g. ordered_folder_ids)
+# $2: the CURRENT `folder-children` value, e.g. "['Sistema', 'DEV']"
+_reset_orphaned_app_folders() {
+    local -n _reset_produced="$1"
+    local current_children_str="$2"
+
+    local -a current_ids=()
+    if [ -n "$current_children_str" ]; then
+        mapfile -t current_ids < <(grep -oE "'[^']+'" <<< "$current_children_str")
+    fi
+
+    local id bare_id path
+    for id in "${current_ids[@]}"; do
+        # Fail-open: never touch an id this run is actively (re-)creating.
+        if [[ " ${_reset_produced[*]} " == *" ${id} "* ]]; then
+            continue
+        fi
+
+        bare_id="${id//\'/}"
+        path="org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/${bare_id}/"
+
+        # Guard strictly to the app-folders relocatable-schema shape —
+        # reset-recursively on a wrong path is destructive with no undo.
+        if [[ ! "$path" =~ ^org\.gnome\.desktop\.app-folders\.folder:/org/gnome/desktop/app-folders/folders/[A-Za-z0-9_-]+/$ ]]; then
+            print_status "warning" "Refusing to reset unexpected folder path: $path"
+            continue
+        fi
+
+        print_status "info" "Resetting orphaned folder definition: $bare_id"
+        run_or_echo gsettings reset-recursively "$path"
+    done
+}
+
 configure_inactivity_time_lock() {
     print_status "info" "Set inactivity time to lock workspace..."
     run_or_echo gsettings set org.gnome.desktop.session idle-delay 900
@@ -1323,6 +1361,13 @@ EOF
             fi
         done
     done
+
+    # Before writing the new folder-children list, reset any id this run no
+    # longer produces — otherwise its schema entry (name/apps) survives as an
+    # orphan in dconf, invisible until something re-adds the id (#293).
+    local current_folder_children
+    current_folder_children=$(gsettings get org.gnome.desktop.app-folders folder-children 2>/dev/null) || current_folder_children=""
+    _reset_orphaned_app_folders ordered_folder_ids "$current_folder_children"
 
     if [ ${#ordered_folder_ids[@]} -gt 0 ]; then
         local ordered_folder_ids_str

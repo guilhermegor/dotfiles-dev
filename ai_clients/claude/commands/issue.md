@@ -166,9 +166,24 @@ This **derives the starting column**, so step 7 confirms a value rather than re-
 three upstreams from scratch every time. The user can still override to any board column.
 
 **Recording it.** GitHub issue *types* are defined at organisation level, so a personal-account
-repo may not have them. Do not probe with a dry run — attempt `--type <work-type>` at create
-time (step 6) and, if GitHub rejects it, retry without the flag and apply a `type:<work-type>`
-label instead. Linear has no type field at all, so it always uses the label form.
+repo may not have them. **Never let a mutating command be the probe.** `gh issue create` creates
+the issue and resolves `--type` afterwards, so a rejected `--type` exits 1 with the issue
+**already created**, and a documented retry without the flag files a second one — measured three
+times, most recently `gh issue create --type task` exiting 1 with #185 already on the tracker.
+
+Probe **read-only**, once per repo, before step 6 creates anything:
+
+```
+rtk gh api graphql -f query='query($o:String!,$r:String!){
+  repository(owner:$o,name:$r){ issueTypes(first:20){ nodes{ name } } } }' \
+  -F o=<owner> -F r=<repo>
+```
+
+An empty node set, no error but no matching `<work-type>` name, or any error → skip `--type`
+entirely and use the `type:<work-type>` label instead (create the label first if missing — see
+step 6's label-exists check, which now covers this label too). A matching name present → pass
+`--type <work-type>` at create time. Either way, **create the issue exactly once.** Linear has no
+type field at all, so it always uses the label form.
 
 The mode is always a label on both trackers: `hitl` or `afk`. `task` used to read "either", which
 left the most common work type with no rule while this line insisted a label always gets written —
@@ -225,14 +240,14 @@ of these holds — otherwise do not raise it at all:
 - `--quick` was passed → always flat; skip the ask entirely regardless of the other
   triggers below.
 - `--parent <n>` was passed → file directly as a sub-issue of `<n>`; skip the ask entirely.
-- The **Escopo** section you are about to write would carry more than 3 bullets.
+- The **Scope** section you are about to write would carry more than 3 bullets.
 - The description names two or more independently shippable deliverables.
 - A `s:problem-framing` artifact for this work exists with more than one scope.
 
 When you do ask, offer: one flat issue, or a parent plus one sub-issue per deliverable (list the
 deliverables you inferred so the user can correct them).
 
-Parent bodies carry **Objetivo** plus a checklist of their children; children carry the full
+Parent bodies carry **Goal** plus a checklist of their children; children carry the full
 template. There is no separate `/epic` command — it would duplicate the repo, board and branch
 logic for no gain.
 
@@ -243,7 +258,7 @@ so the score exists to write. Also entered directly from step 2's resume path wh
 missing.)* No issue is filed or left resumed without a score, on either tracker — see
 dotfiles-dev#178.
 
-Load `s:story-score` via Skill tool, passing the Escopo/description of each unit step 5 settled
+Load `s:story-score` via Skill tool, passing the Scope/description of each unit step 5 settled
 on as context — the single flat issue, or each child (never the parent as one lump; the scale
 scores subtasks, and a parent's score is their sum, never a number of its own). Do not restate
 or reinvent the scale here — it lives in the skill.
@@ -269,27 +284,33 @@ scored before the parent is written.
 
 *(Create path only — skip if step 2 resolved an existing issue.)*
 
-Body template. The **Documentação** section is mandatory and stays verbatim — it is a standing
-requirement:
+Body template. The **Documentation** section is mandatory and stays verbatim — it is a standing
+requirement. It is written in English, like the rest of this repo's durable record
+(`gh_prose_language_guard.sh` enforces exactly that for whatever is published here — a template
+demanding non-English prose would fight its own guard, dotfiles-dev#187):
 
 ```
-## Objetivo
+## Goal
 <one-paragraph statement of what this work delivers>
 
-## Escopo
+## Scope
 - <bullet(s) scoping the change>
 
-## Documentação
-- Atualizar `docs/` e o `README.md` quando necessário — novo comportamento, mudança na API
-  pública, ou novo exemplo de uso. A entrega só está completa com a documentação em dia.
+## Documentation
+- Update `docs/` and the `README.md` where relevant — new behaviour, a change to the public API,
+  or a new usage example. The work is not complete until the documentation matches it.
 ```
+
+A quoted non-English literal (a UI string, a Gherkin keyword, a foreign source identifier) is
+data, not prose — keep it verbatim in backticks so it stays greppable in the code it describes;
+the guard exempts inline `code` spans exactly for this case (dotfiles-dev#187).
 
 Per-tracker operations — one spine, two arms:
 
 | Operation | `github` | `linear` |
 |---|---|---|
 | create | `rtk gh issue create --title "<title>" --body-file <f> --assignee @me` | `issueCreate(input:{teamId,title,description,assigneeId})` |
-| work type | `--type <work-type>`, else `type:<work-type>` label on rejection | `type:<work-type>` label |
+| work type | `--type <work-type>` if step 4's read-only probe found it, else `type:<work-type>` label | `type:<work-type>` label |
 | mode | `--label hitl\|afk` | label id |
 | oracle | `--label oracle:strong\|oracle:weak` | label id |
 | extra label | `--label <name>` when `--label` was passed | label id |
@@ -298,8 +319,10 @@ Per-tracker operations — one spine, two arms:
 
 ⚠️ **On GitHub, ensure the label exists before attaching it.** `gh issue create --label <name>`
 **fails the whole create** when the label is absent from the repo — and `oracle:strong` /
-`oracle:weak` exist in no repo yet, while `hitl` / `afk` exist only where they were added by hand.
-So run this first, for each label being attached:
+`oracle:weak` exist in no repo yet, `hitl` / `afk` exist only where they were added by hand, and
+a `type:<work-type>` label (step 4's fallback when the read-only probe finds no matching issue
+type) is created ad hoc, per work type, the first time it is needed. So run this first, for each
+label being attached:
 
 ```bash
 rtk gh label create "<name>" --description "<why>" --color "<hex>" --force

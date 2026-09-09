@@ -61,14 +61,20 @@ doc_language_is_english() {
 
 count_pt_words() {
 	# Count Portuguese function-word hits in the given text, matching whole words only and
-	# ignoring case. Fenced code blocks are stripped first: a body may legitimately quote
-	# Portuguese source code, a commit subject, or a log line without being written in it.
+	# ignoring case. Fenced code blocks AND inline `code` spans are stripped first: a body may
+	# legitimately quote Portuguese source code, a commit subject, a UI string, or a Gherkin
+	# keyword without being WRITTEN in it — the quoted literal is data the surrounding prose
+	# describes, not prose itself, and it must stay verbatim (and greppable) rather than being
+	# translated away. Measured (dotfiles-dev#187): a body that was entirely English prose, but
+	# quoted `Quando`/`Então`-style keywords in backticks, still scored above MIN_HITS and was
+	# blocked — the fenced-block strip alone does not cover an inline span.
 	local text="$1"
-	# The backticks are literal fence characters in the sed address, not a command
+	# The backticks are literal fence/span characters in the sed expressions, not a command
 	# substitution — single quotes are exactly what is wanted here.
 	# shellcheck disable=SC2016
 	printf '%s\n' "$text" \
 		| sed '/^[[:space:]]*```/,/^[[:space:]]*```/d' \
+		| sed -E 's/`[^`]*`//g' \
 		| grep -oiEw "$PT_WORDS" 2>/dev/null \
 		| wc -l \
 		| tr -d ' '

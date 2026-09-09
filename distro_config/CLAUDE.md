@@ -46,7 +46,7 @@ Each category file (e.g. `install_lib/browsers.sh`, `install_coding_lib/editors.
 |-------|----------|---------|
 | `func` | yes | The `install_<name>` function defined above in the same file |
 | `label` | yes | Human-readable menu label |
-| `gnome_folder` | no | One of `Sistema`, `Seguranca`, `Utilitarios`, `Media`, `Sharing`, `IRPF`, `DEV`, `Ereader`, `Office`, `OrgPessoal`, `Social`, `AmbienteVirtual`, or empty (no folder) |
+| `gnome_folder` | no | One of `Sistema`, `Seguranca`, `Utilitarios`, `Media`, `Sharing`, `IRPF`, `Code`, `Data`, `Infra`, `Design`, `Planning`, `Reading`, `Ereader`, `Office`, `Social`, or empty (no folder) |
 | `desktop_file` | no | Explicit `.desktop` filename. If empty, derived as `${func#install_}.desktop` |
 
 `ubuntu_workspace.sh` reads the registry at startup and merges the `desktop_file` of every entry whose `gnome_folder` matches into the corresponding folder array, so install registrations are the single source of truth for app placement.
@@ -141,22 +141,25 @@ Each install function must guard against re-installation with `command_exists` o
 
 App-folder placement is now driven by the `gnome_folder` field in `INSTALL_REGISTRY`. `ubuntu_workspace.sh` sources both `install_lib/*.sh` and `install_coding_lib/*.sh` at startup to populate `INSTALL_REGISTRY`, then `_merge_registry_into_folder` (defined inside `organize_app_folders`) adds each registry-contributed `.desktop` filename to the matching folder array.
 
-Existing folders and their purpose:
+Folders are grouped by **artifact produced**, not by tool category. Existing folders and their purpose:
 
 | dconf key | Display name | Typical contents |
 |-----------|--------------|-----------------|
 | `Sistema` | System | System tools, settings, file manager |
 | `Seguranca` | Security | Security, antivirus, backup |
-| `Utilitarios` | Utilities | General utilities (screenshots, image editors…) |
+| `Utilitarios` | Utilities | General utilities (screenshots, weather, Flameshot, Rofi…) |
 | `Media` | Media | Video players, audio players, media tools |
 | `Sharing` | Sharing | File-sharing and remote-desktop apps |
 | `IRPF` | IRPF | Brazilian tax program |
-| `DEV` | DEV | IDEs, terminals, DB clients, Docker |
+| `Code` | Code | IDEs, editors, terminals (VS Code, Cursor, vim, nvim, Notepadqq, Warp, Devtoolbox) |
+| `Data` | Data | DB clients (pgAdmin4, DBeaver) |
+| `Infra` | Infra | VMs, containers, USB imaging (Docker Desktop, VM Manager, Ventoy, Balena Etcher) |
+| `Design` | Design | Image/graphic design tools (Figma, GIMP, Pinta) |
+| `Planning` | Planning | Project/task planning (Linear, Google Calendar, Google Tasks, Notion Calendar, Miro, Google Keep) |
+| `Reading` | Reading | Things to read later (Instapaper, NewsFlash, Valor Digital) |
 | `Ereader` | Ereader | E-book readers |
 | `Office` | Office | LibreOffice suite |
-| `OrgPessoal` | Personal Organization | Calendars, tasks, productivity |
 | `Social` | Social | Messaging and email (Slack, Telegram, Thunderbird) |
-| `AmbienteVirtual` | Operating System | VMs and virtualisation |
 
 For **pre-installed system apps** (e.g. `gnome-control-center.desktop`, `mission-center.desktop`) that no install function manages, append them to the static `<id>_app_names` arrays inside `organize_app_folders()`. The registry merge runs alongside the static arrays — both contribute to the same folder.
 

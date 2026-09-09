@@ -51,8 +51,9 @@ UBUNTU_VERSION=""
 UBUNTU_CODENAME=""
 
 # INSTALL_REGISTRY entry format: "func:label:gnome_folder:desktop_file"
-#   gnome_folder: "" | Sistema | Utilitarios | Media | Sharing | DEV | Office |
-#                 OrgPessoal | AmbienteVirtual | Ereader | IRPF | Seguranca
+#   gnome_folder: "" | Sistema | Utilitarios | Media | Sharing | Code | Data |
+#                 Infra | Design | Planning | Reading | Office | Ereader |
+#                 IRPF | Seguranca | Social
 #   desktop_file: explicit .desktop filename, or "" to derive as "${func#install_}.desktop"
 INSTALL_REGISTRY=()
 INSTALL_FAILURES=()

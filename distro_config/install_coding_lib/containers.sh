@@ -73,5 +73,5 @@ install_docker_desktop() {
 
 INSTALL_REGISTRY+=(
     "install_docker:Docker Engine::"
-    "install_docker_desktop:Docker Desktop:DEV:docker-desktop.desktop"
+    "install_docker_desktop:Docker Desktop:Infra:docker-desktop.desktop"
 )

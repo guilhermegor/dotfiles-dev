@@ -125,7 +125,7 @@ DESKTOP
 # ============================================================================
 
 INSTALL_REGISTRY+=(
-    "install_virtual_machine_manager:VM Manager:AmbienteVirtual:virt-manager.desktop"
-    "install_balena_etcher:Balena Etcher (USB Image Writer):AmbienteVirtual:balena-etcher.desktop"
-    "install_ventoy:Ventoy (Multiboot USB):AmbienteVirtual:ventoy.desktop"
+    "install_virtual_machine_manager:VM Manager:Infra:virt-manager.desktop"
+    "install_balena_etcher:Balena Etcher (USB Image Writer):Infra:balena-etcher.desktop"
+    "install_ventoy:Ventoy (Multiboot USB):Infra:ventoy.desktop"
 )

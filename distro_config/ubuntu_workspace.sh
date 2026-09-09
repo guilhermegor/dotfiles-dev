@@ -244,7 +244,7 @@ configure_dock() {
         fi
     done
     
-    # Google Keep is deliberately NOT pinned here — it lives in the OrgPessoal
+    # Google Keep is deliberately NOT pinned here — it lives in the Planning
     # app folder instead, via its INSTALL_REGISTRY entry in install_lib/productivity.sh.
 
     # 5. Notion
@@ -678,6 +678,24 @@ organize_app_folders() {
         print_status "warning" "No Utilities apps found"
     fi
 
+    # ==================== DESIGN FOLDER ====================
+    print_status "info" "Creating Design folder..."
+    local design_apps=()
+
+    _merge_registry_into_folder "Design" design_apps
+    mapfile -t design_apps < <(printf '%s\n' "${design_apps[@]}" | sort -u)
+    if [ ${#design_apps[@]} -gt 0 ]; then
+        local design_apps_str
+        design_apps_str=$(IFS=,; echo "${design_apps[*]}")
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Design/ name 'Design'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Design/ apps "[${design_apps_str}]"
+        folder_ids+=("'Design'")
+        print_status "success" "Design folder created with ${#design_apps[@]} apps"
+        print_status "config" "  Apps: ${design_apps_str}"
+    else
+        print_status "warning" "No Design apps found"
+    fi
+
     # ==================== MEDIA FOLDER ====================
     print_status "info" "Creating Media folder..."
     local media_apps=()
@@ -812,80 +830,25 @@ organize_app_folders() {
         print_status "warning" "No IRPF apps found"
     fi
     
-    # ==================== DEV FOLDER ====================
-    print_status "info" "Creating DEV folder..."
-    local dev_apps=()
+    # ==================== CODE FOLDER ====================
+    print_status "info" "Creating Code folder..."
+    local code_apps=()
 
-    local dev_app_names=(
+    local code_app_names=(
         'vim.desktop' 'gvim.desktop' 'org.vim.Vim.desktop'
         'nvim.desktop' 'neovim.desktop' 'org.neovim.nvim.desktop'  # Added Neovim
         'dev.warp.Warp.desktop' 'warp.desktop' 'warp-terminal.desktop'
         'me.iepure.devtoolbox.desktop' 'devtoolbox.desktop' 'dev-toolbox.desktop'
-        'miro.desktop' 'com.miro.Miro.desktop' 'miro-app.desktop' 'RealtimeBoard.desktop'
-        'miro_miro.desktop' 'snap-miro_miro.desktop'
-        'linear.desktop'
         'cursor.desktop' 'com.cursor.Cursor.desktop' 'cursor-app.desktop'
         'notepadqq.desktop' 'com.notepadqq.Notepadqq.desktop'
-        'pgadmin4.desktop' 'pgadmin4_pgadmin4.desktop' 'org.pgadmin.pgAdmin4.desktop'
     )
 
-    for app in "${dev_app_names[@]}"; do
+    for app in "${code_app_names[@]}"; do
         if result=$(find_app_desktop_file "$app"); then
-            dev_apps+=("'$result'")
-            print_status "config" "Found DEV app: $result"
+            code_apps+=("'$result'")
+            print_status "config" "Found Code app: $result"
         fi
     done
-
-    # SPECIFIC Miro Snap package detection
-    print_status "info" "Adding Miro Snap package..."
-    if [ -f "/var/lib/snapd/desktop/applications/miro_miro.desktop" ]; then
-        if [[ ! " ${dev_apps[*]} " == *" 'miro_miro.desktop' "* ]]; then
-            dev_apps+=("'miro_miro.desktop'")
-            print_status "success" "✓ Added Miro Snap package: miro_miro.desktop"
-        else
-            print_status "info" "Miro Snap package already in list"
-        fi
-    else
-        print_status "warning" "Miro Snap package not found at expected location"
-    fi
-
-    # SPECIFIC Chrome App Miro detection - using the exact filename we found
-    print_status "info" "Adding Miro Chrome app..."
-    local miro_chrome_app="chrome-bfldocfmjhokladppcchgfolcnpjlnng-Default.desktop"
-    if [ -f "$HOME/.local/share/applications/$miro_chrome_app" ]; then
-        if [[ ! " ${dev_apps[*]} " == *" '$miro_chrome_app' "* ]]; then
-            dev_apps+=("'$miro_chrome_app'")
-            print_status "success" "✓ Added Miro Chrome app: $miro_chrome_app"
-        else
-            print_status "info" "Miro Chrome app already in list"
-        fi
-    else
-        print_status "warning" "Miro Chrome app not found at: $HOME/.local/share/applications/$miro_chrome_app"
-    fi
-
-    # Additional fallback search for any other Miro Chrome apps (in case there are multiple)
-    print_status "info" "Searching for additional Miro Chrome shortcuts..."
-    shopt -s nullglob
-    for desktop_file in "$HOME/.local/share/applications/chrome-"*.desktop; do
-        if [ -f "$desktop_file" ]; then
-            local basename
-            basename=$(basename "$desktop_file")
-            # Skip if it's already the one we specifically added
-            if [ "$basename" != "$miro_chrome_app" ]; then
-                # Check if it's Miro by examining the file content
-                if grep -q -i "Name.*=.*Miro" "$desktop_file" || 
-                grep -q -i "Exec.*=.*miro" "$desktop_file" || 
-                grep -q -i "miro" "$desktop_file" || 
-                grep -q -i "realtimeboard" "$desktop_file"; then
-                    if [[ ! " ${dev_apps[*]} " == *" '$basename' "* ]]; then
-                        dev_apps+=("'$basename'")
-                        print_status "success" "✓ Added additional Miro Chrome shortcut: $basename"
-                    fi
-                fi
-            fi
-        fi
-    done
-    shopt -u nullglob
 
     # Search for Neovim desktop files in common locations
     print_status "info" "Searching for Neovim desktop files..."
@@ -899,8 +862,8 @@ organize_app_folders() {
         if [ -f "$desktop_file" ]; then
             local basename
             basename=$(basename "$desktop_file")
-            if [[ ! " ${dev_apps[*]} " == *" '$basename' "* ]]; then
-                dev_apps+=("'$basename'")
+            if [[ ! " ${code_apps[*]} " == *" '$basename' "* ]]; then
+                code_apps+=("'$basename'")
                 print_status "success" "✓ Added Neovim: $basename"
             fi
         fi
@@ -910,23 +873,23 @@ organize_app_folders() {
     # Check if Neovim is installed but doesn't have a desktop file
     if command -v nvim >/dev/null 2>&1; then
         print_status "info" "Neovim is installed but checking for desktop file..."
-        
+
         # Check if we already found a desktop file
         local found_nvim_desktop=false
-        for app in "${dev_apps[@]}"; do
+        for app in "${code_apps[@]}"; do
             if [[ "$app" == *"nvim"* ]] || [[ "$app" == *"neovim"* ]]; then
                 found_nvim_desktop=true
                 break
             fi
         done
-        
+
         if [ "$found_nvim_desktop" = false ]; then
             print_status "warning" "Neovim is installed but no desktop file found"
             print_status "info" "Creating a desktop file for Neovim..."
-            
+
             local nvim_desktop_path="$HOME/.local/share/applications/nvim.desktop"
             mkdir -p "$HOME/.local/share/applications"
-            
+
             cat > "$nvim_desktop_path" << 'EOF'
 [Desktop Entry]
 Version=1.0
@@ -942,9 +905,9 @@ Categories=Development;TextEditor;
 Keywords=Text;Editor;
 MimeType=text/plain;
 EOF
-            
+
             if [ -f "$nvim_desktop_path" ]; then
-                dev_apps+=("'nvim.desktop'")
+                code_apps+=("'nvim.desktop'")
                 print_status "success" "✓ Created and added Neovim desktop file"
             else
                 print_status "error" "Failed to create Neovim desktop file"
@@ -953,23 +916,51 @@ EOF
     fi
 
     # Remove any duplicates that might have been added
-    _merge_registry_into_folder "DEV" dev_apps
-    mapfile -t dev_apps < <(printf '%s\n' "${dev_apps[@]}" | sort -u)
-    if [ ${#dev_apps[@]} -gt 0 ]; then
-        local dev_apps_str
-        dev_apps_str=$(IFS=,; echo "${dev_apps[*]}")
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ name 'DEV'
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/DEV/ apps "[${dev_apps_str}]"
-        folder_ids+=("'DEV'")
-        print_status "success" "DEV folder created with ${#dev_apps[@]} apps"
-        print_status "config" "  Apps in DEV folder:"
-        for app in "${dev_apps[@]}"; do
+    _merge_registry_into_folder "Code" code_apps
+    mapfile -t code_apps < <(printf '%s\n' "${code_apps[@]}" | sort -u)
+    if [ ${#code_apps[@]} -gt 0 ]; then
+        local code_apps_str
+        code_apps_str=$(IFS=,; echo "${code_apps[*]}")
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Code/ name 'Code'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Code/ apps "[${code_apps_str}]"
+        folder_ids+=("'Code'")
+        print_status "success" "Code folder created with ${#code_apps[@]} apps"
+        print_status "config" "  Apps in Code folder:"
+        for app in "${code_apps[@]}"; do
             print_status "config" "    - ${app//\'/}"
         done
     else
-        print_status "warning" "No DEV apps found"
+        print_status "warning" "No Code apps found"
     fi
-    
+
+    # ==================== DATA FOLDER ====================
+    print_status "info" "Creating Data folder..."
+    local data_apps=()
+
+    local data_app_names=(
+        'pgadmin4.desktop' 'pgadmin4_pgadmin4.desktop' 'org.pgadmin.pgAdmin4.desktop'
+    )
+
+    for app in "${data_app_names[@]}"; do
+        if result=$(find_app_desktop_file "$app"); then
+            data_apps+=("'$result'")
+        fi
+    done
+
+    _merge_registry_into_folder "Data" data_apps
+    mapfile -t data_apps < <(printf '%s\n' "${data_apps[@]}" | sort -u)
+    if [ ${#data_apps[@]} -gt 0 ]; then
+        local data_apps_str
+        data_apps_str=$(IFS=,; echo "${data_apps[*]}")
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Data/ name 'Data'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Data/ apps "[${data_apps_str}]"
+        folder_ids+=("'Data'")
+        print_status "success" "Data folder created with ${#data_apps[@]} apps"
+        print_status "config" "  Apps: ${data_apps_str}"
+    else
+        print_status "warning" "No Data apps found"
+    fi
+
     # ==================== EREADER FOLDER ====================
     print_status "info" "Creating ereader folder..."
     local ereader_apps=()
@@ -1035,41 +1026,95 @@ EOF
         print_status "warning" "No Office apps found"
     fi
     
-    # ==================== PERSONAL ORGANIZATION FOLDER ====================
-    print_status "info" "Creating Personal Organization folder..."
-    local org_pessoal_apps=()
+    # ==================== PLANNING FOLDER ====================
+    print_status "info" "Creating Planning folder..."
+    local planning_apps=()
 
-    local org_pessoal_app_names=(
+    local planning_app_names=(
         'google-calendar.desktop'
         'notion-calendar.desktop'
         'google-tasks.desktop'
+        'linear.desktop'
+        'miro.desktop' 'com.miro.Miro.desktop' 'miro-app.desktop' 'RealtimeBoard.desktop'
+        'miro_miro.desktop' 'snap-miro_miro.desktop'
     )
 
-    for app in "${org_pessoal_app_names[@]}"; do
+    for app in "${planning_app_names[@]}"; do
         if result=$(find_app_desktop_file "$app"); then
-            org_pessoal_apps+=("'$result'")
+            planning_apps+=("'$result'")
         fi
     done
 
-    _merge_registry_into_folder "OrgPessoal" org_pessoal_apps
-    mapfile -t org_pessoal_apps < <(printf '%s\n' "${org_pessoal_apps[@]}" | sort -u)
-    if [ ${#org_pessoal_apps[@]} -gt 0 ]; then
-        local org_pessoal_apps_str
-        org_pessoal_apps_str=$(IFS=,; echo "${org_pessoal_apps[*]}")
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ name 'Personal Organization'
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/OrgPessoal/ apps "[${org_pessoal_apps_str}]"
-        folder_ids+=("'OrgPessoal'")
-        print_status "success" "Personal Organization folder created with ${#org_pessoal_apps[@]} apps"
-        print_status "config" "  Apps: ${org_pessoal_apps_str}"
+    # SPECIFIC Miro Snap package detection
+    print_status "info" "Adding Miro Snap package..."
+    if [ -f "/var/lib/snapd/desktop/applications/miro_miro.desktop" ]; then
+        if [[ ! " ${planning_apps[*]} " == *" 'miro_miro.desktop' "* ]]; then
+            planning_apps+=("'miro_miro.desktop'")
+            print_status "success" "✓ Added Miro Snap package: miro_miro.desktop"
+        else
+            print_status "info" "Miro Snap package already in list"
+        fi
     else
-        print_status "warning" "No Personal Organization apps found"
+        print_status "warning" "Miro Snap package not found at expected location"
+    fi
+
+    # SPECIFIC Chrome App Miro detection - using the exact filename we found
+    print_status "info" "Adding Miro Chrome app..."
+    local miro_chrome_app="chrome-bfldocfmjhokladppcchgfolcnpjlnng-Default.desktop"
+    if [ -f "$HOME/.local/share/applications/$miro_chrome_app" ]; then
+        if [[ ! " ${planning_apps[*]} " == *" '$miro_chrome_app' "* ]]; then
+            planning_apps+=("'$miro_chrome_app'")
+            print_status "success" "✓ Added Miro Chrome app: $miro_chrome_app"
+        else
+            print_status "info" "Miro Chrome app already in list"
+        fi
+    else
+        print_status "warning" "Miro Chrome app not found at: $HOME/.local/share/applications/$miro_chrome_app"
+    fi
+
+    # Additional fallback search for any other Miro Chrome apps (in case there are multiple)
+    print_status "info" "Searching for additional Miro Chrome shortcuts..."
+    shopt -s nullglob
+    for desktop_file in "$HOME/.local/share/applications/chrome-"*.desktop; do
+        if [ -f "$desktop_file" ]; then
+            local basename
+            basename=$(basename "$desktop_file")
+            # Skip if it's already the one we specifically added
+            if [ "$basename" != "$miro_chrome_app" ]; then
+                # Check if it's Miro by examining the file content
+                if grep -q -i "Name.*=.*Miro" "$desktop_file" ||
+                grep -q -i "Exec.*=.*miro" "$desktop_file" ||
+                grep -q -i "miro" "$desktop_file" ||
+                grep -q -i "realtimeboard" "$desktop_file"; then
+                    if [[ ! " ${planning_apps[*]} " == *" '$basename' "* ]]; then
+                        planning_apps+=("'$basename'")
+                        print_status "success" "✓ Added additional Miro Chrome shortcut: $basename"
+                    fi
+                fi
+            fi
+        fi
+    done
+    shopt -u nullglob
+
+    _merge_registry_into_folder "Planning" planning_apps
+    mapfile -t planning_apps < <(printf '%s\n' "${planning_apps[@]}" | sort -u)
+    if [ ${#planning_apps[@]} -gt 0 ]; then
+        local planning_apps_str
+        planning_apps_str=$(IFS=,; echo "${planning_apps[*]}")
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Planning/ name 'Planning'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Planning/ apps "[${planning_apps_str}]"
+        folder_ids+=("'Planning'")
+        print_status "success" "Planning folder created with ${#planning_apps[@]} apps"
+        print_status "config" "  Apps: ${planning_apps_str}"
+    else
+        print_status "warning" "No Planning apps found"
     fi
     
-    # ==================== OPERATING SYSTEM FOLDER ====================
-    print_status "info" "Creating Operating System folder..."
-    local ambiente_virtual_apps=()
+    # ==================== INFRA FOLDER ====================
+    print_status "info" "Creating Infra folder..."
+    local infra_apps=()
 
-    local virtualization_app_names=(
+    local infra_app_names=(
         'virt-manager.desktop' 'org.virt-manager.virt-manager.desktop'
         'gnome-boxes.desktop' 'org.gnome.Boxes.desktop'
         'virtualbox.desktop' 'org.virtualbox.VirtualBox.desktop' 'virtualbox-qt.desktop'
@@ -1086,9 +1131,9 @@ EOF
         'ventoy.desktop'
     )
 
-    for app in "${virtualization_app_names[@]}"; do
+    for app in "${infra_app_names[@]}"; do
         if result=$(find_app_desktop_file "$app"); then
-            ambiente_virtual_apps+=("'$result'")
+            infra_apps+=("'$result'")
         fi
     done
 
@@ -1110,25 +1155,25 @@ EOF
         if [ -f "$desktop_file" ]; then
             local basename
             basename=$(basename "$desktop_file")
-            if [[ ! " ${ambiente_virtual_apps[*]} " == *" '$basename' "* ]]; then
-                ambiente_virtual_apps+=("'$basename'")
+            if [[ ! " ${infra_apps[*]} " == *" '$basename' "* ]]; then
+                infra_apps+=("'$basename'")
             fi
         fi
     done
     shopt -u nullglob
 
-    _merge_registry_into_folder "AmbienteVirtual" ambiente_virtual_apps
-    mapfile -t ambiente_virtual_apps < <(printf '%s\n' "${ambiente_virtual_apps[@]}" | sort -u)
-    if [ ${#ambiente_virtual_apps[@]} -gt 0 ]; then
-        local ambiente_virtual_apps_str
-        ambiente_virtual_apps_str=$(IFS=,; echo "${ambiente_virtual_apps[*]}")
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ name 'Operating System'
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/AmbienteVirtual/ apps "[${ambiente_virtual_apps_str}]"
-        folder_ids+=("'AmbienteVirtual'")
-        print_status "success" "Operating System folder created with ${#ambiente_virtual_apps[@]} apps"
-        print_status "config" "  Apps: ${ambiente_virtual_apps_str}"
+    _merge_registry_into_folder "Infra" infra_apps
+    mapfile -t infra_apps < <(printf '%s\n' "${infra_apps[@]}" | sort -u)
+    if [ ${#infra_apps[@]} -gt 0 ]; then
+        local infra_apps_str
+        infra_apps_str=$(IFS=,; echo "${infra_apps[*]}")
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Infra/ name 'Infra'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Infra/ apps "[${infra_apps_str}]"
+        folder_ids+=("'Infra'")
+        print_status "success" "Infra folder created with ${#infra_apps[@]} apps"
+        print_status "config" "  Apps: ${infra_apps_str}"
     else
-        print_status "warning" "No Operating System apps found"
+        print_status "warning" "No Infra apps found"
     fi
     
     # ==================== BROWSERS FOLDER ====================
@@ -1184,32 +1229,33 @@ EOF
         print_status "warning" "No browser apps found"
     fi
 
-    # ==================== NEWSLETTER FOLDER ====================
-    print_status "info" "Creating Newsletter folder..."
-    local newsletter_apps=()
+    # ==================== READING FOLDER ====================
+    print_status "info" "Creating Reading folder..."
+    local reading_apps=()
 
-    local newsletter_app_names=(
+    local reading_app_names=(
         'io.gitlab.news_flash.NewsFlash.desktop'
         'valor-digital.desktop'
     )
 
-    for app in "${newsletter_app_names[@]}"; do
+    for app in "${reading_app_names[@]}"; do
         if result=$(find_app_desktop_file "$app"); then
-            newsletter_apps+=("'$result'")
+            reading_apps+=("'$result'")
         fi
     done
 
-    mapfile -t newsletter_apps < <(printf '%s\n' "${newsletter_apps[@]}" | sort -u)
-    if [ ${#newsletter_apps[@]} -gt 0 ]; then
-        local newsletter_apps_str
-        newsletter_apps_str=$(IFS=,; echo "${newsletter_apps[*]}")
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ name 'Newsletter'
-        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Newsletter/ apps "[${newsletter_apps_str}]"
-        folder_ids+=("'Newsletter'")
-        print_status "success" "Newsletter folder created with ${#newsletter_apps[@]} apps"
-        print_status "config" "  Apps: ${newsletter_apps_str}"
+    _merge_registry_into_folder "Reading" reading_apps
+    mapfile -t reading_apps < <(printf '%s\n' "${reading_apps[@]}" | sort -u)
+    if [ ${#reading_apps[@]} -gt 0 ]; then
+        local reading_apps_str
+        reading_apps_str=$(IFS=,; echo "${reading_apps[*]}")
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Reading/ name 'Reading'
+        run_or_echo gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Reading/ apps "[${reading_apps_str}]"
+        folder_ids+=("'Reading'")
+        print_status "success" "Reading folder created with ${#reading_apps[@]} apps"
+        print_status "config" "  Apps: ${reading_apps_str}"
     else
-        print_status "warning" "No Newsletter apps found"
+        print_status "warning" "No Reading apps found"
     fi
 
     # ==================== COMMUNICATION FOLDER ====================
@@ -1269,7 +1315,7 @@ EOF
     # ==================== UPDATE FOLDER LIST ====================
     local ordered_folder_ids=()
 
-    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Sharing'" "'IRPF'" "'DEV'" "'Ereader'" "'Office'" "'Media'" "'OrgPessoal'" "'Social'" "'AmbienteVirtual'" "'Browsers'" "'Newsletter'"; do
+    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Design'" "'Sharing'" "'IRPF'" "'Code'" "'Data'" "'Ereader'" "'Office'" "'Media'" "'Planning'" "'Social'" "'Infra'" "'Browsers'" "'Reading'"; do
         for created_folder in "${folder_ids[@]}"; do
             if [ "$created_folder" = "$folder" ]; then
                 ordered_folder_ids+=("$folder")

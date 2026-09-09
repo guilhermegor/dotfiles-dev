@@ -167,7 +167,7 @@ payload() {
 @test "passes when the resolved --repo target has no PR template of its own" {
     local fake_home target
     fake_home="$(mktemp -d)"
-    target="$fake_home/github/no-template-repo"
+    target="$fake_home/repos/no-template-repo"
     mkdir -p "$target"
     git init -q "$target"
     run env HOME="$fake_home" bash -c "payload 'gh pr create --repo someowner/no-template-repo --title x --body \"whatever\"' | '$GUARD'"

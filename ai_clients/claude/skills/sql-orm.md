@@ -8,6 +8,11 @@ allowed-tools: Read Glob Grep
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+emitting code — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer.
+
 The ORM/framework-agnostic layer of the SQL skill family: reasoning true of SQLAlchemy,
 Prisma, Django ORM, ActiveRecord, and any comparable tool. Raw-SQL hazards are `s:sql`;
 the SQLAlchemy-specific implementation is `s:sql-sqlalchemy`.

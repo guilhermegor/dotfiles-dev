@@ -8,6 +8,11 @@ allowed-tools: Read
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+emitting code — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer.
+
 Generate pytest-bdd step definitions that bind the provided Gherkin `.feature`
 file to executable pytest code. This is the pytest weapon of the BDD family —
 for Gherkin syntax, the localised-keyword rule, and the decision of *whether* a

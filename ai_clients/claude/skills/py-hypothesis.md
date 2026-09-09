@@ -8,6 +8,11 @@ allowed-tools: Read
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+emitting code — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer.
+
 Generate property-based tests for the provided Python module using Hypothesis.
 This is the PBT weapon of the testing family — for the vocabulary that decides
 *whether* a case is EBT or PBT in the first place, and for AAA/SUT/independence,

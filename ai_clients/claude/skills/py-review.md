@@ -8,6 +8,11 @@ allowed-tools: Read Glob Grep
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+flagging comment findings — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer.
+
 Review the provided Python source code against the project's coding standards.
 Report findings as a structured list — do not modify any files.
 

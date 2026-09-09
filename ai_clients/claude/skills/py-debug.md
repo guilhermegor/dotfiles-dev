@@ -8,6 +8,11 @@ allowed-tools: Read Glob Grep
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+proposing a fix — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer.
+
 Diagnose the root cause of a Python error by reading tracebacks, tracing call
 stacks, and identifying the failing code path. Report a structured diagnosis —
 do not modify any files.

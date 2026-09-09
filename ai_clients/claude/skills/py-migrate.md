@@ -7,6 +7,11 @@ argument-hint: [source-file-or-directory] [from-version] [to-version]
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+emitting code — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer.
+
 Migrate the provided Python source code between Python versions or upgrade major
 library dependencies. Apply changes to the source files and report what was modified.
 

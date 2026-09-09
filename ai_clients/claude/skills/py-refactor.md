@@ -7,6 +7,11 @@ argument-hint: [source-file]
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
 
+**Comment discipline:** read `~/.claude/skills/code-comments/SKILL.md` before
+emitting code — an explanation long enough to need a comment is
+documentation in disguise; put it in `docs/` and leave at most a one-line
+pointer.
+
 Refactor the provided Python module according to the rules below. Return only the
 refactored code — no explanations, no commentary. Use `True` / `False` instead
 of `OK` / `NOK`.

@@ -460,6 +460,16 @@ on at merge time.
 ⚠️ **If the free surface is empty, state it.** That is information, not silence.
 
 Every brief carries:
+- 🔴 **qualify the target — always, not just here.** Every repository command starts with
+  `cd <absolute-path> &&`; every git command that compares with a base names it explicitly as
+  `origin/<base>`, never a bare local branch or an implicit `HEAD`. The harness resets cwd after
+  every Bash call, and it can reset to a **different repo** — an unqualified command then answers
+  about whatever the shell happens to point at, and the wrong answer is plausible, not an error.
+  Measured 2026-09-05 twice: cwd reset mid-task from a worktree to `~/github/blueprintx` with no
+  `cd` run, and an unref'd `git describe --tags --abbrev=0` on a stale feature-branch checkout was
+  16 tags behind `origin/main` — the release step's shipped-diff gate would have cut the wrong
+  version with nothing going red. `git -C <path>` does not substitute for this: it fixes the
+  directory but not the implicit-HEAD half of the bug (dotfiles-dev#229);
 - 🔴 **confirm before writing** — the feature/defect check above; state the command and its output;
 - 🔴 **commit and push at the first coherent point, then keep committing** (the measurement above);
 - 🔴 **verify HEAD belongs to you and holds your diff — not just that it exists.** `git log -1`

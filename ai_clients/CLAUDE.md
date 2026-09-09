@@ -135,6 +135,12 @@ argument-hint: <hint shown in autocomplete>  # optional but recommended
 - `allowed-tools` must use glob patterns for Bash (`Bash(git diff*)`) —
   never `Bash(*)` (too broad)
 - No trailing `Co-Authored-By` footers unless explicitly requested
+- Every command example that reads or writes repository state qualifies its
+  target: absolute `cd <path> &&` for the directory, explicit `origin/<base>`
+  for any git ref compared against a base — never a bare local branch or an
+  implicit `HEAD`, and never `git -C <path>` as a substitute (it fixes the
+  directory, not the ref). Same rule as `config/CLAUDE.md`'s
+  "Qualify the target" bullet (dotfiles-dev#229).
 
 ### 2. Agents (subagent definitions)
 
@@ -169,6 +175,9 @@ argument-hint: [hint]
 - End with a structured `## Final summary` block
 - Include a `## Do Not` section listing prohibited behaviors
 - Use `## Memory` section when `memory: true` to define what to persist
+- Same target-qualification rule as commands, above (dotfiles-dev#229) —
+  agent briefs are exactly where it matters most, since a dispatched agent's
+  cwd can reset to a different repo mid-task with no `cd` ever run
 
 ### 3. Skills (mid-task reference guides)
 
@@ -211,6 +220,8 @@ allowed-tools: Read Glob Grep  # space-separated for skills (no commas)
   if the skill legitimately needs to run commands
 - Keep total token count low — skills load into every conversation that
   triggers them
+- Same target-qualification rule as commands, above (dotfiles-dev#229) — a
+  skill's example commands are copied into a running session verbatim
 
 ## Session profiles (cheap-brain runtime, dotfiles-dev#151)
 

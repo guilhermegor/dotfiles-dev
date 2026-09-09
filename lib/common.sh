@@ -93,12 +93,38 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
+# Probe over the protocol the installers actually use, not ICMP (#296).
+#
+# `ping` was the wrong instrument twice over: corporate networks, hotels, mobile
+# tethering and containers routinely block ICMP while HTTPS passes, and `ping`
+# needs CAP_NET_RAW, which sandboxes withhold. A false "no internet" here is not
+# a cosmetic warning — `install_programs` is the 5th of `make run`'s 14 targets
+# and make aborts on first failure, so it silently costs the 9 targets after it.
+#
+# The host is a package mirror rather than a generic site: reaching the
+# repository is the capability the callers actually need.
+CONNECTIVITY_PROBE_URL="${CONNECTIVITY_PROBE_URL:-http://archive.ubuntu.com}"
+
 check_internet() {
     print_status "info" "Checking internet connectivity..."
-    if ping -c 1 google.com &> /dev/null; then
-        print_status "success" "Internet connection verified"
-        return 0
+
+    if command_exists curl; then
+        if curl -fsS --max-time 5 -o /dev/null "$CONNECTIVITY_PROBE_URL" 2>/dev/null; then
+            print_status "success" "Internet connection verified"
+            return 0
+        fi
+    elif command_exists wget; then
+        if wget -q --spider --timeout=5 --tries=1 "$CONNECTIVITY_PROBE_URL" 2>/dev/null; then
+            print_status "success" "Internet connection verified"
+            return 0
+        fi
+    else
+        # Neither downloader present: every install would fail anyway, and this
+        # is a missing-dependency problem, not a connectivity one. Say which.
+        print_status "error" "Neither curl nor wget is available — cannot check connectivity"
+        return 1
     fi
+
     print_status "error" "No internet connection detected"
     return 1
 }

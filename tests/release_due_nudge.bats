@@ -196,3 +196,61 @@ merged_json() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"RELEASE DUE"* ]]
 }
+
+# --- dotfiles-dev#99: bump type must come from shipped-path commits only, not the whole log -----
+
+@test "bump is patch: feat touches only .github/, fix touches src/ (not vacuous vs current impl)" {
+    mkdir -p .github
+    echo "x" >> .github/workflow.yml
+    git add .github
+    git commit -q -m "feat(ci): weekly drift detector"
+
+    echo "x" >> src/lib.py
+    git add src/lib.py
+    git commit -q -m "fix(us): probe for the cookie banner"
+
+    run run_hook "git pull"
+    [ "$status" -eq 0 ]
+    # Proves non-vacuous: the unfixed highest_signal() scans ALL commits since the tag and would
+    # see the feat(ci) subject line first, proposing 1.1.0 (feat) instead of the correct 1.0.1 (fix)
+    # — this assertion fails against the pre-fix implementation.
+    [[ "$output" == *"RELEASE DUE: 1.0.1 (fix)"* ]]
+    [[ "$output" != *"(feat)"* ]]
+}
+
+@test "bump is minor: feat touches src/ directly" {
+    echo "x" >> src/lib.py
+    git add src/lib.py
+    git commit -q -m "feat: new capability shipped in the package"
+
+    run run_hook "git pull"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"RELEASE DUE: 1.1.0 (feat)"* ]]
+}
+
+@test "NO RELEASE NEEDED: feat(ci) outside shipped paths alongside chore/docs" {
+    mkdir -p .github docs
+    echo "x" >> .github/workflow.yml
+    git add .github
+    git commit -q -m "feat(ci): weekly drift detector"
+
+    echo "x" >> docs/readme.md
+    git add docs
+    git commit -q -m "docs: update readme"
+
+    run run_hook "git pull"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"NO RELEASE NEEDED"* ]]
+}
+
+@test "silent: fresh repo with no tags at all" {
+    FRESH="$(mktemp -d)"
+    (cd "$FRESH" && git init -q -b main . && git config user.email t@t && git config user.name t \
+        && mkdir -p .claude src && printf 'src/\n' > .claude/release.conf \
+        && git add .claude src && git commit -q -m "chore: init")
+
+    run bash -c "cd '$FRESH' && jq -nc '{tool_name: \"Bash\", tool_input: {command: \"git pull\"}}' | '$HOOK'"
+    rm -rf "$FRESH"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}

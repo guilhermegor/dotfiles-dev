@@ -123,7 +123,13 @@ check_release_due() {
     local root="$1" ref="$2" last_tag signal next
     local -a paths
 
-    last_tag="$(git describe --tags --abbrev=0 "$ref" 2>/dev/null)" || exit 0   # no tags → nothing
+    # No tags at all (fresh repo): describe fails, we exit silently — there is no floor to bump
+    # from, so "since the last release" is undefined and this hook has nothing to say (the s:release
+    # skill's first-publish path handles that case, not this advisory hook).
+    # `--abbrev=0` also guarantees last_tag is reachable from ref (git describe only walks ref's own
+    # ancestry), so it is always an ancestor of ref by construction — the "tag not an ancestor of
+    # HEAD" edge case cannot arise from how last_tag is derived here.
+    last_tag="$(git describe --tags --abbrev=0 "$ref" 2>/dev/null)" || exit 0
 
     mapfile -t paths < <(shipped_paths "$root")
     if shipped_diff_empty "$last_tag" "$ref" "${paths[@]}"; then
@@ -131,7 +137,7 @@ check_release_due() {
         exit 0
     fi
 
-    signal="$(highest_signal "$last_tag" "$ref")"
+    signal="$(highest_signal "$last_tag" "$ref" "${paths[@]}")"
     next="$(next_version "$last_tag" "$signal")" || { announce_none; exit 0; }
     announce_due "$next" "$signal"
 }
@@ -156,9 +162,16 @@ shipped_diff_empty() {
 }
 
 highest_signal() {
-    # breaking > feat > fix > none, over commit subjects+bodies since the tag.
-    local last_tag="$1" ref="$2" log
-    log="$(git log "$last_tag".."$ref" --format='%s%n%b' 2>/dev/null)" || { printf 'none'; return; }
+    # breaking > feat > fix > none, over commit subjects+bodies since the tag — but ONLY commits
+    # that touched a shipped path (dotfiles-dev#99: scanning every commit inflates the bump, e.g. a
+    # feat(ci) that never touched the package still proposed a MINOR). Same "$@" paths as
+    # shipped_diff_empty() above, passed through to git log's own pathspec filter: `A..B -- <paths>`
+    # already restricts to commits whose diff intersects <paths>, so the two checks ("did the
+    # artifact change" and "what type of change was it") can never disagree about which commits
+    # count — no separate per-commit diff-tree loop needed.
+    local last_tag="$1" ref="$2"; shift 2
+    local log
+    log="$(git log "$last_tag".."$ref" --format='%s%n%b' -- "$@" 2>/dev/null)" || { printf 'none'; return; }
     printf '%s' "$log" | grep -Eq 'BREAKING[ -]CHANGE|^[a-z]+(\([^)]*\))?!:' && { printf 'breaking'; return; }
     printf '%s' "$log" | grep -Eq '^feat(\([^)]*\))?:' && { printf 'feat'; return; }
     printf '%s' "$log" | grep -Eq '^fix(\([^)]*\))?:' && { printf 'fix'; return; }

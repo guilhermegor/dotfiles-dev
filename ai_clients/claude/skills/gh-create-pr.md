@@ -22,6 +22,10 @@ If the user answers **no**, stop immediately.
 
 Run in parallel:
 
+- `git rev-parse --show-toplevel` — absolute repo root; keep it as `$REPO_ROOT` and prefix every
+  command below with `cd "$REPO_ROOT" &&` — the harness resets cwd between Bash calls and can
+  reset it to a different repo entirely, so an unqualified command answers about whatever the
+  shell happens to point at (dotfiles-dev#229)
 - `git branch --show-current` — active branch name
 - `git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null` — upstream (may fail)
 - `gh pr list --head "$(git branch --show-current)" --json number,title,url --limit 1`
@@ -41,15 +45,18 @@ If the user answers no, stop.
 
 ## 2. Gather changes
 
-Compute the merge base and collect data in parallel:
+Compute the merge base and collect data in parallel. Compare against `origin/<base-branch>`,
+never the bare local branch name — a stale local tracking ref silently mis-scopes the diff the
+same way an implicit `HEAD` does (dotfiles-dev#229):
 
 ```bash
-git merge-base <base-branch> HEAD   # → <merge-base>
+cd "$REPO_ROOT" && git fetch origin "<base-branch>" --quiet
+cd "$REPO_ROOT" && git merge-base "origin/<base-branch>" HEAD   # → <merge-base>
 
-git log <merge-base>..HEAD --oneline --no-decorate --reverse
-git diff <merge-base>..HEAD --stat
-git diff <merge-base>..HEAD -- '*.py' '*.sh' '*.md' '*.json' '*.toml' '*.yaml' '*.yml'
-git status --short
+cd "$REPO_ROOT" && git log <merge-base>..HEAD --oneline --no-decorate --reverse
+cd "$REPO_ROOT" && git diff <merge-base>..HEAD --stat
+cd "$REPO_ROOT" && git diff <merge-base>..HEAD -- '*.py' '*.sh' '*.md' '*.json' '*.toml' '*.yaml' '*.yml'
+cd "$REPO_ROOT" && git status --short
 ```
 
 Use the full diff only to understand intent — not to reproduce it in the PR body.

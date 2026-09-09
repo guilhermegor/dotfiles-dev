@@ -8,6 +8,17 @@ Source tree for AI client configurations. `make ai_clients` runs
 `ai_clients/claude/main.sh`, which copies files from this tree into
 `~/.claude/` via the lib scripts in `ai_clients/claude/lib/`.
 
+⚠️ **True for files, not for `settings.json` keys.** `configure_settings()`
+merges source into `~/.claude/settings.json` with `jq '. * $base'` —
+additive only. It updates a key source defines but can never remove a key
+that exists only live, because a merge never deletes. Deleting an entry
+from source is therefore a no-op against the live file until the `prune`
+step's `prune_settings_keys()` (`lib/prune.sh`) explicitly removes it —
+and that function only touches the specific, fully source-owned subtrees
+named in `SETTINGS_PRUNE_KEYS` (`enabledPlugins` today), never a blanket
+diff, so machine-local keys the additive merge exists to protect still
+survive (dotfiles-dev#272).
+
 Only `ai_clients/claude/` is wired up today. New clients follow the same
 pattern: add `ai_clients/<name>/main.sh` and it is auto-discovered by
 `ai_clients/main.sh`.
@@ -135,6 +146,12 @@ argument-hint: <hint shown in autocomplete>  # optional but recommended
 - `allowed-tools` must use glob patterns for Bash (`Bash(git diff*)`) —
   never `Bash(*)` (too broad)
 - No trailing `Co-Authored-By` footers unless explicitly requested
+- Every command example that reads or writes repository state qualifies its
+  target: absolute `cd <path> &&` for the directory, explicit `origin/<base>`
+  for any git ref compared against a base — never a bare local branch or an
+  implicit `HEAD`, and never `git -C <path>` as a substitute (it fixes the
+  directory, not the ref). Same rule as `config/CLAUDE.md`'s
+  "Qualify the target" bullet (dotfiles-dev#229).
 
 ### 2. Agents (subagent definitions)
 
@@ -169,6 +186,9 @@ argument-hint: [hint]
 - End with a structured `## Final summary` block
 - Include a `## Do Not` section listing prohibited behaviors
 - Use `## Memory` section when `memory: true` to define what to persist
+- Same target-qualification rule as commands, above (dotfiles-dev#229) —
+  agent briefs are exactly where it matters most, since a dispatched agent's
+  cwd can reset to a different repo mid-task with no `cd` ever run
 
 ### 3. Skills (mid-task reference guides)
 
@@ -211,6 +231,8 @@ allowed-tools: Read Glob Grep  # space-separated for skills (no commas)
   if the skill legitimately needs to run commands
 - Keep total token count low — skills load into every conversation that
   triggers them
+- Same target-qualification rule as commands, above (dotfiles-dev#229) — a
+  skill's example commands are copied into a running session verbatim
 
 ## Session profiles (cheap-brain runtime, dotfiles-dev#151)
 
@@ -408,6 +430,27 @@ Note the division of labour with `install_skills()`: prune removes **name**
 orphans (no source counterpart), while `install_skills()` separately sweeps
 **layout** orphans (flat `skills/*.md`, which are never loadable regardless of
 whether a source file of that name exists). Neither one subsumes the other.
+
+### Pruning stale `settings.json` keys (dotfiles-dev#272)
+
+File orphans and settings-key orphans are different shapes of problem, and
+`prune_orphans()` handles both: `_prune_file_artifacts()` for the file types
+above, then `prune_settings_keys()` for `settings.json`. The settings side
+can't reuse the file logic's "anything live without a source counterpart is
+an orphan" rule — the live file legitimately carries machine-local keys
+(API tokens, per-machine `env` entries) that must survive every deploy,
+which is the entire reason `configure_settings()`'s merge (`lib/settings.sh`)
+is additive-only (`jq '. * $base'`, never deletes).
+
+So `prune_settings_keys()` is scoped to the object keys named in
+`SETTINGS_PRUNE_KEYS` (`lib/prune.sh`) — subtrees that are *entirely*
+source-owned, `enabledPlugins` being the concrete case: every entry is added
+by `run_plugins()`, never hand-edited live, so anything live-but-not-in-source
+is unambiguously stale (e.g. a plugin reference removed from source after the
+marketplace stopped shipping it). It diffs only inside those named keys, asks
+before removing, and never touches a top-level key or any key not listed —
+adding a key to `SETTINGS_PRUNE_KEYS` is an explicit claim that source is the
+full authority for everything under it.
 
 ## Deployment
 

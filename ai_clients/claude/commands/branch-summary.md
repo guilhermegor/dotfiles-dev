@@ -10,25 +10,30 @@ You are summarizing all work done on the current branch. Follow these steps exac
 ## 1. Detect branch context
 
 Run these in parallel:
+- `git rev-parse --show-toplevel` — absolute repo root; keep it as `$REPO_ROOT` and prefix every
+  command below with `cd "$REPO_ROOT" &&` — the harness resets cwd between Bash calls and can
+  reset it to a different repo entirely (dotfiles-dev#229)
 - `git rev-parse --abbrev-ref HEAD` — current branch name
 - `git rev-parse --abbrev-ref --symbolic-full-name @{u}` — tracking remote (may fail if unset)
 - `git branch --show-current`
 
-Determine the base branch: try `main`, then `master`, then the default remote HEAD. Compute the merge base:
-- `git merge-base <base> HEAD`
+Determine the base branch: try `main`, then `master`, then the default remote HEAD. Compute the
+merge base against the **remote** base ref, never the bare local branch name — a stale local
+tracking ref silently mis-scopes the diff the same way an implicit `HEAD` does:
+- `cd "$REPO_ROOT" && git fetch origin "<base>" --quiet && git merge-base "origin/<base>" HEAD`
 
 ## 2. Gather all changes
 
 Run these in parallel using the merge base commit:
-- `git log <merge-base>..HEAD --oneline --no-decorate`
-- `git log <merge-base>..HEAD --format="%h %s" --reverse`
-- `git diff <merge-base>..HEAD --stat`
-- `git status --short`
+- `cd "$REPO_ROOT" && git log <merge-base>..HEAD --oneline --no-decorate`
+- `cd "$REPO_ROOT" && git log <merge-base>..HEAD --format="%h %s" --reverse`
+- `cd "$REPO_ROOT" && git diff <merge-base>..HEAD --stat`
+- `cd "$REPO_ROOT" && git status --short`
 
 ## 3. Read key diffs
 
 For files with significant changes (more than a few lines in the stat output), read the actual diff:
-- `git diff <merge-base>..HEAD -- <file>`
+- `cd "$REPO_ROOT" && git diff <merge-base>..HEAD -- <file>`
 
 Focus on understanding the intent — what was built, fixed, or changed — not just the line counts.
 

@@ -29,7 +29,14 @@ configure_settings() {
     local base_settings
     base_settings=$(cat "$base_settings_file")
 
-    # Merge: base_settings take priority over current (preserves any extra user keys)
+    # Merge: base_settings take priority over current (preserves any extra user keys).
+    # This is additive-only — it can update a key source defines but can never
+    # remove a key that exists only live (jq '*' never deletes). That is exactly
+    # right for machine-local keys, and exactly wrong for a key deleted from
+    # source: it silently stays behind forever. The "prune" step's
+    # prune_settings_keys() (lib/prune.sh) is the delete path for the specific,
+    # fully source-owned subtrees where that matters (e.g. enabledPlugins) —
+    # see dotfiles-dev#272.
     echo "$current" | jq --argjson base "$base_settings" '. * $base' > "${settings_file}.tmp"
 
     # Add portable statusLine only if claude-hud cache is present.

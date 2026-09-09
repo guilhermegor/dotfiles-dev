@@ -350,10 +350,35 @@ apply_additional_tweaks() {
     print_status "success" "Additional tweaks applied"
 }
 
+# Every app-folder id this script has ever produced, derived from the full git
+# history of this file:
+#     for c in $(git log --format=%H -- distro_config/ubuntu_workspace.sh); do
+#       git show $c:distro_config/ubuntu_workspace.sh \
+#         | grep -oE "folders/[A-Za-z0-9_-]+/ name" | sed 's|folders/||;s|/ name||'
+#     done | sort -u
+#
+# This allowlist is what makes the reset decidable: "defined in dconf but not in
+# folder-children" also catches ids this repo never created — GNOME/distro stock
+# folders (Pardus, YaST, Utilities) and anything the user made by hand in the
+# Shell. Resetting those would be a sweep of the user's dconf, not a cleanup of
+# our own leftovers. Add a row here when an id is retired, never remove one:
+# an id drops out of the live set precisely when it becomes the thing to clean.
+_HISTORICAL_APP_FOLDER_IDS=(
+    AmbienteVirtual Browsers Code Data Design DEV Ereader Infra IRPF Media
+    Newsletter Office OrgPessoal Planning Reading Seguranca Sharing Sistema
+    Social Utilitarios
+)
+
 # Reset the relocatable-schema state (name/apps) of any app-folder id that
 # THIS run no longer produces. `folder-children` only ever lists ids — it
 # never deletes an id's own schema entries, so a dropped id survives in
 # dconf carrying its stale name/apps until something re-adds it (#293).
+#
+# The candidate set is what dconf actually HAS, never what `folder-children`
+# lists: an already-orphaned id is by definition absent from `folder-children`,
+# so deriving candidates from it can only catch the id on the single run that
+# drops it, and never afterwards. That was the gap in the first fix (PR #294) —
+# it prevented new orphans while leaving every pre-existing one untouched.
 # $1: name of the array holding the ids this run produced (nameref, quoted
 #     entries like "'Sistema'", e.g. ordered_folder_ids)
 # $2: the CURRENT `folder-children` value, e.g. "['Sistema', 'DEV']"
@@ -362,18 +387,29 @@ _reset_orphaned_app_folders() {
     local current_children_str="$2"
 
     local -a current_ids=()
-    if [ -n "$current_children_str" ]; then
+    if command_exists dconf; then
+        mapfile -t current_ids < <(dconf list /org/gnome/desktop/app-folders/folders/ 2>/dev/null \
+            | sed "s|/$||; s|^|'|; s|$|'|")
+    fi
+    # Fall back to folder-children when dconf is unavailable: strictly weaker
+    # (transition-only, the PR #294 behaviour) but better than doing nothing.
+    if [ ${#current_ids[@]} -eq 0 ] && [ -n "$current_children_str" ]; then
         mapfile -t current_ids < <(grep -oE "'[^']+'" <<< "$current_children_str")
     fi
 
     local id bare_id path
     for id in "${current_ids[@]}"; do
+        # Only ever touch ids this script is known to have created.
+        bare_id="${id//\'/}"
+        if [[ ! " ${_HISTORICAL_APP_FOLDER_IDS[*]} " == *" ${bare_id} "* ]]; then
+            continue
+        fi
+
         # Fail-open: never touch an id this run is actively (re-)creating.
         if [[ " ${_reset_produced[*]} " == *" ${id} "* ]]; then
             continue
         fi
 
-        bare_id="${id//\'/}"
         path="org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/${bare_id}/"
 
         # Guard strictly to the app-folders relocatable-schema shape —

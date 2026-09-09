@@ -43,6 +43,7 @@ main() {
 
     mapfile -t paths < <(shipped_paths "$root")
     shipped_diff_empty "$last_tag" "${paths[@]}" && block_no_shipped_change "$last_tag" "${paths[@]}"
+    semantic_diff_empty "$last_tag" "${paths[@]}" && block_comment_only_change "$last_tag" "${paths[@]}"
 
     # Everything below is advisory only.
     signal="$(highest_signal "$last_tag")"
@@ -83,6 +84,65 @@ shipped_diff_empty() {
     local out
     out="$(git diff --name-only "$last_tag"..HEAD -- "$@" 2>/dev/null)" || return 1
     [[ -z "$out" ]]
+}
+
+semantic_diff_empty() {
+    # True only when EVERY changed shipped-path file is a tracked .py file whose AST is identical
+    # across revisions (dotfiles-dev#100). A non-empty byte diff proves "these files were touched",
+    # never "the artifact changed": a comment/docstring/formatting-only edit is non-empty in bytes
+    # and AST-identical under ast.dump(). This check is Python-only by construction — ast.dump()
+    # has no equivalent here for any other language — so it FAILS TOWARD "real change" for anything
+    # it cannot certify: a non-.py file, an added/deleted file, or a file python3/ast cannot parse.
+    # IDENTICAL to release_due_nudge.sh's semantic_diff_empty — the guard, that nudge, and the
+    # s:release skill must agree on what "semantically empty" means, or they contradict each other.
+    # Caller must already know the byte diff (shipped_diff_empty above) is non-empty.
+    local last_tag="$1"; shift
+    local -a changed
+    mapfile -t changed < <(git diff --name-only "$last_tag"..HEAD -- "$@" 2>/dev/null)
+
+    command -v python3 >/dev/null 2>&1 || return 1   # cannot certify -> treat as real change
+
+    local file
+    for file in "${changed[@]}"; do
+        [[ "$file" == *.py ]] || return 1            # non-Python shipped file -> always real
+        ast_identical "$last_tag" HEAD "$file" || return 1
+    done
+    return 0
+}
+
+ast_identical() {
+    # AST-equality of one file's content between two revisions. Returns failure (not identical) on
+    # anything this check cannot certify: the file missing at either revision (added/deleted), or
+    # unparseable/undecodable content at either revision — never silently reads an uncertain case
+    # as "unchanged".
+    local old_ref="$1" new_ref="$2" file="$3" old_tmp new_tmp rc
+    old_tmp="$(mktemp)" && new_tmp="$(mktemp)" || return 1
+    if ! git show "${old_ref}:${file}" >"$old_tmp" 2>/dev/null; then
+        rm -f "$old_tmp" "$new_tmp"
+        return 1
+    fi
+    if ! git show "${new_ref}:${file}" >"$new_tmp" 2>/dev/null; then
+        rm -f "$old_tmp" "$new_tmp"
+        return 1
+    fi
+
+    python3 - "$old_tmp" "$new_tmp" <<'PYEOF'
+import ast
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        old_src = f.read()
+    with open(sys.argv[2], encoding="utf-8") as f:
+        new_src = f.read()
+    same = ast.dump(ast.parse(old_src)) == ast.dump(ast.parse(new_src))
+except (SyntaxError, UnicodeDecodeError, OSError, ValueError):
+    sys.exit(1)
+sys.exit(0 if same else 1)
+PYEOF
+    rc=$?
+    rm -f "$old_tmp" "$new_tmp"
+    return $rc
 }
 
 highest_signal() {
@@ -148,6 +208,25 @@ block_no_shipped_change() {
         echo
         echo "If the shipped layout is wrong, set the paths in .claude/release.conf (one per line)."
         echo "Otherwise there is genuinely nothing to release."
+    } >&2
+    exit 2
+}
+
+block_comment_only_change() {
+    local last_tag="$1"; shift
+    {
+        echo "BLOCKED: shipped diff since ${last_tag} is comment-only — refusing to release."
+        echo
+        echo "git diff --name-only ${last_tag}..HEAD -- $* is non-empty, but every changed file is a"
+        echo ".py file whose AST is identical across revisions: comments, docstring prose, or"
+        echo "formatting only — zero change observable to a consumer. Publishing here would ship a"
+        echo "byte-identical wheel under a new version number."
+        echo
+        echo "This check covers .py files only (ast.dump() equality). Any non-.py shipped file, or a"
+        echo "file python3 could not parse, is ALWAYS treated as a real change and never suppressed."
+        echo
+        echo "If this diff genuinely changes behavior, the AST comparison has a bug — investigate"
+        echo "before overriding. Otherwise there is genuinely nothing to release."
     } >&2
     exit 2
 }

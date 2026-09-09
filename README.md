@@ -140,19 +140,19 @@ project `.env`. Both files are written mode `600`.
 
 | Key | Purpose | Scopes | Consumers |
 |---|---|---|---|
-| `CODERABBIT_TRIGGER_PAT` | User PAT so CodeRabbit answers a review request — it silently ignores bot-authored (`GITHUB_TOKEN`) comments | Fine-grained PAT, **All repositories**, `Pull requests: Read and write` | `.github/workflows/coderabbit_trigger.yml` in `blueprintx` and every project it scaffolds |
+| `GH_REVIEW_TRIGGER_PAT` | User PAT so CodeRabbit answers a review request — it silently ignores bot-authored (`GITHUB_TOKEN`) comments | Fine-grained PAT, **All repositories**, `Pull requests: Read and write` | `.github/workflows/coderabbit_trigger.yml` in `blueprintx` and every project it scaffolds |
 | `CLAUDE_BACKUP_DIR` | Default target dir for `/backup-env` / `/restore-env` | n/a (local path) | `ai_clients/claude/commands/backup-env.md`, `restore-env.md` |
 
-**Re-minting `CODERABBIT_TRIGGER_PAT` on a new/lost machine** (a PAT is re-minted,
+**Re-minting `GH_REVIEW_TRIGGER_PAT` on a new/lost machine** (a PAT is re-minted,
 not restored — a backed-up value may already be expired):
 1. github.com/settings/tokens → generate a new fine-grained token with the
    scopes above.
-2. `echo 'CODERABBIT_TRIGGER_PAT=<value>' >> .env` (project-root `.env` —
+2. `echo 'GH_REVIEW_TRIGGER_PAT=<value>' >> .env` (project-root `.env` —
    create it first with `cp .env.example .env` if it doesn't exist yet).
 3. `make setup_env` to regenerate `~/.claude/.env` from it, then
    `source ~/.bashrc` (or open a new shell).
-4. Verify: `[ -n "$CODERABBIT_TRIGGER_PAT" ] && echo "set"` — and that
-   `gh secret set CODERABBIT_TRIGGER_PAT --body "$CODERABBIT_TRIGGER_PAT"` on
+4. Verify: `[ -n "$GH_REVIEW_TRIGGER_PAT" ] && echo "set"` — and that
+   `gh secret set GH_REVIEW_TRIGGER_PAT --body "$GH_REVIEW_TRIGGER_PAT"` on
    the target repo succeeds.
 
 ### Alternative Installation Methods

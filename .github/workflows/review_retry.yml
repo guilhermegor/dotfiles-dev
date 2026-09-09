@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Detect rate-limit refusal and re-ask after the declared wait
         env:
-          GH_TOKEN: ${{ secrets.CODERABBIT_TRIGGER_PAT }}
+          GH_TOKEN: ${{ secrets.GH_REVIEW_TRIGGER_PAT }}
           PR_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
           COMMENT_BODY: ${{ github.event.comment.body }}
@@ -30,7 +30,7 @@ jobs:
           # retry cannot post, so sleeping first would burn ~35 minutes of runner
           # time only to fail at the last line.
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::warning::CODERABBIT_TRIGGER_PAT is not set — cannot re-ask for a review after a rate-limit refusal (see dotfiles-dev#130)."
+            echo "::warning::GH_REVIEW_TRIGGER_PAT is not set — cannot re-ask for a review after a rate-limit refusal (see dotfiles-dev#130)."
             exit 0
           fi
 

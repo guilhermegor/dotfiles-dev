@@ -140,11 +140,16 @@ Precedence, identical to the guard so the two can never disagree:
 
 ### Step 4 — Classify work type + mode
 
-Infer from the description, then confirm. Probe issue-type support **once** per repo:
+Infer from the description, then confirm. Probe issue-type support **once** per repo,
+**read-only**:
 
 - `gh issue create --type` requires org-level issue types. Personal-account repos
-  (`guilhermegor/*`) may not have them. Probe, and on absence fall back to a
-  `type:<work-type>` label. Linear has no type field either, so it uses the label form too.
+  (`guilhermegor/*`) may not have them. Never let a mutating command be the probe — `gh issue
+  create` creates the issue and resolves `--type` afterwards, so a rejected `--type` exits 1
+  with the issue already created, and a retry without the flag files a second one (measured,
+  dotfiles-dev#186). Probe with a read-only `gh api graphql` query against
+  `repository.issueTypes`, and on an empty/no-match result fall back to a `type:<work-type>`
+  label. Linear has no type field either, so it uses the label form too.
 - The HITL/AFK mode is always a label (`hitl` / `afk`) on both trackers.
 
 On the **resume** path, read the existing labels/type rather than re-asking.

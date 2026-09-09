@@ -48,7 +48,11 @@ _source_names() {
 
 prune_orphans() {
     print_status "section" "PRUNING ORPHANED ARTIFACTS"
+    _prune_file_artifacts
+    prune_settings_keys
+}
 
+_prune_file_artifacts() {
     local -a orphan_paths=()
     local -a orphan_labels=()
     local type spec src ext dest layout name
@@ -95,4 +99,84 @@ prune_orphans() {
         rm -rf "$path"
     done
     print_status "success" "Removed ${#orphan_paths[@]} orphaned artifact(s)"
+}
+
+# ── Settings-key pruning (dotfiles-dev#272) ─────────────────────────────────
+#
+# configure_settings() merges source into ~/.claude/settings.json with
+# `jq '. * $base'` — additive only. It can update a key's value but can
+# never remove a key that exists only live, because a merge never deletes.
+# That same property is what lets legitimate machine-local keys (API
+# tokens, per-machine env vars, ...) survive every deploy — so pruning here
+# must NOT be "delete anything live that source lacks" (that would destroy
+# the very thing the additive merge exists to protect).
+#
+# Instead, prune only inside object keys that are named below and are
+# *entirely* source-owned — every entry under them is expected to trace back
+# to source, so anything else found live is stale, not machine-local.
+# `enabledPlugins` is the concrete case (#272): plugin entries are only ever
+# added by run_plugins() in main.sh, never hand-edited on a live machine.
+# Add a key here only when that same guarantee holds; never a top-level key
+# that legitimately mixes source and machine-local entries.
+declare -ga SETTINGS_PRUNE_KEYS=("enabledPlugins")
+
+# Echoes subkeys present in $settings_file's "$key" object but absent from
+# $base_file's, one per line.
+_stale_settings_subkeys() {
+    local settings_file="$1" base_file="$2" key="$3"
+
+    comm -23 \
+        <(jq -r --arg k "$key" '(.[$k] // {}) | keys[]?' "$settings_file" 2>/dev/null | sort) \
+        <(jq -r --arg k "$key" '(.[$k] // {}) | keys[]?' "$base_file" 2>/dev/null | sort)
+}
+
+prune_settings_keys() {
+    local settings_file="$CLAUDE_DIR/settings.json"
+    local base_settings_file="$SCRIPT_DIR/settings.json"
+
+    [[ -f "$settings_file" ]] || return 0
+    [[ -f "$base_settings_file" ]] || return 0
+    jq empty "$settings_file" 2>/dev/null || return 0
+
+    local key subkey
+    local -a stale_refs=()    # "key<TAB>subkey", for the jq delete pass
+    local -a stale_labels=()
+
+    for key in "${SETTINGS_PRUNE_KEYS[@]}"; do
+        while read -r subkey; do
+            [[ -n "$subkey" ]] || continue
+            stale_refs+=("$key"$'\t'"$subkey")
+            stale_labels+=("$key: $subkey")
+        done < <(_stale_settings_subkeys "$settings_file" "$base_settings_file" "$key")
+    done
+
+    if (( ${#stale_refs[@]} == 0 )); then
+        print_status "success" "No stale settings keys — enabledPlugins matches source"
+        return 0
+    fi
+
+    print_status "warning" "Found ${#stale_refs[@]} settings key(s) live but absent from source:"
+    local label
+    for label in "${stale_labels[@]}"; do
+        print_status "info" "  $label"
+    done
+
+    local reply
+    read -r -p "Remove these from $settings_file? They are recoverable from git history. [y/N] " reply
+    if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+        print_status "info" "Left in place — nothing removed"
+        return 0
+    fi
+
+    local ref k sk tmp
+    tmp="${settings_file}.tmp"
+    cp "$settings_file" "$tmp"
+    for ref in "${stale_refs[@]}"; do
+        k="${ref%%$'\t'*}"
+        sk="${ref#*$'\t'}"
+        jq --arg k "$k" --arg sk "$sk" 'del(.[$k][$sk])' "$tmp" > "${tmp}.next" \
+            && mv "${tmp}.next" "$tmp"
+    done
+    mv "$tmp" "$settings_file"
+    print_status "success" "Removed ${#stale_refs[@]} stale settings key(s)"
 }

@@ -8,6 +8,17 @@ Source tree for AI client configurations. `make ai_clients` runs
 `ai_clients/claude/main.sh`, which copies files from this tree into
 `~/.claude/` via the lib scripts in `ai_clients/claude/lib/`.
 
+⚠️ **True for files, not for `settings.json` keys.** `configure_settings()`
+merges source into `~/.claude/settings.json` with `jq '. * $base'` —
+additive only. It updates a key source defines but can never remove a key
+that exists only live, because a merge never deletes. Deleting an entry
+from source is therefore a no-op against the live file until the `prune`
+step's `prune_settings_keys()` (`lib/prune.sh`) explicitly removes it —
+and that function only touches the specific, fully source-owned subtrees
+named in `SETTINGS_PRUNE_KEYS` (`enabledPlugins` today), never a blanket
+diff, so machine-local keys the additive merge exists to protect still
+survive (dotfiles-dev#272).
+
 Only `ai_clients/claude/` is wired up today. New clients follow the same
 pattern: add `ai_clients/<name>/main.sh` and it is auto-discovered by
 `ai_clients/main.sh`.
@@ -408,6 +419,27 @@ Note the division of labour with `install_skills()`: prune removes **name**
 orphans (no source counterpart), while `install_skills()` separately sweeps
 **layout** orphans (flat `skills/*.md`, which are never loadable regardless of
 whether a source file of that name exists). Neither one subsumes the other.
+
+### Pruning stale `settings.json` keys (dotfiles-dev#272)
+
+File orphans and settings-key orphans are different shapes of problem, and
+`prune_orphans()` handles both: `_prune_file_artifacts()` for the file types
+above, then `prune_settings_keys()` for `settings.json`. The settings side
+can't reuse the file logic's "anything live without a source counterpart is
+an orphan" rule — the live file legitimately carries machine-local keys
+(API tokens, per-machine `env` entries) that must survive every deploy,
+which is the entire reason `configure_settings()`'s merge (`lib/settings.sh`)
+is additive-only (`jq '. * $base'`, never deletes).
+
+So `prune_settings_keys()` is scoped to the object keys named in
+`SETTINGS_PRUNE_KEYS` (`lib/prune.sh`) — subtrees that are *entirely*
+source-owned, `enabledPlugins` being the concrete case: every entry is added
+by `run_plugins()`, never hand-edited live, so anything live-but-not-in-source
+is unambiguously stale (e.g. a plugin reference removed from source after the
+marketplace stopped shipping it). It diffs only inside those named keys, asks
+before removing, and never touches a top-level key or any key not listed —
+adding a key to `SETTINGS_PRUNE_KEYS` is an explicit claim that source is the
+full authority for everything under it.
 
 ## Deployment
 

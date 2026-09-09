@@ -26,6 +26,20 @@ live here:
   of the same symptom — never pipe `git commit` through `tail`/`head`/
   `grep`, since a rejection (`codespell`, `gitlint`, `ruff E501`) can scroll
   off past trailing `Passed` lines.
+- **Qualify the target: absolute `cd`, explicit git ref.** Every command
+  in an agent brief, a skill, or a hook that reads or writes repository
+  state must name what it targets — `cd <absolute-path> &&` for the
+  directory, `origin/<base>` for the ref, never a bare local branch or an
+  implicit `HEAD`. Same family as the two rules above: the channel lies in
+  silence, so qualify. Measured 2026-09-05: the harness resets cwd after
+  every Bash call and can reset it to a **different repository**
+  (`Shell cwd was reset to ~/github/blueprintx` with no `cd` having run),
+  and in the same session an unref'd `git describe --tags --abbrev=0`
+  described a stale feature-branch checkout 16 tags behind `origin/main` —
+  the release gate would have diffed against the wrong tag and cut the
+  wrong version with nothing red. `git -C <path>` does not fix this: it
+  resolves the directory but not the implicit-HEAD half of the bug
+  (dotfiles-dev#229).
 
 ## Author Claude artifacts in dotfiles-dev, never only in live `~/.claude/`
 

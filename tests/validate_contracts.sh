@@ -82,6 +82,25 @@ check_no_broad_bash() {
     fi
 }
 
+# Check 4: git merge-base examples must compare against the remote ref, never a bare
+# base-branch placeholder (dotfiles-dev#229). A stale local tracking branch silently
+# mis-scopes the diff the same way an implicit HEAD does — measured as a 16-tag gap
+# between `git describe` (implicit HEAD) and `git describe origin/main`. Narrowly scoped
+# to this one known-fixed anti-pattern (not a general "every git command needs a ref"
+# grep) because that broader form false-positives on legitimate bare-HEAD reads like
+# `git log --oneline -5` or `git rev-parse HEAD` that never compare against a base.
+check_merge_base_qualifies_ref() {
+    print_status "info" "Checking git merge-base examples name origin/<base>, not a bare base..."
+    local hits f
+    if hits="$(grep -rlE 'git merge-base ["'"'"'\`]?<base' "$CLAUDE_DIR" 2>/dev/null)"; then
+        while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            print_status "error" "$(basename "$f"): git merge-base compares against a bare base, not origin/<base> (dotfiles-dev#229)"
+            FAILURES=$((FAILURES + 1))
+        done <<< "$hits"
+    fi
+}
+
 # TODO(you): add the stricter contract checks below. Each is documented in
 # ai_clients/CLAUDE.md but NOT yet enforced — calibrate against the current tree
 # first so a legitimate exception does not turn CI red:
@@ -100,6 +119,7 @@ main() {
     check_name_prefixes
     check_agent_models
     check_no_broad_bash
+    check_merge_base_qualifies_ref
 
     if ((FAILURES > 0)); then
         print_status "error" "Contract validation failed: $FAILURES issue(s)."

@@ -25,6 +25,16 @@ strip_rtk_prefix() {
     printf '%s' "$1" | sed -E 's/^[[:space:]]*rtk[[:space:]]+(proxy[[:space:]]+)?//'
 }
 
+# Known command wrappers that don't change what actually runs underneath them
+# (dotfiles-dev#271). `sudo git push --force`, `env FOO=1 git push -f`, `time git push -f`,
+# `nice git push -f`, and `xargs … git push -f` all still end up executing the wrapped command,
+# so the anchored predicates below must see past them. This is an ALTERNATION added to the same
+# start-of-command anchor every predicate already uses (`(^|[;&|])[[:space:]]*`) — it matches a
+# wrapper TOKEN at its actual position, same as the `rtk` prefix it sits beside, never an
+# unanchored substring anywhere in the line (that unanchored shape is exactly what #217 removed).
+# The trailing `*` lets wrappers stack (`sudo env FOO=1 git push -f`).
+WRAPPER_RE='((sudo|time|nice)[[:space:]]+|env([[:space:]]+[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)*[[:space:]]+|xargs([[:space:]]+-[[:alnum:]-]+)*[[:space:]]+)*'
+
 # 1. Download-and-execute — the leak an allowlist cannot express.
 #    The threat is *arbitrary network content* fed into an interpreter, so BOTH halves must hold:
 #      (a) a network fetcher (curl/wget) is the pipeline's data source, AND
@@ -63,11 +73,11 @@ is_unscoped_rm() {
 # already applied to protected_branch_guard.sh / branch_requires_issue_guard.sh.
 is_history_rewrite() {
     local cmd="$1"
-    if printf '%s' "$cmd" | grep -Eq '(^|[;&|])[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+push([[:space:]].*)?[[:space:]](-f|--force)([[:space:]]|$)' \
+    if printf '%s' "$cmd" | grep -Eq "(^|[;&|])[[:space:]]*${WRAPPER_RE}(rtk[[:space:]]+)?git[[:space:]]+push([[:space:]].*)?[[:space:]](-f|--force)([[:space:]]|\$)" \
         && ! printf '%s' "$cmd" | grep -q -- '--force-with-lease'; then
         return 0
     fi
-    printf '%s' "$cmd" | grep -Eq '(^|[;&|])[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+filter-branch([[:space:]]|$)'
+    printf '%s' "$cmd" | grep -Eq "(^|[;&|])[[:space:]]*${WRAPPER_RE}(rtk[[:space:]]+)?git[[:space:]]+filter-branch([[:space:]]|\$)"
 }
 
 # 4. `git reset --hard` / `git clean -fd` while the tree is dirty — silently destroys uncommitted
@@ -76,7 +86,7 @@ is_history_rewrite() {
 # (dotfiles-dev#217) applied here too.
 is_destructive_git_on_dirty_tree() {
     printf '%s' "$1" \
-        | grep -Eq '(^|[;&|])[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+(reset[[:space:]]+(--hard|.*[[:space:]]--hard)|clean[[:space:]]+-[[:alnum:]]*[fd])' \
+        | grep -Eq "(^|[;&|])[[:space:]]*${WRAPPER_RE}(rtk[[:space:]]+)?git[[:space:]]+(reset[[:space:]]+(--hard|.*[[:space:]]--hard)|clean[[:space:]]+-[[:alnum:]]*[fd])" \
         || return 1
     # Dirty tree? Non-empty porcelain output = uncommitted work at risk.
     [[ -n "$(git status --porcelain 2>/dev/null)" ]]
@@ -86,7 +96,7 @@ is_destructive_git_on_dirty_tree() {
 # Anchored per the note on is_history_rewrite above — the same unanchored-substring flaw
 # (dotfiles-dev#217) applied here too (a command that merely quotes "chmod -R 777" as text).
 is_chmod_777() {
-    printf '%s' "$1" | grep -Eq '(^|[;&|])[[:space:]]*chmod[[:space:]]+(-[[:alnum:]]*[[:space:]]+)*-?[[:alnum:]]*[rR][[:alnum:]]*[[:space:]]+777'
+    printf '%s' "$1" | grep -Eq "(^|[;&|])[[:space:]]*${WRAPPER_RE}chmod[[:space:]]+(-[[:alnum:]]*[[:space:]]+)*-?[[:alnum:]]*[rR][[:alnum:]]*[[:space:]]+777"
 }
 
 block() {

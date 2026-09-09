@@ -28,6 +28,14 @@ setup() {
 
     mkdir -p .claude src
     printf 'src/\n' > .claude/release.conf
+    cat > src/lib.py <<'PY'
+def add(a, b):
+    # add two ints together
+    return a + b
+
+
+GREETING = "hello"
+PY
     git add .claude src
     git commit -q -m "chore: init"
     git tag v1.0.0
@@ -79,6 +87,31 @@ push_docs_only_change_to_origin() {
     (cd "$worker" && git config user.email t@t && git config user.name t \
         && mkdir -p docs && echo "x" >> docs/readme.md && git add docs \
         && git commit -q -m "docs: update readme" && git push -q origin main)
+    rm -rf "$worker"
+}
+
+# Edits a tracked src/*.py file with the given content and pushes it directly to origin (bypassing
+# the local clone, same "stale local main" fixture shape as the other push_* helpers).
+push_py_edit_to_origin() {
+    local msg="$1" content="$2"
+    local worker
+    worker="$(mktemp -d)"
+    git clone -q "$ORIGIN" "$worker"
+    (cd "$worker" && git config user.email t@t && git config user.name t \
+        && mkdir -p src && printf '%s' "$content" > src/lib.py && git add src/lib.py \
+        && git commit -q -m "$msg" && git push -q origin main)
+    rm -rf "$worker"
+}
+
+# A non-.py file under a shipped path, changed and pushed directly to origin — the fallback path
+# the AST check cannot cover (dotfiles-dev#100: non-.py must always be treated as a real change).
+push_non_py_shipped_change_to_origin() {
+    local worker
+    worker="$(mktemp -d)"
+    git clone -q "$ORIGIN" "$worker"
+    (cd "$worker" && git config user.email t@t && git config user.name t \
+        && mkdir -p src && echo "x" >> src/config.yaml && git add src/config.yaml \
+        && git commit -q -m "fix: bump config value" && git push -q origin main)
     rm -rf "$worker"
 }
 
@@ -241,6 +274,41 @@ merged_json() {
     run run_hook "git pull"
     [ "$status" -eq 0 ]
     [[ "$output" == *"NO RELEASE NEEDED"* ]]
+}
+
+# --- dotfiles-dev#100: shipped diff non-empty is not sufficient — AST-identical means no release --
+
+@test "NO RELEASE NEEDED (comment-only): edit only a comment inside tracked .py path" {
+    push_py_edit_to_origin "docs: reword comment" \
+        $'def add(a, b):\n    # add two ints together, nothing else\n    return a + b\n\n\nGREETING = "hello"\n'
+    GH_PR_VIEW_JSON="$(mktemp)"; merged_json main > "$GH_PR_VIEW_JSON"; export GH_PR_VIEW_JSON
+
+    run run_hook "gh pr merge 11 --squash"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"NO RELEASE NEEDED"* ]]
+    [[ "$output" == *"comment-only"* ]]
+    # Non-vacuity: the pre-fix implementation has no semantic_diff_empty check, so a non-empty byte
+    # diff on a shipped .py path always fired RELEASE DUE — this assertion fails against that.
+    [[ "$output" != *"RELEASE DUE"* ]]
+}
+
+@test "RELEASE DUE: a one-character change in a string constant is still a real change" {
+    push_py_edit_to_origin "fix: correct greeting" \
+        $'def add(a, b):\n    # add two ints together\n    return a + b\n\n\nGREETING = "hallo"\n'
+    GH_PR_VIEW_JSON="$(mktemp)"; merged_json main > "$GH_PR_VIEW_JSON"; export GH_PR_VIEW_JSON
+
+    run run_hook "gh pr merge 12 --squash"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"RELEASE DUE"* ]]
+}
+
+@test "RELEASE DUE: non-.py shipped file change is always treated as a real change" {
+    push_non_py_shipped_change_to_origin
+    GH_PR_VIEW_JSON="$(mktemp)"; merged_json main > "$GH_PR_VIEW_JSON"; export GH_PR_VIEW_JSON
+
+    run run_hook "gh pr merge 13 --squash"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"RELEASE DUE"* ]]
 }
 
 @test "silent: fresh repo with no tags at all" {

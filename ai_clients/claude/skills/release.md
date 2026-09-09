@@ -54,7 +54,16 @@ git diff --name-only <last-tag>..HEAD -- <shipped-paths...>
 - **No tags yet** → first release; propose the project's declared version, or `0.1.0`.
 - **Shipped diff empty** → **STOP. No release.** Say plainly: *"No shipped change since
   `<last-tag>` — ci/docs/chore/test do not get a release."* Do not publish, do not tag.
-- **Shipped diff non-empty** → continue.
+- **Shipped diff non-empty is necessary, not sufficient** — it proves these files were *touched*,
+  never that the artifact *changed* (dotfiles-dev#100). A diff touching only a comment, docstring
+  prose, or formatting inside a `.py` file is non-empty in bytes and semantically empty. One-line
+  discriminator, per changed `.py` file: `ast.dump(ast.parse(old_src)) == ast.dump(ast.parse(new_src))`.
+  If every changed file is `.py` and AST-identical → **STOP. No release**, same as an empty diff —
+  say *"Shipped diff since `<last-tag>` is comment-only (AST-identical) — no release."* This check
+  is Python-only: any non-`.py` shipped file in the diff, or a file the parser cannot read, is
+  always a real change and must never be suppressed. The `release_dispatch_guard` and
+  `release_due_nudge` hooks apply this same rule — see their `semantic_diff_empty()`.
+- **Shipped diff non-empty and not AST-identical** → continue.
 
 **A repeated "nothing to do" earns one ground-truth check, not habituation.** The cost of believing
 a wrong suppression is an action that never happens, which leaves no trace.

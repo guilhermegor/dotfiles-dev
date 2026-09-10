@@ -49,17 +49,26 @@ WELL_FORMED_SPEC='# Gadget
 - Q-1: is soft-delete required? (answered) no, hard delete only.
 '
 
-# ⚠️ Every `@test` inside a fixture string is INDENTED on purpose. bats counts a
-# file's tests by scanning for `@test` at column 0, so an unindented fixture line
-# is counted as a real test and never run — "Executed N-1 instead of expected N",
-# which fails the suite. The gate scans for `@AC-<n>` anywhere on a line, so the
-# indentation costs the fixture nothing.
-WELL_FORMED_TESTS='  @test "@AC-1 creates a gadget" {
-    true
-  }
-  @test "@AC-2 paginates the list" {
-    true
-  }
+# ⚠️ No fixture below contains the literal token `@test`, on purpose. bats derives a file's
+# expected test count by scanning its whole text for test declarations, so a `@test` inside a
+# quoted fixture string is counted as a real test that then cannot be run:
+#
+#     bats: unknown test name `test_-40AC-2d2_paginates_the_list'
+#     # bats warning: Executed 292 instead of expected 293 tests   -> suite fails
+#
+# Indenting the fixture is NOT a fix, and looked like one: bats versions disagree on whether
+# that scan is anchored to column 0. The local version is, CI's is not — so the indented form
+# passed here and failed there, on the very commit that "fixed" it (dotfiles-dev#323).
+#
+# Nothing is lost by dropping the token: the gate looks for `@AC-<n>` anywhere on a line and
+# never parses bats syntax. What DOES matter is the line COUNT — "TEST_WITHOUT_AC: fires ..."
+# appends to this string and asserts the stray tag lands on `feature.bats:7:`.
+WELL_FORMED_TESTS='# @AC-1 creates a gadget
+true
+# ---
+# @AC-2 paginates the list
+true
+# ---
 '
 
 # --- the base case: a fully aligned feature -> ALIGNED (exit 0) ---------------------------------
@@ -97,7 +106,7 @@ WELL_FORMED_TESTS='  @test "@AC-1 creates a gadget" {
 
 @test "TEST_WITHOUT_AC: fires when a test tags an id the spec doesn't define" {
     write_spec "$WELL_FORMED_SPEC"
-    write_test_file "$WELL_FORMED_TESTS"$'@test "@AC-99 stray" {\n  true\n}\n'
+    write_test_file "$WELL_FORMED_TESTS"$'# @AC-99 stray\n'
 
     run_gate
     [ "$status" -eq 1 ]
@@ -164,9 +173,7 @@ WELL_FORMED_TESTS='  @test "@AC-1 creates a gadget" {
 ## Open Questions
 - Q-1: anything unresolved? (answered) no.
 '
-    write_test_file '@test "@AC-1 creates a gadget" {
-  true
-}
+    write_test_file '# @AC-1 creates a gadget
 '
 
     run_gate
@@ -189,9 +196,7 @@ None.
 
 None.
 '
-    write_test_file '@test "@AC-1 creates a gadget" {
-  true
-}
+    write_test_file '# @AC-1 creates a gadget
 '
 
     run_gate

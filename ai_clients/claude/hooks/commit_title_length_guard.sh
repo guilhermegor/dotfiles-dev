@@ -26,6 +26,11 @@ set -u
 # jq parses the hook payload; without it we cannot inspect the command, so fail open.
 command -v jq >/dev/null 2>&1 || exit 0
 
+# Shared with commit_body_wrap.sh and commit_secret_guard.sh (dotfiles-dev#324) — one
+# `git commit` detection regex, not three that can drift apart.
+# shellcheck source=lib/commit_command_matcher.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/commit_command_matcher.sh"
+
 DEFAULT_TITLE_MAX_LENGTH=72
 
 main() {
@@ -38,11 +43,10 @@ main() {
     command="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
     [[ -n "$command" ]] || exit 0
 
-    # Only guard an actual `git commit` (optionally rtk-prefixed), anchored to a line start so a
-    # mere mention of "git commit" inside another argument does not trip the guard.
-    printf '%s' "$command" \
-        | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+commit([[:space:]]|$)' \
-        || exit 0
+    # Only act on an actual `git commit`. Every accepted spelling — and the per-segment anchor
+    # that keeps a mere *mention* of "git commit" from tripping this — lives in the shared
+    # matcher; see its header for the four shapes the old inline regex missed.
+    command_has_git_commit "$command" || exit 0
 
     if printf '%s' "$command" | grep -q '<<'; then
         # A heredoc is present. The one shape we can safely parse is `-F-`/`--file=-` fed by

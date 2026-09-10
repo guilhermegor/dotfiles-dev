@@ -35,13 +35,19 @@ source "$SCRIPT_DIR/common.sh"
 
 MAKE_BIN="${MAKE_BIN:-make}"
 
-# ponytail: each target below is now its own `make` invocation (needed so a
-# failure in one can be caught without aborting the rest), so `editors_setup`
-# re-runs its own prereqs (vscode_setup, ai_clients) even though ai_clients
-# already ran earlier in this list. Both are idempotent, so it's a redundant
-# re-check, not a double install — the single-process prereq dedup a plain
-# `make run` used to get for free. Upgrade to a shared "already ran" marker
-# if that redundancy ever gets expensive.
+# Each target below is its own `make` invocation — that is what makes a single
+# failure catchable instead of fatal — so make's per-process prerequisite dedup
+# no longer applies across the chain. A COMPOSITE target therefore re-runs its
+# prerequisites even when this list already ran them.
+#
+# ⚠️ That is not a harmless re-check when a prerequisite is INTERACTIVE. The
+# chain lists `ai_clients` directly, and `editors_setup: vscode_setup ai_clients`
+# would run its menu a second time — the operator answers the same prompts twice
+# in one setup. So the chain lists the two real targets and skips the composite,
+# whose own recipe is a completion banner and nothing else.
+#
+# The rule for anything added here: list the LEAF targets, never a composite
+# whose prerequisites already appear in this list.
 if [ -z "${RUN_CHAIN_TARGETS+set}" ]; then
     RUN_CHAIN_TARGETS=(
         banner
@@ -55,7 +61,7 @@ if [ -z "${RUN_CHAIN_TARGETS+set}" ]; then
         install_coding
         ai_clients
         starship_setup
-        editors_setup
+        vscode_setup
         irpf_download
         ubuntu_workspace
     )

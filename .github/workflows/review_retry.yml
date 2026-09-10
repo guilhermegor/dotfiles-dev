@@ -49,4 +49,9 @@ jobs:
 
           echo "declared wait: ${minutes} minutes — sleeping before retry"
           sleep "$((minutes * 60))"
-          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "@coderabbitai full review"
+          # REST, not `gh pr comment`: `gh pr comment` issues the GraphQL
+          # `addComment` mutation, which 403'd here while REST reads
+          # succeeded with the same token (dotfiles-dev#317).
+          gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
+            -f body='@coderabbitai full review' \
+            --jq '"requested by \(.user.login) [\(.user.type)]"'

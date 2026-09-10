@@ -19,24 +19,105 @@ jobs:
     name: ask CodeRabbit for a full review
     runs-on: ubuntu-latest
     steps:
+      - name: The trigger PAT must be configured
+        # An absent PAT is a configuration gap, not a defect in the PR being
+        # checked, so it must not fail this PR's CI (dotfiles-dev#250). Warn
+        # loudly instead: with no PAT nothing here is reviewed, and silence
+        # would hide that on exactly the paths this workflow selects for.
+        id: pat_present
+        env:
+          GH_TOKEN: ${{ secrets.GH_REVIEW_TRIGGER_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::GH_REVIEW_TRIGGER_PAT is not set — skipping the CodeRabbit review request. No PR touching hooks/ or settings.json will be reviewed until it is configured (see dotfiles-dev#130)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      # A bare 401 from the request step below cannot tell "the token is
+      # expired/revoked" from "the account hit its own GitHub API rate
+      # limit" (a different, self-clearing condition, ported from
+      # blueprintx's coderabbit_trigger.yml preflight) — and those two need
+      # different responses: the first is a real defect that should fail
+      # loudly, the second must not leave a red check for something that
+      # clears on its own.
+      - name: The PAT must authenticate as a user
+        id: pat_check
+        if: steps.pat_present.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_REVIEW_TRIGGER_PAT }}
+        run: |
+          set +e
+          RESPONSE="$(gh api -i --jq '"authenticates as \(.login) [\(.type)]"' user 2>&1)"
+          STATUS=$?
+          set -e
+
+          if [ "$STATUS" -eq 0 ]; then
+            echo "$RESPONSE" | tail -n1
+            exit 0
+          fi
+
+          echo "$RESPONSE" >&2
+          str_http_status="$(printf '%s\n' "$RESPONSE" | head -n1 | grep -oE '[0-9]{3}' | head -n1)"
+
+          # Match on "rate limit" ALONE, never a longer phrase: GitHub's
+          # primary ("API rate limit exceeded for user ID …") and secondary
+          # ("You have exceeded a secondary rate limit …") messages don't
+          # share wording, and a narrow matcher routes the one it misses to
+          # the bad-token branch below.
+          if printf '%s\n' "$RESPONSE" | grep -qi 'rate limit'; then
+            str_retry_after="$(printf '%s\n' "$RESPONSE" \
+              | grep -i '^retry-after:' | tr -d '\r ' | cut -d: -f2)"
+            str_reset_epoch="$(printf '%s\n' "$RESPONSE" \
+              | grep -i '^x-ratelimit-reset:' | tr -d '\r ' | cut -d: -f2)"
+
+            if [ -n "$str_retry_after" ]; then
+              int_wait_min=$(( (str_retry_after + 59) / 60 ))
+              echo "::warning::GitHub SECONDARY rate limit (HTTP ${str_http_status:-403/429})" \
+                "hit for the PAT's user — not a bad token, and not CodeRabbit's review quota." \
+                "Retry after ${str_retry_after}s (~${int_wait_min}m). Skipping the review" \
+                "request this run; the next push will ask again." >&2
+            elif [ -n "$str_reset_epoch" ]; then
+              str_reset_utc="$(date -u -d "@$str_reset_epoch" '+%Y-%m-%d %H:%M:%S UTC')"
+              int_wait_min=$(( (str_reset_epoch - $(date -u +%s) + 59) / 60 ))
+              echo "::warning::GitHub API rate limit (HTTP ${str_http_status:-403}) hit for the" \
+                "PAT's user — not a bad token. This is the GitHub API's own limit, not" \
+                "CodeRabbit's review quota. Quota resets at $str_reset_utc (~${int_wait_min}m)." \
+                "Skipping the review request this run; the next push will ask again." >&2
+            else
+              echo "::warning::GitHub rate limit (HTTP ${str_http_status:-unknown}) hit for the" \
+                "PAT's user, but neither retry-after nor x-ratelimit-reset was present to say" \
+                "when it clears." >&2
+            fi
+            echo "skip_review=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "::error::PAT auth failed with HTTP ${str_http_status:-unknown}, and the response" \
+            "carries no rate-limit wording. The token itself is expired, revoked, or scoped to" \
+            "the wrong resource owner — none of which this repo can fix." >&2
+          exit 1
+
       - name: Request full review
         # Must come from a user PAT, never GITHUB_TOKEN: CodeRabbit silently
         # ignores bot-authored comments (dotfiles-dev#130). Must say "full
         # review", not "review" — a plain "review" answers "already reviewed"
         # for commits CodeRabbit has already seen on another PR (a reopen, a
         # rebase, a re-PR); only the full form disregards that history.
+        #
+        # REST, not `gh pr comment`: `gh pr comment` issues the GraphQL
+        # `addComment` mutation, which 403'd here (`Resource not accessible
+        # by personal access token`) while REST reads succeeded with the
+        # same token. blueprintx uses this same REST call (dotfiles-dev#317).
+        if: steps.pat_present.outputs.skip != 'true' && steps.pat_check.outputs.skip_review != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_REVIEW_TRIGGER_PAT }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-        # An absent PAT is a configuration gap, not a defect in the PR being
-        # checked, so it must not fail this PR's CI (dotfiles-dev#250). Warn
-        # loudly instead: with no PAT nothing here is reviewed, and silence
-        # would hide that on exactly the paths this workflow selects for.
         run: |
           set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::warning::GH_REVIEW_TRIGGER_PAT is not set — skipping the CodeRabbit review request. No PR touching hooks/ or settings.json will be reviewed until it is configured (see dotfiles-dev#130)."
-            exit 0
-          fi
-          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "@coderabbitai full review"
+          gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
+            -f body='@coderabbitai full review' \
+            --jq '"requested by \(.user.login) [\(.user.type)]"'

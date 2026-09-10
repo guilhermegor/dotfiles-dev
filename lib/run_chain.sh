@@ -14,6 +14,16 @@
 #   MAKE_BIN          — the make binary to invoke (default: make)
 #   RUN_CHAIN_TARGETS — array of target names to run, in order
 #                       (default: the 14 `make run` targets)
+#
+# Ordering (issue #298): the network-free, idempotent, $HOME/gsettings-only
+# targets `bash_profile` and `set_shortcuts` run early, ahead of the
+# long/failure-prone installs, so a hang or failure further down the chain
+# (#299 makes a *failure* non-fatal, but not a *hang*) does not also cost
+# them. `ubuntu_workspace` stays last on purpose: it places .desktop entries
+# for apps the installs above provide (distro_config/ubuntu_workspace.sh
+# find_desktop_file), so moving it earlier means placing against a smaller
+# app set. Every other target's position is unchanged — each was verified
+# against the code it depends on (see PR #298 description), not assumed.
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     set -euo pipefail
@@ -38,15 +48,15 @@ if [ -z "${RUN_CHAIN_TARGETS+set}" ]; then
         restore_env_prompt
         permissions
         setup_env
+        bash_profile
+        set_shortcuts
         install_programs
         install_espanso_packages
         install_coding
         ai_clients
-        bash_profile
         starship_setup
         editors_setup
         irpf_download
-        set_shortcuts
         ubuntu_workspace
     )
 fi

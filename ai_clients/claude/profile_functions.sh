@@ -12,6 +12,12 @@
 #
 # Usage:
 #   claude-profile <name> [claude args...]   e.g. claude-profile deepseek
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    echo "profile_functions.sh is meant to be sourced, not executed." >&2
+    exit 1
+fi
+
 claude-profile() {
     local profile_name="$1"
     if [ -z "$profile_name" ]; then

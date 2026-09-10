@@ -28,6 +28,9 @@ pick up yet.
 | **3** | You do not really know how to solve it. Larger blast radius, possibly an RFC. Ambiguity and exploration ahead. |
 | **4** | **Not a score.** A signal to split into more stories — see step 3. |
 
+A subtask whose acceptance criteria don't each name an observable (see `s:test`) has not
+actually delimited its scope — that ambiguity belongs in row 2 or 3, never row 1.
+
 The scale itself is the portable part — the same ruler applies whether the work
 lives in Linear, in a GitHub issue, or nowhere at all yet. Nothing below reads
 or writes a tracker; recording the result is a separate step for someone else

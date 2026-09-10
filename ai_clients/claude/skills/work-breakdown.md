@@ -34,8 +34,9 @@ goal with no appetite set, load `s:problem-framing` first. Do not shape inline h
 
 Establish what the problem actually is **against the existing code**, not against the request as
 phrased. Read the touched area before writing anything down. End in a statement and acceptance
-criteria — never in a solution. If discovery surfaces a design decision only the user can make, ask
-it now; a decomposition built on an unresolved "what" collides by construction later.
+criteria — never in a solution, and each criterion must name an observable (see `s:test`), not a
+notation. If discovery surfaces a design decision only the user can make, ask it now; a
+decomposition built on an unresolved "what" collides by construction later.
 
 ## 2. Prototyping — conditional, and the rule has to be written down
 

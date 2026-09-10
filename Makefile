@@ -17,7 +17,9 @@
 .PHONY: run
 # Exported so ai_clients/main.sh skips its own restore-env prompt during the run.
 run: export DOTFILES_INIT_IN_PROGRESS=1
-run: banner restore_env_prompt permissions setup_env install_programs install_espanso_packages install_coding ai_clients bash_profile starship_setup editors_setup irpf_download set_shortcuts ubuntu_workspace  ## Complete initial setup (RECOMMENDED first-time entry point)
+run: export MAKE_BIN := $(MAKE)
+run:  ## Complete initial setup (RECOMMENDED first-time entry point)
+	@bash lib/run_chain.sh
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║                                                            ║"

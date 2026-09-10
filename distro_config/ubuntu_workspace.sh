@@ -1387,16 +1387,28 @@ EOF
     fi
 
     # ==================== UPDATE FOLDER LIST ====================
+    # Order the folders alphabetically by the name the Shell DISPLAYS, not by
+    # dconf id. Three ids differ from their display name (Seguranca→Security,
+    # Sistema→System, Utilitarios→Utilities), so sorting by id would place
+    # "System" before "Social" — correct against the dconf keys and wrong
+    # against what the user reads on screen.
+    #
+    # The names are read back from gsettings rather than restated here: this
+    # function has just written every one of them, so re-listing them would be
+    # a second copy free to drift from the first. Under DRY_RUN the writes are
+    # previewed rather than applied, so a name may not resolve — fall back to
+    # the bare id, which keeps the ordering deterministic instead of empty.
     local ordered_folder_ids=()
-
-    for folder in "'Sistema'" "'Seguranca'" "'Utilitarios'" "'Design'" "'Sharing'" "'IRPF'" "'Code'" "'Data'" "'Ereader'" "'Office'" "'Media'" "'Planning'" "'Social'" "'Infra'" "'Browsers'" "'Reading'"; do
+    mapfile -t ordered_folder_ids < <(
+        local created_folder bare_id display_name
         for created_folder in "${folder_ids[@]}"; do
-            if [ "$created_folder" = "$folder" ]; then
-                ordered_folder_ids+=("$folder")
-                break
-            fi
-        done
-    done
+            bare_id="${created_folder//\'/}"
+            display_name=$(gsettings get \
+                "org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/${bare_id}/" \
+                name 2>/dev/null | tr -d "'")
+            printf '%s\t%s\n' "${display_name:-$bare_id}" "$created_folder"
+        done | sort -f | cut -f2
+    )
 
     # Before writing the new folder-children list, reset any id this run no
     # longer produces — otherwise its schema entry (name/apps) survives as an

@@ -107,7 +107,7 @@ target_index() {
     set_shortcuts_idx="$(target_index set_shortcuts "$targets")"
 
     local installer
-    for installer in install_programs install_espanso_packages install_coding editors_setup; do
+    for installer in install_programs install_espanso_packages install_coding vscode_setup; do
         local installer_idx
         installer_idx="$(target_index "$installer" "$targets")"
         [ "$bash_profile_idx" -lt "$installer_idx" ]
@@ -126,15 +126,19 @@ target_index() {
     [ "$install_coding_idx" -lt "$ai_clients_idx" ]
 }
 
-@test "default chain: install_coding runs before editors_setup (VS Code prerequisite)" {
+@test "default chain: install_coding runs before vscode_setup (VS Code prerequisite)" {
     run default_chain_targets
     [ "$status" -eq 0 ]
     local targets="$output"
 
-    local install_coding_idx editors_setup_idx
+    # The constraint is unchanged — VS Code must be installed before it is
+    # configured. Only the target name moved: the chain lists the leaf
+    # `vscode_setup` rather than the composite `editors_setup`, whose other
+    # prerequisite (ai_clients) the chain already runs.
+    local install_coding_idx vscode_setup_idx
     install_coding_idx="$(target_index install_coding "$targets")"
-    editors_setup_idx="$(target_index editors_setup "$targets")"
-    [ "$install_coding_idx" -lt "$editors_setup_idx" ]
+    vscode_setup_idx="$(target_index vscode_setup "$targets")"
+    [ "$install_coding_idx" -lt "$vscode_setup_idx" ]
 }
 
 @test "default chain: install_programs runs before install_espanso_packages (espanso prerequisite)" {
@@ -155,4 +159,42 @@ target_index() {
     local last
     last="$(echo "$targets" | tail -n 1)"
     [ "$last" = "ubuntu_workspace" ]
+}
+
+# --- no composite target whose prerequisites the chain already lists ------------
+# Each target is its own `make` invocation, so make's per-process prerequisite
+# dedup does not apply across the chain. Listing a composite therefore re-runs
+# its prerequisites — and when one of them is INTERACTIVE, that means answering
+# the same menu twice in a single setup. Measured: `editors_setup: vscode_setup
+# ai_clients` asked the ai_clients menu a second time.
+
+@test "the chain lists no composite whose prerequisites it already runs" {
+    run default_chain_targets
+    [ "$status" -eq 0 ]
+    local -a chain
+    mapfile -t chain <<< "$output"
+
+    local target prereq_line prereq
+    for target in "${chain[@]}"; do
+        [ -n "$target" ] || continue
+        # The target's own prerequisite list, as declared in the Makefile.
+        prereq_line=$(grep -E "^${target}:" "$REPO_ROOT/Makefile" | head -1 \
+            | sed "s/^${target}://; s/##.*//")
+        for prereq in $prereq_line; do
+            for other in "${chain[@]}"; do
+                if [ "$prereq" = "$other" ]; then
+                    echo "FAIL: chain target '$target' has prerequisite '$prereq'," \
+                         "which the chain already runs — it would run twice"
+                    return 1
+                fi
+            done
+        done
+    done
+}
+
+@test "editors_setup is not in the chain, but both its real targets are" {
+    run default_chain_targets
+    [[ "$output" != *"editors_setup"* ]]
+    [[ "$output" == *"vscode_setup"* ]]
+    [[ "$output" == *"ai_clients"* ]]
 }

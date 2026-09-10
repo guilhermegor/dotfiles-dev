@@ -98,12 +98,59 @@ fanout_pr_summary() {
 	' 2>/dev/null
 }
 
+# Classifies a dirty worktree's diff against HEAD as "interrupted" (net new work worth
+# resuming) or "stale" (a revert of content already shipped on the default branch) — the
+# SIGN of the diff is the signal, not the file count (dotfiles-dev#318; lessons-dotfiles:
+# a-staged-deletion-set-is-a-stale-revert-not-lost-work.md — four worktrees reporting 42/39/
+# 90/42 dirty files were stale reverts, the one holding real work reported 5). Prints
+# "<verdict>\t<insertions>\t<deletions>". Fails open to "interrupted" on any ambiguity or
+# lookup failure — silently hiding real work is the worse mistake for a report nobody blocks on.
+classify_worktree_diff() {
+	local path="$1" default_branch="$2"
+	local numstat ins=0 del=0 untracked a d
+
+	numstat="$(git -C "$path" diff HEAD --numstat 2>/dev/null)"
+	if [ -n "$numstat" ]; then
+		while IFS=$'\t' read -r a d _; do
+			[[ "$a" =~ ^[0-9]+$ ]] && ins=$((ins + a))
+			[[ "$d" =~ ^[0-9]+$ ]] && del=$((del + d))
+		done <<<"$numstat"
+	fi
+	untracked="$(git -C "$path" ls-files --others --exclude-standard 2>/dev/null | wc -l | tr -d '[:space:]')"
+	[ -n "$untracked" ] || untracked=0
+
+	if [ "$untracked" -gt 0 ] || [ "$ins" -gt "$del" ]; then
+		printf 'interrupted\t%s\t%s\n' "$ins" "$del"
+		return
+	fi
+
+	if [ "$del" -gt "$ins" ] && [ -n "$default_branch" ]; then
+		# Confirm before calling it stale: do the deleted paths already exist on
+		# origin/<default_branch>? Capped at 5 lookups — this hook must stay fast.
+		local deleted p checked=0 confirmed=0
+		deleted="$(git -C "$path" diff HEAD --name-status 2>/dev/null | awk '$1=="D"{print $2}')"
+		while IFS= read -r p; do
+			[ -z "$p" ] && continue
+			checked=$((checked + 1))
+			git -C "$path" cat-file -e "origin/$default_branch:$p" 2>/dev/null && confirmed=$((confirmed + 1))
+			[ "$checked" -ge 5 ] && break
+		done <<<"$deleted"
+		if [ "$confirmed" -gt 0 ]; then
+			printf 'stale\t%s\t%s\n' "$ins" "$del"
+			return
+		fi
+	fi
+
+	printf 'interrupted\t%s\t%s\n' "$ins" "$del"
+}
+
 # `git worktree list` entries for THIS repo (parallel-agent worktrees included) — unpushed
-# commits, uncommitted files, and (when the GitHub half answered) a branch that was pushed but
-# never got a PR. One walk, no per-branch `gh` calls.
+# commits, classified dirty state, and (when the GitHub half answered) a branch that was
+# pushed but never got a PR. One walk, no per-branch `gh` calls.
 fanout_worktrees() {
 	local cwd="$1" github_ok="$2" json="$3"
 	local pr_branches="" default_branch path="" branch="" name uncommitted ahead has_upstream
+	local -a interrupted_names=()
 
 	[ "$github_ok" = "1" ] && pr_branches="$(printf '%s' "$json" | jq -r '.[].headRefName' 2>/dev/null)"
 	default_branch="$(git -C "$cwd" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
@@ -132,7 +179,22 @@ fanout_worktrees() {
 				fi
 
 				[ "$ahead" -gt 0 ] && printf '[fan-out] worktree %s: %s commit(s) not pushed\n' "$name" "$ahead"
-				[ "$uncommitted" -gt 0 ] && printf '[fan-out] worktree %s: %s uncommitted file(s)\n' "$name" "$uncommitted"
+
+				if [ "$uncommitted" -gt 0 ]; then
+					local verdict ins del anon_note=""
+					IFS=$'\t' read -r verdict ins del <<<"$(classify_worktree_diff "$path" "$default_branch")"
+					case "$branch" in
+					worktree-agent-*) anon_note=" [anonymous branch, no issue reference]" ;;
+					esac
+					if [ "$verdict" = "stale" ]; then
+						printf '[fan-out] worktree %s: %s uncommitted file(s) — stale revert, do NOT rescue (+%s/-%s already on origin)%s\n' \
+							"$name" "$uncommitted" "$ins" "$del" "$anon_note"
+					else
+						printf '[fan-out] worktree %s: %s uncommitted file(s) — INTERRUPTED WORK, resume it (+%s/-%s)%s\n' \
+							"$name" "$uncommitted" "$ins" "$del" "$anon_note"
+						interrupted_names+=("$name")
+					fi
+				fi
 
 				if [ "$github_ok" = "1" ] && [ "$has_upstream" = "1" ] && [ -n "$branch" ] \
 					&& [ "$branch" != "$default_branch" ] \
@@ -145,6 +207,13 @@ fanout_worktrees() {
 			;;
 		esac
 	done < <(git -C "$cwd" worktree list --porcelain 2>/dev/null; printf '\n')
+
+	if [ "${#interrupted_names[@]}" -gt 0 ]; then
+		local joined
+		joined="$(IFS=', '; printf '%s' "${interrupted_names[*]}")"
+		printf '[fan-out] RESUME %s worktree(s) holding interrupted work: %s — SendMessage to each agent name, staggered; never a fresh Agent call.\n' \
+			"${#interrupted_names[@]}" "$joined"
+	fi
 }
 
 # Outstanding fan-out state (dotfiles-dev#160): PRs waiting on a review of the current head
@@ -188,4 +257,8 @@ main() {
 	exit 0
 }
 
-main "$@"
+# Source-guarded so tests can `source` this file to unit-test individual functions
+# (e.g. classify_worktree_diff) without triggering the SessionStart payload + exit 0.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	main "$@"
+fi

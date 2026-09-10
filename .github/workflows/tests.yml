@@ -54,6 +54,19 @@ jobs:
         # executable. Pure parse-and-assert, no external dependencies.
         run: bash tests/validate_contracts.sh
 
+  spec_audit:
+    name: spec audit gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run spec audit gate
+        # Mechanical verdict (dotfiles-dev#305) on whether each
+        # .specs/features/<name>/design.md is aligned with its tests: exit 0 =
+        # aligned, exit 1 = findings, one per file:line. A no-op today (no
+        # feature dirs exist yet) but goes live the moment one lands.
+        run: bash tests/spec_audit_gate.sh
+
   actionlint:
     name: actionlint (workflow lint)
     runs-on: ubuntu-latest

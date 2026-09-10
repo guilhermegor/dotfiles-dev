@@ -190,3 +190,33 @@ CMD
     run bash -c "jq -nc '{tool_name: \"Read\", tool_input: {command: \"git commit -m wip\"}}' | '$GUARD'"
     [ "$status" -eq 0 ]
 }
+
+# --- issue #324 table: all four invocation shapes, with an over-limit -m title ------------------
+# (78 chars > 72 default), so a MATCH shows up as BLOCKED (exit 2) and a MISS as ALLOWED (exit 0).
+
+TOO_LONG_TITLE='docs(backlog): every zero-review notice fails, including the successful one!'
+
+@test "#324 row 1/4: BLOCKS bare git commit" {
+    run run_guard "git commit -m \"$TOO_LONG_TITLE\""
+    [ "$status" -eq 2 ]
+}
+
+@test "#324 row 2/4: BLOCKS rtk git commit" {
+    run run_guard "rtk git commit -m \"$TOO_LONG_TITLE\""
+    [ "$status" -eq 2 ]
+}
+
+@test "#324 row 3/4: BLOCKS rtk proxy git commit (was a MISS pre-#324)" {
+    run run_guard "rtk proxy git commit -m \"$TOO_LONG_TITLE\""
+    [ "$status" -eq 2 ]
+}
+
+@test "#324 row 4/4: BLOCKS git add -A && rtk proxy git commit (was a MISS pre-#324)" {
+    run run_guard "git add -A && rtk proxy git commit -m \"$TOO_LONG_TITLE\""
+    [ "$status" -eq 2 ]
+}
+
+@test "#324 false positive: a mere mention of 'git commit' in an argument does not trip the guard" {
+    run run_guard "gh pr create --body \"run git commit first, then push\" --title \"$TOO_LONG_TITLE\""
+    [ "$status" -eq 0 ]
+}

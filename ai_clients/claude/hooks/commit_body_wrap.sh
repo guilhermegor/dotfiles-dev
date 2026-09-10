@@ -21,6 +21,11 @@ set -u
 # jq parses the hook payload; without it we cannot inspect the command, so fail open.
 command -v jq >/dev/null 2>&1 || exit 0
 
+# Shared with commit_title_length_guard.sh and commit_secret_guard.sh (dotfiles-dev#324) — one
+# `git commit` detection regex, not three that can drift apart.
+# shellcheck source=lib/commit_command_matcher.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/commit_command_matcher.sh"
+
 # 72, not the repo's gitlint setting: 72 is safe under both the git convention (72) and gitlint's
 # default (80), so the hook never has to read each repo's .gitlint to pick a target.
 BODY_MAX_LENGTH=72
@@ -35,11 +40,10 @@ main() {
     command="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
     [[ -n "$command" ]] || exit 0
 
-    # Only act on an actual `git commit` (optionally rtk-prefixed), anchored to a line start so a
-    # mere mention of "git commit" inside another argument does not trip the hook.
-    printf '%s' "$command" \
-        | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?git[[:space:]]+commit([[:space:]]|$)' \
-        || exit 0
+    # Only act on an actual `git commit` (bare / rtk-prefixed / rtk-proxy-prefixed) in any chained
+    # segment of the command — each segment stays anchored at its own start so a mere mention of
+    # "git commit" inside another argument does not trip the hook.
+    command_has_git_commit "$command" || exit 0
 
     msg_file="$(extract_message_file "$command")" || exit 0
     [[ -f "$msg_file" && -w "$msg_file" ]] || exit 0

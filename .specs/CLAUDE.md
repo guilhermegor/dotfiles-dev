@@ -2,14 +2,27 @@
 
 This is the one home for work-in-flight feature specs and plans in this repo —
 what `s:brainstorming` and `s:writing-plans` (the `superpowers` plugin skills)
-produce before and during implementation. See dotfiles-dev#303.
+produce before and during implementation, and what `s:work-breakdown`'s
+auto-sizing step (dotfiles-dev#306) produces for a decomposed feature. See
+dotfiles-dev#303.
 
 ## What belongs here
 
 Per feature, one directory: `.specs/features/<feature-name>/`
 
-- `design.md` — the brainstorming output (the spec/design doc)
-- `plan.md` — the writing-plans output (the implementation plan)
+- `spec.md` — `s:work-breakdown`'s always-present output: acceptance criteria,
+  sized one-liner/brief/full per its auto-sizing table (#306)
+- `design.md` — a feature's design decisions: either the `s:brainstorming`
+  output, or `s:work-breakdown`'s own Large-scope decisions (#306). Never
+  `architecture.md` — it records one feature's decisions, not the system's.
+- `plan.md` — the `s:writing-plans` output (a single-agent implementation plan)
+- `tasks.md` — `s:work-breakdown`'s Large-scope per-task breakdown for a
+  decomposed, multi-issue feature (#306) — a different shape than `plan.md`,
+  written only when the feature was split into parallel-dispatchable issues
+
+`design.md`/`tasks.md` are omitted at smaller scope by design (see #306's
+sizing table) — that means the decisions stay inline in `spec.md`, not that
+they were skipped.
 
 `<feature-name>` is a kebab-case slug, not a dated filename — the directory
 holds both artifacts for one feature, and git history already carries the

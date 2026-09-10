@@ -3,7 +3,7 @@ name: s:work-breakdown
 description: Use when a problem has already been bounded (an `s:problem-framing` artifact exists, or scope is otherwise clear) and needs to become a set of issues ready to dispatch to parallel subagents. Orchestrates discovery, conditional prototyping, epic/issue decomposition, blast-radius partitioning (file collision AND file count), test-case enrichment, and handoff to `s:dev-loop`. Also use when the user says "break this into issues", "turn this into tickets I can parallelize", or "what can go out as separate PRs".
 effort: high
 argument-hint: [<shaped problem | issue #>]
-allowed-tools: Read Glob Grep Bash AskUserQuestion
+allowed-tools: Read Glob Grep Bash Write AskUserQuestion
 ---
 
 > **Priority:** this project's `CLAUDE.md` and `rules/*.md` take precedence over the guidance below whenever they conflict — treat this skill as a fallback, not a mandate.
@@ -166,11 +166,62 @@ The *how* (AAA shape, parametrize table format, hypothesis strategy) is `s:test`
 This step only decides which categories a given ticket needs, and writes that into its Escopo
 before it goes out, so the subagent that picks it up already knows what "done" tests for.
 
+## 5a. Size the spec, then write it — Specify and Execute are never skipped
+
+This is the spec loop (dotfiles-dev#306), folded in here rather than living as its own skill —
+`s:work-breakdown` already owns decomposition, and a second skill covering the same ground drifts
+without ever throwing an error (measured in #272/#293). Every feature gets exactly one `spec.md`.
+Design and Tasks scale with size; Execute is `s:dev-loop`'s existing job (step 6) and needs no new
+artifact — it already verifies inline for one issue and per-task for a partitioned batch.
+
+| Scope | Specify | Design | Tasks | Execute |
+|---|---|---|---|---|
+| Small (≤3 files) | one-liner | skip | skip | inline verify |
+| Medium (<10 tasks) | brief | inline | inline | implement + verify |
+| Large (multi-component) | full | `design.md` | `tasks.md` | per-task verify |
+
+⚠️ Skipping `design.md`/`tasks.md` does not mean skipping *designing* or *decomposing* — it means
+those decisions stay inline in `spec.md` rather than getting their own file. A reader who takes the
+table as "don't think about it" has misread it.
+
+**Sizing signal — reuse the counts steps 1, 3, and 4 already gathered, do not invent a second
+one:**
+
+- **Small** — step 1 found ≤3 files and step 3 produced a single issue (no hierarchy).
+- **Medium** — step 3 produced fewer than 10 issues and step 4's partition never triggered (no
+  file-count split, no wiring-file serialization).
+- **Large** — step 3 produced an epic/hierarchy, or step 4 split the batch into siblings. Both are
+  "multi-component" by construction — that is what triggered them.
+
+This is a starting guess, not a commitment. **Safety valve:** if a task from step 3 or 5 turns out
+to need 5+ steps or has a dependency on another task, stop and write `tasks.md` even if the feature
+scored Medium — a small feature that grows is the common case, not an edge case.
+
+**Where it lives:** apply `.specs/CLAUDE.md`'s out-of-repo rule — ask, never infer, whether this
+repo owns `.specs/` (in-repo, `.specs/features/<name>/`) or is a repo you don't own (out-of-repo,
+`~/.claude/specs/<repo-slug>/features/<name>/`). `<name>` is the kebab-case slug of step 1's
+discovery statement.
+
+**Naming:** `design.md`, never `architecture.md` — it records decisions for this one feature, not
+the system's architecture.
+
+**Assumptions vs. open questions — a distinction about authority, not confidence:**
+
+- `ASM-XXX` — a gap filled with a reasonable guess so work can continue. Write it down honestly,
+  next to the decision it affects, in `spec.md` (or `design.md` at Large scope).
+- `Q-XXX` — a decision that is not this skill's to make (a product call, a scope call). Stop and
+  ask via `AskUserQuestion` before handing off to step 6 — do not guess and label it `ASM`.
+
+Treating a `Q` as an `ASM` silently makes a product decision; treating an `ASM` as a `Q` blocks on
+something nobody needs to answer. Both cost real work later (feeds the audit gate, #305 — out of
+scope here).
+
 ## 6. Handoff
 
-The batch — issues, milestone, labels, wiring-file notes, file-count split, test requirements — goes
-to `s:dev-loop`. The boundary is hard: this skill decides **what** and **in what order**;
-`s:dev-loop` **does**. Do not start dispatching subagents from inside this skill.
+The batch — issues, milestone, labels, wiring-file notes, file-count split, test requirements, and
+the `spec.md` (plus `design.md`/`tasks.md` if Large) from step 5a — goes to `s:dev-loop`. The
+boundary is hard: this skill decides **what** and **in what order**; `s:dev-loop` **does**. Do not
+start dispatching subagents from inside this skill.
 
 ---
 
@@ -189,3 +240,11 @@ to `s:dev-loop`. The boundary is hard: this skill decides **what** and **in what
   each piece independently mergeable, and hierarchy implies the opposite.
 - Do not skip the prototype-vs-discovery test in step 2 — "prototype if needed" with no test is not
   a rule.
+- Do not skip writing `spec.md`, even at Small scope, and do not skip writing verified code at the
+  end — Specify and Execute are the two ends of the loop and neither one scales away.
+- Do not write a new `design.md`/`tasks.md` file when the sizing table says inline — record the
+  decision inline in `spec.md` instead of either skipping it or promoting it to its own file.
+- Do not label a product or scope decision `ASM-XXX` to keep moving, and do not stop-and-ask over a
+  gap nobody but the implementer needs to fill — the two are opposite failures, both costly.
+- Do not invent the `.specs/` location. Ask which of `.specs/CLAUDE.md`'s two shapes applies
+  (in-repo vs. out-of-repo); never infer it from whether the directory already exists.

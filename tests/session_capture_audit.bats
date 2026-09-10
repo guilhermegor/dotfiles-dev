@@ -206,6 +206,52 @@ STUB
 	[[ "$output" == *"lessons → issues :"* ]]
 }
 
+# --- check_mirrors: the audit's actual join rule (dotfiles-dev#315) ---------------------------
+#
+# lesson_capture_checkpoint.sh's reminder claims (now correctly) that the mirror check matches
+# on the bare filename appearing anywhere in the mirror text. Pin that here directly against
+# check_mirrors()'s real behaviour — `grep -qF "$name" "$mirror"` — so the two files cannot
+# silently re-diverge. Uses a repo that is neither store's backport target (dotfiles-dev-lessons'
+# target is "dotfiles-dev"), since check_mirrors() skips the same-repo mirror entirely otherwise.
+
+@test "check_mirrors accepts a mirror entry containing only the bare filename" {
+	OTHER_REPO="$TEST_TMP/filings-cvm"
+	mkdir -p "$OTHER_REPO/docs"
+	git -C "$OTHER_REPO" init -q
+	git -C "$OTHER_REPO" remote add origin https://github.com/guilhermegor/filings-cvm.git
+
+	printf '# origin-lesson\n\n- **Tier:** language-common\n- **Origin:** filings-cvm\n' \
+		>"$STORE/origin-lesson.md"
+	printf -- '- origin-lesson.md\n' >>"$STORE/README.md"
+
+	# Only the bare filename, mid-sentence — no "- **Source:**" field. This is exactly
+	# what the corrected checkpoint reminder now promises is sufficient.
+	printf 'Ported over: origin-lesson.md\n' >"$OTHER_REPO/docs/dotfiles-dev-lessons.md"
+
+	run bash -c "cd '$OTHER_REPO' && PATH='$TEST_TMP/bin:$PATH' GH_ISSUES='' \
+		GH_ARGV_LOG='$TEST_TMP/gh_argv' bash '$HOOK' </dev/null"
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"origin-lesson.md' originated here but is not in docs/dotfiles-dev-lessons.md"* ]]
+}
+
+@test "check_mirrors still flags a mirror missing the filename entirely (non-vacuous control)" {
+	OTHER_REPO="$TEST_TMP/filings-cvm"
+	mkdir -p "$OTHER_REPO/docs"
+	git -C "$OTHER_REPO" init -q
+	git -C "$OTHER_REPO" remote add origin https://github.com/guilhermegor/filings-cvm.git
+
+	printf '# origin-lesson\n\n- **Tier:** language-common\n- **Origin:** filings-cvm\n' \
+		>"$STORE/origin-lesson.md"
+	printf -- '- origin-lesson.md\n' >>"$STORE/README.md"
+
+	printf 'nothing relevant here\n' >"$OTHER_REPO/docs/dotfiles-dev-lessons.md"
+
+	run bash -c "cd '$OTHER_REPO' && PATH='$TEST_TMP/bin:$PATH' GH_ISSUES='' \
+		GH_ARGV_LOG='$TEST_TMP/gh_argv' bash '$HOOK' </dev/null"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"origin-lesson.md' originated here but is not in docs/dotfiles-dev-lessons.md"* ]]
+}
+
 @test "a store absent from disk is reported as skipped, never silently omitted" {
 	# blueprintx-lessons is never created by setup(); the header for it must still
 	# print "skipped" — a missing store must never look identical to "checked and clean".

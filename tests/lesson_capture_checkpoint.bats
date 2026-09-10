@@ -48,3 +48,15 @@ run_hook() {
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
+
+# dotfiles-dev#315: the reminder previously claimed, in bold, that the audit "joins by
+# this literal string, never by heading/prose" — false; session_capture_audit.sh's
+# check_mirrors() does `grep -qF "$name" "$mirror"`, a bare-filename substring match.
+# Pin the corrected claim so the two files cannot silently re-diverge.
+@test "reminder no longer overclaims the audit joins on the literal Source: field" {
+    run run_hook "gh pr create --title x --body y"
+    [ "$status" -eq 0 ]
+    ctx="$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')"
+    [[ "$ctx" != *"audit joins by this literal string"* ]]
+    [[ "$ctx" == *"bare FILENAME"* ]]
+}

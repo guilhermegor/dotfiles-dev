@@ -41,6 +41,20 @@
 # A test references an acceptance criterion by putting the literal tag
 # `@AC-<n>` anywhere in a file under --tests-dir (default: tests/).
 #
+# Grammar parsed out of <feature-dir>/progress.md (dotfiles-dev#313) -- a THREE-state
+# checkbox list, one entry per markdown list item:
+#   `- [ ] ...`  to do
+#   `- [~] ...`  IN PROGRESS  <- the whole point: the state git cannot represent
+#   `- [x] ...`  done
+# progress.md is OPTIONAL. A feature without one is NOT a finding and the gate stays
+# silent about it -- same reason the gate anchors on spec.md, the always-present file:
+# a check on a conditional file reports on every feature that correctly omitted it.
+# TRACKER_STALE fires only when all three hold: the file exists, it carries at least
+# one `[~]`, and its mtime predates the newest commit touching the feature directory
+# (i.e. the work moved and the declared in-flight state did not). It is a FINDING like
+# the other five, never a hard block -- a stale tracker misleads, it does not break the
+# build. It fails open (silent) when git cannot answer: no repo, no commits, no git.
+#
 # ponytail: the id patterns are plain substrings, not word-bounded -- a spec
 # containing "REQ-3" would false-positive-match the `Q-[0-9]+` pattern. Add a
 # boundary check if that ever fires for real; not worth it against today's
@@ -145,10 +159,52 @@ check_open_items() {
     done < <(scan_ids "$id_regex" "$resolved_regex" "$spec")
 }
 
+# Line number of the first `- [~]` entry in FILE, or nothing when there is none.
+# The trailing `|| return 0` is load-bearing: "no match" is the common, legitimate
+# answer here, and under `set -euo pipefail` grep's exit 1 would abort the gate.
+first_in_progress_line() {
+    local file="$1"
+    grep -nE '^[[:space:]]*[-*+][[:space:]]+\[~\]' "$file" 2>/dev/null |
+        head -n 1 | cut -d: -f1 || return 0
+}
+
+# Commit timestamp (epoch seconds) of the newest commit touching DIR. Non-zero exit
+# when git cannot answer -- not a repo, no commits for that path, git absent.
+newest_commit_epoch() {
+    local dir="$1" epoch
+    # `-- .` (not the absolute path) so the pathspec is resolved relative to -C,
+    # which stays correct when the worktree root reaches the dir through a symlink.
+    epoch="$(git -C "$dir" log -1 --format=%ct -- . 2>/dev/null)" || return 1
+    [[ -n "$epoch" ]] || return 1
+    printf '%s\n' "$epoch"
+}
+
+check_tracker_stale() {
+    local feature_dir="$1"
+    local tracker="$feature_dir/progress.md"
+    [[ -f "$tracker" ]] || return 0
+
+    local lineno
+    lineno="$(first_in_progress_line "$tracker")"
+    [[ -n "$lineno" ]] || return 0
+
+    local commit_epoch tracker_epoch
+    commit_epoch="$(newest_commit_epoch "$feature_dir")" || return 0
+    tracker_epoch="$(stat -c %Y "$tracker" 2>/dev/null)" || return 0
+    ((tracker_epoch < commit_epoch)) || return 0
+
+    FINDINGS+=("$tracker:$lineno: TRACKER_STALE an in-progress [~] entry is older than\
+ the newest commit touching '$feature_dir' -- update the tracker or clear the [~]")
+}
+
 check_feature() {
     local feature_dir="${1%/}" spec
 
     spec="$feature_dir/spec.md"
+
+    # Before the spec.md guard: progress.md is independent of spec.md, so a feature
+    # missing its spec still gets its tracker audited rather than only one finding.
+    check_tracker_stale "$feature_dir"
 
     if [[ ! -f "$spec" ]]; then
         FINDINGS+=("$spec:1: SECTION_MISSING spec.md not found for feature dir '$feature_dir'")

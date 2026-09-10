@@ -19,10 +19,23 @@ Per feature, one directory: `.specs/features/<feature-name>/`
 - `tasks.md` — `s:work-breakdown`'s Large-scope per-task breakdown for a
   decomposed, multi-issue feature (#306) — a different shape than `plan.md`,
   written only when the feature was split into parallel-dispatchable issues
+- `progress.md` — **optional**, and unlike the four above it is not written up
+  front by a planning skill: the session doing the work writes and updates it
+  as the work happens, so an interrupted session can be resumed without
+  reconstructing state by inference (#313). Three states, not two:
+  `- [ ]` to do, `- [~]` **in progress**, `- [x]` done. `[~]` is the point —
+  it is the state git cannot represent. Worth writing for any size of change;
+  a three-file fix can have one, a Large feature can go without.
 
 `design.md`/`tasks.md` are omitted at smaller scope by design (see #306's
 sizing table) — that means the decisions stay inline in `spec.md`, not that
-they were skipped.
+they were skipped. `progress.md` is omitted whenever nothing is in flight.
+
+A stale tracker misleads worse than no tracker, so the honesty half is
+deterministic: `tests/spec_audit_gate.sh` reports `TRACKER_STALE` when a
+`progress.md` carrying a `[~]` is older than the newest commit touching its
+feature directory. It is a **finding, not a block** — and a feature with no
+`progress.md` is not a finding at all.
 
 `<feature-name>` is a kebab-case slug, not a dated filename — the directory
 holds both artifacts for one feature, and git history already carries the
@@ -35,9 +48,11 @@ defines the shape new ones follow.
 - Backlog / issue-triage notes → `docs/backlog/`
 - Anything meant to outlive the feature it was written for (ADRs, README,
   CLAUDE.md changes)
-- An audit-gate verdict or a cross-feature progress tracker — those are
-  #305 and #313, both undesigned. Do not invent a place for them here ahead
-  of that work; it only has to be redone.
+- An audit-gate verdict — the gate reports to CI, it does not write a file here
+  (#305)
+- A **cross-feature** progress board (what is dispatched, merged, released) —
+  that is `s:dev-loop`'s job, and it is session-shaped, not feature-shaped.
+  `progress.md` is deliberately per-feature only (#313).
 
 ## What happens to a feature directory once it ships
 

@@ -36,6 +36,26 @@ run_gate() {
     run bash "$GATE" --tests-dir "$TESTS_DIR" "$FEATURE_DIR"
 }
 
+write_tracker() {
+    printf '%s' "$1" > "$FEATURE_DIR/progress.md"
+}
+
+# Commit the whole fixture tree at a FIXED epoch, so "tracker older than the newest
+# commit" is decided by arithmetic and never by how long the test took to run.
+COMMIT_EPOCH=1700000000
+
+commit_fixture_at_fixed_epoch() {
+    git -C "$TEST_TMP" init -q
+    git -C "$TEST_TMP" add -A
+    GIT_AUTHOR_DATE="@$COMMIT_EPOCH +0000" GIT_COMMITTER_DATE="@$COMMIT_EPOCH +0000" \
+        git -C "$TEST_TMP" -c user.email=gate@example.com -c user.name=gate \
+        commit -q -m 'feature work'
+}
+
+set_tracker_mtime() {
+    touch -d "@$1" "$FEATURE_DIR/progress.md"
+}
+
 WELL_FORMED_SPEC='# Gadget
 
 ## Acceptance Criteria
@@ -214,6 +234,85 @@ None.
     [ "$status" -eq 1 ]
     [[ "$output" == *"SECTION_MISSING"* ]]
     [[ "$output" == *"spec.md not found"* ]]
+}
+
+# --- TRACKER_STALE (dotfiles-dev#313) --------------------------------------------------------
+#
+# progress.md is OPTIONAL, so the silent cases matter as much as the firing one: a feature
+# with no tracker, and a tracker with nothing `[~]`, must both stay quiet.
+
+IN_FLIGHT_TRACKER='# Gadget progress
+
+- [x] read the existing chain and confirm the targets
+- [~] move bash_profile ahead of the installs
+- [ ] decide whether a second pass is needed
+'
+
+SETTLED_TRACKER='# Gadget progress
+
+- [x] read the existing chain and confirm the targets
+- [x] move bash_profile ahead of the installs
+- [ ] decide whether a second pass is needed
+'
+
+@test "TRACKER_STALE: does not fire when the feature has no progress.md at all" {
+    write_spec "$WELL_FORMED_SPEC"
+    write_test_file "$WELL_FORMED_TESTS"
+    commit_fixture_at_fixed_epoch
+
+    run_gate
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"TRACKER_STALE"* ]]
+}
+
+@test "TRACKER_STALE: does not fire for a stale tracker with no [~] entry" {
+    write_spec "$WELL_FORMED_SPEC"
+    write_test_file "$WELL_FORMED_TESTS"
+    write_tracker "$SETTLED_TRACKER"
+    commit_fixture_at_fixed_epoch
+    set_tracker_mtime "$((COMMIT_EPOCH - 86400))"
+
+    run_gate
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"TRACKER_STALE"* ]]
+}
+
+@test "TRACKER_STALE: does not fire when the tracker is newer than the newest commit" {
+    write_spec "$WELL_FORMED_SPEC"
+    write_test_file "$WELL_FORMED_TESTS"
+    write_tracker "$IN_FLIGHT_TRACKER"
+    commit_fixture_at_fixed_epoch
+    set_tracker_mtime "$((COMMIT_EPOCH + 86400))"
+
+    run_gate
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"TRACKER_STALE"* ]]
+}
+
+@test "TRACKER_STALE: fires when a [~] tracker predates the newest commit" {
+    write_spec "$WELL_FORMED_SPEC"
+    write_test_file "$WELL_FORMED_TESTS"
+    write_tracker "$IN_FLIGHT_TRACKER"
+    commit_fixture_at_fixed_epoch
+    set_tracker_mtime "$((COMMIT_EPOCH - 86400))"
+
+    run_gate
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"TRACKER_STALE"* ]]
+    # cites file:line -- the first `[~]` entry, on line 4 of the tracker
+    [[ "$output" == *"progress.md:4:"* ]]
+}
+
+@test "TRACKER_STALE: fails open (silent) when the tree is not a git repo" {
+    write_spec "$WELL_FORMED_SPEC"
+    write_test_file "$WELL_FORMED_TESTS"
+    write_tracker "$IN_FLIGHT_TRACKER"
+    # No commit_fixture_at_fixed_epoch: nothing to compare against, so no verdict.
+    set_tracker_mtime "$((COMMIT_EPOCH - 86400))"
+
+    run_gate
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"TRACKER_STALE"* ]]
 }
 
 # --- discovery + no-op cases ----------------------------------------------------------------

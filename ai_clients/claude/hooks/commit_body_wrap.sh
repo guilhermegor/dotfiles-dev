@@ -46,6 +46,14 @@ main() {
     command_has_git_commit "$command" || exit 0
 
     msg_file="$(extract_message_file "$command")" || exit 0
+
+    # `git -C <dir> commit -F <relative>` resolves the path against <dir>, because git chdirs
+    # there first — so a relative path must be re-anchored or this rewrites the wrong file (or,
+    # more often, silently finds nothing and no-ops). COMMIT_COMMAND_GIT_DIR is set by the matcher.
+    if [[ -n "$COMMIT_COMMAND_GIT_DIR" && "$msg_file" != /* ]]; then
+        msg_file="$COMMIT_COMMAND_GIT_DIR/$msg_file"
+    fi
+
     [[ -f "$msg_file" && -w "$msg_file" ]] || exit 0
 
     reflowed="$(reflow_body "$msg_file")" || exit 0

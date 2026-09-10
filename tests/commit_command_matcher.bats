@@ -116,3 +116,46 @@ setup() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"meant to be sourced"* ]]
 }
+
+# --- quoted -C paths (CodeRabbit, PR #325) ------------------------------------------------------
+#
+# `read -ra` ignores quotes, so `git -C '/tmp/repo with spaces' commit` tokenised as six words and
+# the matcher read `with` as the subcommand -> MISS -> the secret guard exited before scanning.
+
+@test "MATCH: single-quoted -C path containing spaces" {
+    run bash -c "source '$MATCHER' && command_has_git_commit \"git -C '/tmp/repo with spaces' commit -m x\""
+    [ "$status" -eq 0 ]
+}
+
+@test "MATCH: double-quoted -C path containing spaces" {
+    run bash -c "source '$MATCHER' && command_has_git_commit 'git -C \"/tmp/repo with spaces\" commit -m x'"
+    [ "$status" -eq 0 ]
+}
+
+# --- COMMIT_COMMAND_GIT_DIR: the effective directory a caller must honour ------------------------
+
+@test "exports the -C directory so callers scan the repo the commit targets" {
+    run bash -c "source '$MATCHER' && command_has_git_commit 'git -C /tmp/other commit -m x' && printf '%s' \"\$COMMIT_COMMAND_GIT_DIR\""
+    [ "$status" -eq 0 ]
+    [ "$output" = "/tmp/other" ]
+}
+
+@test "exports the -C directory with spaces intact" {
+    run bash -c "source '$MATCHER' && command_has_git_commit \"git -C '/tmp/repo with spaces' commit -m x\" && printf '%s' \"\$COMMIT_COMMAND_GIT_DIR\""
+    [ "$status" -eq 0 ]
+    [ "$output" = "/tmp/repo with spaces" ]
+}
+
+@test "leaves the directory empty for an ordinary same-directory commit" {
+    run bash -c "source '$MATCHER' && command_has_git_commit 'git commit -m x' && printf '[%s]' \"\$COMMIT_COMMAND_GIT_DIR\""
+    [ "$status" -eq 0 ]
+    [ "$output" = "[]" ]
+}
+
+@test "does not evaluate command substitution while tokenizing" {
+    # The matcher must never execute what it inspects. If \$(...) were evaluated, the marker file
+    # would exist. Reading it must stay pure text processing.
+    marker="$BATS_TEST_TMPDIR/pwned"
+    run bash -c "source '$MATCHER' && command_has_git_commit 'git -C \$(touch $marker) commit -m x' || true"
+    [ ! -e "$marker" ]
+}

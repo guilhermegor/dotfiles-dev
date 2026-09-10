@@ -46,6 +46,18 @@ ASSIGN_RE="${SECRET_NAME}${QUOTE}?[[:space:]]*[:=][[:space:]]*${QUOTE}${NOTQUOTE
 # References/placeholders that are NOT real secrets — exclude to cut false positives.
 PLACEHOLDER_RE='(process\.env|os\.environ|getenv|env\[|\$\{|\{\{|your[_-]|changeme|example|placeholder|redacted|dummy|xxxx|\.\.\.)'
 
+# Run git against the repository the commit TARGETS, not this hook's cwd. `git -C ../other
+# commit` stages into ../other, so an unqualified scan here would both miss that repo's secrets
+# and block on unrelated staged content of our own. COMMIT_COMMAND_GIT_DIR is set by the matcher
+# on a successful match, and is empty for the ordinary same-directory commit.
+scan_git() {
+    if [[ -n "$COMMIT_COMMAND_GIT_DIR" ]]; then
+        git -C "$COMMIT_COMMAND_GIT_DIR" "$@"
+    else
+        git "$@"
+    fi
+}
+
 main() {
     local payload tool command scan_target diff names env_hit hit
 
@@ -61,7 +73,7 @@ main() {
     # matcher; see its header for the four shapes the old inline regex missed.
     command_has_git_commit "$command" || exit 0
 
-    git rev-parse --show-toplevel >/dev/null 2>&1 || exit 0
+    scan_git rev-parse --show-toplevel >/dev/null 2>&1 || exit 0
 
     # `git commit -a`/`--all` also commits tracked-but-unstaged changes, which are not in
     # `git diff --cached`. Detect the flag and widen the scan to `git diff HEAD` in that case.
@@ -72,11 +84,11 @@ main() {
     fi
 
     if [[ "$scan_target" == "all" ]]; then
-        diff="$(git diff HEAD --no-color 2>/dev/null)" || exit 0
-        names="$(git diff HEAD --name-only 2>/dev/null)"
+        diff="$(scan_git diff HEAD --no-color 2>/dev/null)" || exit 0
+        names="$(scan_git diff HEAD --name-only 2>/dev/null)"
     else
-        diff="$(git diff --cached --no-color 2>/dev/null)" || exit 0
-        names="$(git diff --cached --name-only 2>/dev/null)"
+        diff="$(scan_git diff --cached --no-color 2>/dev/null)" || exit 0
+        names="$(scan_git diff --cached --name-only 2>/dev/null)"
     fi
 
     # A real .env file being committed (.env.example / .sample / .template are fine).

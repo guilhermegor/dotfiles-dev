@@ -61,3 +61,41 @@ run_guard() {
     run run_guard 'gh pr create --body "run git commit first"'
     [ "$status" -eq 0 ]
 }
+
+# --- cross-repository commits (CodeRabbit, PR #325) ---------------------------------------------
+#
+# `git -C <other> commit` stages into <other>. Scanning the caller's repo instead is wrong in both
+# directions: it misses a secret staged in <other>, and it blocks a clean commit to <other> because
+# the CALLER happens to have a secret staged. setup() stages a secret in TEST_TMP, so both
+# directions are observable from here.
+
+@test "scans the repo named by -C, not the caller's: blocks a secret staged THERE" {
+    other="$TEST_TMP/other"
+    git init -q -b main "$other"
+    git -C "$other" config user.email t@t
+    git -C "$other" config user.name t
+    git -C "$other" commit -q --allow-empty -m init
+    printf 'aws_key = "AKIAABCDEFGHIJKLMNOP"\n' > "$other/leak.txt"
+    git -C "$other" add leak.txt
+
+    # Unstage the caller's own secret so only the other repo can be the source of a block.
+    git rm -q --cached secret.txt
+
+    run run_guard "git -C $other commit -m wip"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"leak.txt"* ]]
+}
+
+@test "does not block a clean cross-repo commit because the CALLER has a secret staged" {
+    other="$TEST_TMP/clean"
+    git init -q -b main "$other"
+    git -C "$other" config user.email t@t
+    git -C "$other" config user.name t
+    git -C "$other" commit -q --allow-empty -m init
+    printf 'nothing sensitive\n' > "$other/ok.txt"
+    git -C "$other" add ok.txt
+
+    # secret.txt is still staged HERE (setup), and must not be attributed to the other repo.
+    run run_guard "git -C $other commit -m wip"
+    [ "$status" -eq 0 ]
+}

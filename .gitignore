@@ -29,3 +29,6 @@ docs/dotfiles-dev-lessons.md
 # Claude Code project-local scratch: machine-local settings.local.json and the
 # per-subagent worktrees the Agent tool creates. Never repo content (#196).
 .claude/
+
+# PR body scratch files staged for `gh pr create --body-file`
+.git-pr-*.md

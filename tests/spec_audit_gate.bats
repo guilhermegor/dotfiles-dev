@@ -25,7 +25,7 @@ teardown() {
 }
 
 write_spec() {
-    printf '%s' "$1" > "$FEATURE_DIR/design.md"
+    printf '%s' "$1" > "$FEATURE_DIR/spec.md"
 }
 
 write_test_file() {
@@ -77,7 +77,7 @@ WELL_FORMED_TESTS='@test "@AC-1 creates a gadget" {
     run_gate
     [ "$status" -eq 1 ]
     [[ "$output" == *"AC_WITHOUT_TEST AC-3"* ]]
-    [[ "$output" == *"design.md:13:"* ]]
+    [[ "$output" == *"spec.md:13:"* ]]
 }
 
 @test "AC_WITHOUT_TEST: does not fire when every AC has a matching tag" {
@@ -117,7 +117,7 @@ WELL_FORMED_TESTS='@test "@AC-1 creates a gadget" {
     run_gate
     [ "$status" -eq 1 ]
     [[ "$output" == *"ASSUMPTION_OPEN ASM-2"* ]]
-    [[ "$output" == *"design.md:13:"* ]]
+    [[ "$output" == *"spec.md:13:"* ]]
 }
 
 @test "ASSUMPTION_OPEN: does not fire when the assumption is marked (resolved)" {
@@ -137,7 +137,7 @@ WELL_FORMED_TESTS='@test "@AC-1 creates a gadget" {
     run_gate
     [ "$status" -eq 1 ]
     [[ "$output" == *"QUESTION_OPEN Q-2"* ]]
-    [[ "$output" == *"design.md:13:"* ]]
+    [[ "$output" == *"spec.md:13:"* ]]
 }
 
 @test "QUESTION_OPEN: does not fire when the question is marked (answered)" {
@@ -167,7 +167,7 @@ WELL_FORMED_TESTS='@test "@AC-1 creates a gadget" {
     run_gate
     [ "$status" -eq 1 ]
     [[ "$output" == *"SECTION_MISSING"* ]]
-    [[ "$output" == *"design.md:1:"* ]]
+    [[ "$output" == *"spec.md:1:"* ]]
 }
 
 @test "SECTION_MISSING: does not fire when the heading exists and says None" {
@@ -196,21 +196,21 @@ None.
 
 # --- missing spec file entirely -----------------------------------------------------------------
 
-@test "SECTION_MISSING: fires (only) when design.md itself is absent" {
+@test "SECTION_MISSING: fires (only) when spec.md itself is absent" {
     write_test_file "$WELL_FORMED_TESTS"
-    # No design.md written at all.
+    # No spec.md written at all.
 
     run_gate
     [ "$status" -eq 1 ]
     [[ "$output" == *"SECTION_MISSING"* ]]
-    [[ "$output" == *"design.md not found"* ]]
+    [[ "$output" == *"spec.md not found"* ]]
 }
 
 # --- discovery + no-op cases ----------------------------------------------------------------
 
-@test "an explicit feature dir with no design.md -> SECTION_MISSING (exit 1)" {
+@test "an explicit feature dir with no spec.md -> SECTION_MISSING (exit 1)" {
     run bash "$GATE" --tests-dir "$TESTS_DIR" "$TEST_TMP/does-not-exist-either"
-    # A caller-supplied path that doesn't exist has no design.md -> SECTION_MISSING, not a no-op.
+    # A caller-supplied path that doesn't exist has no spec.md -> SECTION_MISSING, not a no-op.
     [ "$status" -eq 1 ]
     [[ "$output" == *"SECTION_MISSING"* ]]
 }
@@ -225,7 +225,7 @@ None.
 
 @test "default discovery (no feature-dir args): finds a fixture feature dir" {
     mkdir -p "$TEST_TMP/fixture-specs/gadget"
-    printf '%s' "$WELL_FORMED_SPEC" > "$TEST_TMP/fixture-specs/gadget/design.md"
+    printf '%s' "$WELL_FORMED_SPEC" > "$TEST_TMP/fixture-specs/gadget/spec.md"
     write_test_file "$WELL_FORMED_TESTS"
 
     run bash -c "SPEC_AUDIT_GATE_SPECS_DIR='$TEST_TMP/fixture-specs' \

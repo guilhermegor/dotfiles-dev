@@ -14,16 +14,20 @@
 # ai_clients/claude/hooks/pr_merge_threads_guard.sh /
 # ai_clients/claude/hooks/release_dispatch_guard.sh.
 #
-# ⚠️ FORMAT NOTE (read before touching the regexes below): .specs/CLAUDE.md
-# (landed via #320) defines only `design.md` / `plan.md` per feature. It defines
-# NO id syntax for acceptance criteria, assumptions, or open questions, and #305's
-# own issue text assumes a `spec.md` that does not exist in the landed convention.
-# #306 (the spec-writing skill) had not landed as of this gate's authoring, so the
-# grammar below is this gate's OWN minimal, provisional convention -- scoped to
-# exactly the five findings #305 asks for, no more. If #306 lands something
+# ⚠️ FORMAT NOTE (read before touching the regexes below): this gate checks
+# `spec.md`, which .specs/CLAUDE.md names as the ALWAYS-PRESENT per-feature file
+# (`s:work-breakdown`'s output). The other three are conditional: `design.md` and
+# `tasks.md` appear only at Large scope, `plan.md` only when `s:writing-plans`
+# ran. Checking a conditional file would report SECTION_MISSING for every small
+# feature that correctly omitted it -- so the always-present one is the only
+# sound anchor.
+#
+# The id syntax below is this gate's OWN minimal convention: .specs/CLAUDE.md
+# defines the file layout but no marker grammar. It is scoped to exactly the five
+# findings #305 asks for, no more. If a spec-writing change lands something
 # incompatible, this grammar is what changes, not the five finding names.
 #
-# Grammar parsed out of <feature-dir>/design.md:
+# Grammar parsed out of <feature-dir>/spec.md:
 #   Acceptance criteria : any occurrence of the literal pattern `AC-<n>`.
 #   Assumptions section : a markdown heading line whose text contains the word
 #                         "assumptions" (case-insensitive), e.g. `## Assumptions`.
@@ -144,10 +148,10 @@ check_open_items() {
 check_feature() {
     local feature_dir="${1%/}" spec
 
-    spec="$feature_dir/design.md"
+    spec="$feature_dir/spec.md"
 
     if [[ ! -f "$spec" ]]; then
-        FINDINGS+=("$spec:1: SECTION_MISSING design.md not found for feature dir '$feature_dir'")
+        FINDINGS+=("$spec:1: SECTION_MISSING spec.md not found for feature dir '$feature_dir'")
         return
     fi
 

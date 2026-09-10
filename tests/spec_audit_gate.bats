@@ -49,12 +49,17 @@ WELL_FORMED_SPEC='# Gadget
 - Q-1: is soft-delete required? (answered) no, hard delete only.
 '
 
-WELL_FORMED_TESTS='@test "@AC-1 creates a gadget" {
-  true
-}
-@test "@AC-2 paginates the list" {
-  true
-}
+# ⚠️ Every `@test` inside a fixture string is INDENTED on purpose. bats counts a
+# file's tests by scanning for `@test` at column 0, so an unindented fixture line
+# is counted as a real test and never run — "Executed N-1 instead of expected N",
+# which fails the suite. The gate scans for `@AC-<n>` anywhere on a line, so the
+# indentation costs the fixture nothing.
+WELL_FORMED_TESTS='  @test "@AC-1 creates a gadget" {
+    true
+  }
+  @test "@AC-2 paginates the list" {
+    true
+  }
 '
 
 # --- the base case: a fully aligned feature -> ALIGNED (exit 0) ---------------------------------

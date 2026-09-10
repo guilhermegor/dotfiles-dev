@@ -95,14 +95,36 @@ main() {
     local cmd_count=0 mem_count=0 proj_count=0
     local -a skipped_projects=()
 
+    # Snapshots come in two layouts. The current export writes everything under
+    # `claude/`; snapshots taken before that wrote a handful of named subdirs
+    # (`commands/`, `settings/`, `tasks/`, `plans/`). Both must restore, because
+    # the drive holds years of the old shape and a restore that silently skips
+    # them is indistinguishable from one that worked.
+    #
+    # ⚠️ settings.json is deliberately NOT bulk-restored here even in the new
+    # layout: it carries machine-local keys, and the jq merge below exists to
+    # preserve them. Bulk-copying it would undo that on the one file where it
+    # matters most.
+    if [[ -d "$selected_snapshot/claude" ]]; then
+        rsync -a \
+            --exclude='settings.json' \
+            --exclude='.env' \
+            "$selected_snapshot/claude/" "$HOME/.claude/"
+        cmd_count=$(find "$selected_snapshot/claude/commands" -name '*.md' 2>/dev/null | wc -l)
+    fi
+
     if [[ -d "$selected_snapshot/commands" ]]; then
         mkdir -p "$HOME/.claude/commands"
         rsync -a "$selected_snapshot/commands/" "$HOME/.claude/commands/"
         cmd_count=$(find "$selected_snapshot/commands" -name "*.md" 2>/dev/null | wc -l)
     fi
 
-    if [[ -f "$selected_snapshot/settings/settings.json" ]]; then
-        local backup_json="$selected_snapshot/settings/settings.json"
+    # Same file, two possible locations — new layout first, old as fallback.
+    local snap_settings="$selected_snapshot/claude/settings.json"
+    [[ -f "$snap_settings" ]] || snap_settings="$selected_snapshot/settings/settings.json"
+
+    if [[ -f "$snap_settings" ]]; then
+        local backup_json="$snap_settings"
         local current_json="$HOME/.claude/settings.json"
         if command -v jq &>/dev/null && [[ -f "$current_json" ]]; then
             local tmp_merged
@@ -136,11 +158,14 @@ main() {
 
     # .env restore is conservative: only if local missing (machine-specific paths).
     local env_status="not in snapshot"
-    if [[ -f "$selected_snapshot/settings/.env" ]]; then
+    local snap_env="$selected_snapshot/claude/.env"
+    [[ -f "$snap_env" ]] || snap_env="$selected_snapshot/settings/.env"
+
+    if [[ -f "$snap_env" ]]; then
         if [[ -f "$HOME/.claude/.env" ]]; then
             env_status="skipped (local exists)"
         else
-            cp "$selected_snapshot/settings/.env" "$HOME/.claude/.env"
+            cp "$snap_env" "$HOME/.claude/.env"
             env_status="restored (local was missing)"
         fi
     fi

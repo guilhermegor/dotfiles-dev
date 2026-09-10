@@ -44,10 +44,12 @@ business rule)?
       → dotfiles-dev store ~/.claude/memory/lessons-dotfiles/ + repo
       docs/dotfiles-dev-lessons.md
   Save one file per lesson + update that store's README index + the git-ignored
-  repo mirror. The mirror entry MUST include this exact field (mandatory, not a
-  footnote — the audit joins by this literal string, never by heading/prose):
+  repo mirror. The audit's mirror check matches on the bare FILENAME appearing
+  anywhere in the mirror text (grep -F on the name, not a field or heading) —
+  so the filename must appear somewhere in the mirror entry. House convention
+  for making mirrors greppable and consistent (recommended, not mechanically
+  required):
       - **Source:** `<filename>.md`
-  A complete prose section without that literal line still counts as a gap.
 - If NO: say so in one line and continue. Do not skip the decision silently.
 EOF
 )"

@@ -17,6 +17,11 @@ relationship `s:py-unit-test` and `s:py-hypothesis` have to `s:test`.
 
 ## When BDD earns its cost — and when it doesn't
 
+**Gherkin is a rendering, not a source of observability.** `s:test`'s acceptance-criteria rule
+decides whether a criterion is decidable at all; use Given/When/Then when the flow has a
+user-facing actor and reads naturally as a scenario, and state the observable directly
+otherwise — wrapping a non-observable criterion in `Dado`/`Quando`/`Então` does not make it one.
+
 **The decisive test: would a wrong business decision here be expensive, or does
 the flow branch heavily?** If yes, BDD. If the case is a pure function with no
 business ambiguity — a formatter, a checksum, a sort — a unit test is cheaper to

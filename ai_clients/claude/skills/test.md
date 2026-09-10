@@ -13,6 +13,28 @@ good test*, never *how a specific tool writes one*. Tool skills (`s:py-unit-test
 `s:py-hypothesis`, and any future `ts-*` equivalents) read this skill for vocabulary
 and decisions, then add only what is specific to their tool.
 
+## Acceptance criteria must name an observable
+
+What makes an acceptance criterion useful is that it names something a machine can **read
+back** — not the notation it is written in. That property, not the notation, is what makes
+"done" decidable.
+
+| Not acceptable | Acceptable |
+|---|---|
+| the system should be fast | the response arrives in under 30s |
+| the password must be secure | reject passwords under 8 chars, or with no digit, or no uppercase |
+| the import should handle errors | a malformed row is skipped and counted in `rows_rejected` |
+
+The left column cannot fail a test — there is nothing in it to assert against. The right
+column can: each names a value, a count, or a bound that a test body reads back and compares.
+When a criterion in front of you looks like the left column, don't write the test yet — name
+the observable it's missing (a duration bound? a returned code? a counter?) and push that back
+into the ticket before writing any `arrange/act/assert`.
+
+This is upstream of notation, not a notation itself: Gherkin (`s:bdd`) is one *rendering* of an
+observable criterion, not the source of the property — see `s:bdd`'s pointer for when that
+rendering is the right one.
+
 ## Anatomy of a test
 
 `arrange/act/assert`, `given/when/then`, and `setup/exercise/teardown` are three
@@ -106,3 +128,5 @@ CLI flags, and library-specific APIs belong to the tool skill that wraps that to
   pytest specifics (fixtures, `conftest.py`, `monkeypatch`, `tmp_path`).
 - `s:py-hypothesis` — the Python property-based weapon; applies the EBT/PBT
   boundary decided here to Hypothesis strategies.
+- `s:bdd` — decides when Given/When/Then is the right *rendering* of an
+  observable criterion; it does not decide observability itself.

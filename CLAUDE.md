@@ -49,6 +49,16 @@ ai_clients/claude/lib/          ← one file per step:
 
 `ai_clients/main.sh` discovers client subdirectories at runtime — adding a new AI client only requires creating `ai_clients/<name>/main.sh`.
 
+## Specs (`.specs/`)
+
+Work-in-flight feature specs and plans (what `s:brainstorming` /
+`s:writing-plans` produce) live under `.specs/features/<feature-name>/`, not
+`docs/superpowers/`. See `.specs/CLAUDE.md` for what belongs there, what
+doesn't, and the out-of-repo rule for projects this doesn't apply to
+(dotfiles-dev#303). `docs/superpowers/` and the other pre-existing spec
+locations are untouched for now — migrating them is a separate, still-open
+decision (#302 Q-2).
+
 ## Espanso packages
 
 Each package lives under `espanso/<name>/` and must contain `package.yml`. The optional `setup.sh` inside each package runs after the copy step in `make install_espanso_packages`. Packages are copied verbatim to `~/.config/espanso/packages/<name>/`.

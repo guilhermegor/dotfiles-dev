@@ -41,6 +41,34 @@ live here:
   resolves the directory but not the implicit-HEAD half of the bug
   (dotfiles-dev#229).
 
+## Superpowers spec/plan output — redirect to `.specs/`
+
+`s:brainstorming` and `s:writing-plans` (the `superpowers` plugin) hardcode
+their save path to `docs/superpowers/specs/` and `docs/superpowers/plans/`
+in their own `SKILL.md`, inside the plugin cache
+(`~/.claude/plugins/cache/<marketplace>/superpowers/<version>/skills/`) —
+not a file any of our repos own or can edit; it is overwritten on every
+plugin update. The redirect happens here instead, in the instructions read
+before that stated path is followed (dotfiles-dev#303):
+
+Before writing a spec or plan, decide which applies — **ask if it isn't
+already obvious, never infer**:
+
+1. **The project has a `.specs/` at its root already** → write there:
+   `.specs/features/<feature-name>/design.md` (brainstorming) and
+   `.specs/features/<feature-name>/plan.md` (writing-plans). See that
+   project's own `.specs/CLAUDE.md` for what belongs there.
+2. **It has none, and you own/maintain its layout** → ask before adopting
+   `.specs/` there; do not create it unasked.
+3. **It has none, and you're a contributor rather than the owner** (you
+   didn't choose its layout, didn't scaffold it) → this is the normal case
+   for that category of repo, not a fallback: write to
+   `~/.claude/specs/<repo-slug>/features/<feature-name>/{design.md,plan.md}`
+   instead, never inside the foreign repo.
+
+Guessing wrong is either an unwanted directory in someone else's repo, or a
+spec written where nobody will look.
+
 ## Author Claude artifacts in dotfiles-dev, never only in live `~/.claude/`
 
 Durable Claude artifacts (commands, skills, agents, rules, hooks, global

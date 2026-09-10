@@ -19,17 +19,37 @@ What makes an acceptance criterion useful is that it names something a machine c
 back** — not the notation it is written in. That property, not the notation, is what makes
 "done" decidable.
 
-| Not acceptable | Acceptable |
-|---|---|
-| the system should be fast | the response arrives in under 30s |
-| the password must be secure | reject passwords under 8 chars, or with no digit, or no uppercase |
-| the import should handle errors | a malformed row is skipped and counted in `rows_rejected` |
+**The check, run before you accept any criterion: _what command or state change shows this
+happening?_** Answer it in one sentence. If the answer is "you'd have to read the code and
+judge", the criterion is not written yet — send it back before writing any
+`arrange/act/assert`.
+
+Rewrites from this repo's own work — left column is what the ticket said, right column is what
+made it testable:
+
+| Not observable | Observable | Watched by |
+|---|---|---|
+| the commit-title guard works | a `git commit` whose title exceeds `.gitlint`'s `title-max-length` exits 2 and prints the offending length; one under the limit exits 0; an unparseable payload exits 0 (fails open) | `tests/commit_title_length_guard.bats` |
+| connectivity is checked properly | `check_internet` returns 0/1 from an **HTTPS** probe, so a blocked `ping` cannot change the verdict; with neither `curl` nor `wget` present it reports the missing dependency instead of "no connection" | `tests/check_internet.bats` |
+| app folders are organised sensibly | folders come back ordered by resolved **display name**, case-insensitively — `Social` before `Sistema`, `Infra` before `IRPF` — and an unresolvable name falls back to the bare id, never to empty | `tests/app_folder_alpha_order.bats` |
+| the memory export skips what it should | the export is a denylist: an artifact type nobody enumerated is copied anyway, while credentials, rotated `*.backup_*` copies, and `security/agent-sdk-venv/` (but not `security/` itself) are absent | `tests/export_memory_coverage.bats` |
 
 The left column cannot fail a test — there is nothing in it to assert against. The right
-column can: each names a value, a count, or a bound that a test body reads back and compares.
-When a criterion in front of you looks like the left column, don't write the test yet — name
-the observable it's missing (a duration bound? a returned code? a counter?) and push that back
-into the ticket before writing any `arrange/act/assert`.
+column can: each names an exit code, a value, a count, or a bound that a test body reads back
+and compares. Notice what the rewrite forces out into the open: the fail-open case, the
+"blocked ping" regression, the sort key, the denylist-vs-allowlist choice. Those were all
+decisions hiding inside "works". When a criterion in front of you looks like the left column,
+name the observable it's missing (an exit code? a returned key? a counter? a bound?) and push
+that back into the ticket first.
+
+⚠️ **This is not the audit gate's job and must not be made into one.**
+`tests/spec_audit_gate.sh` checks **linkage** — every `AC-<n>` in `spec.md` has a test tagged
+`@AC-<n>`, and every `@AC-<n>` has a criterion. That proves a test *claims* the criterion; it
+says nothing about whether the criterion was watchable. "the config is handled correctly"
+passes the gate today, as long as some test carries the tag. Observability is not mechanically
+decidable, and the gate's whole worth is that each of its findings has a deterministic answer —
+one heuristic finding would make every other finding less trustworthy. The gate checks
+linkage; this skill shapes the writing.
 
 This is upstream of notation, not a notation itself: Gherkin (`s:bdd`) is one *rendering* of an
 observable criterion, not the source of the property — see `s:bdd`'s pointer for when that

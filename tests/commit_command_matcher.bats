@@ -53,6 +53,45 @@ setup() {
     [ "$status" -eq 1 ]  # 'xargs -I{} git commit' — segment starts with xargs, not git/rtk: correctly no match
 }
 
+# --- the house-style spellings: absolute path + global flags ------------------------------------
+#
+# Not hypothetical. The global CLAUDE.md and the dev-loop skill both mandate `/usr/bin/git` where
+# the rtk proxy must be bypassed, and discourage `cd <dir> &&` in favour of `git -C <dir>`. Their
+# composition below is the exact form this repo's commits are written with — and it was a MISS
+# against the first #324 fix, measured while landing that fix.
+
+@test "MATCH (was MISS): absolute path /usr/bin/git commit" {
+    run bash -c "source '$MATCHER' && command_has_git_commit '/usr/bin/git commit -m x'"
+    [ "$status" -eq 0 ]
+}
+
+@test "MATCH (was MISS): global flag between binary and subcommand -- git -C <dir> commit" {
+    run bash -c "source '$MATCHER' && command_has_git_commit 'git -C /some/path commit -m x'"
+    [ "$status" -eq 0 ]
+}
+
+@test "MATCH (was MISS): the composed house form -- /usr/bin/git -C <dir> commit -F <file>" {
+    run bash -c "source '$MATCHER' && command_has_git_commit '/usr/bin/git -C /some/path commit -F /tmp/msg'"
+    [ "$status" -eq 0 ]
+}
+
+@test "MATCH: a valueless global flag -- git --no-pager commit" {
+    run bash -c "source '$MATCHER' && command_has_git_commit 'git --no-pager commit -m x'"
+    [ "$status" -eq 0 ]
+}
+
+@test "MATCH: an inline-value global flag -- git --git-dir=/some/.git commit" {
+    run bash -c "source '$MATCHER' && command_has_git_commit 'git --git-dir=/some/.git commit -m x'"
+    [ "$status" -eq 0 ]
+}
+
+@test "NO MATCH: a global flag's VALUE is skipped, not read as the subcommand" {
+    # `-C commit` names a DIRECTORY called commit and then runs `status`. Reading the flag's
+    # value as the subcommand would make this a false positive.
+    run bash -c "source '$MATCHER' && command_has_git_commit 'git -C commit status'"
+    [ "$status" -eq 1 ]
+}
+
 # --- false positive: a mere mention must NOT match ---------------------------------------------
 
 @test "NO MATCH: git commit merely mentioned inside an argument" {

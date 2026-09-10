@@ -43,9 +43,9 @@ main() {
     command="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
     [[ -n "$command" ]] || exit 0
 
-    # Only guard an actual `git commit` (bare / rtk-prefixed / rtk-proxy-prefixed) in any chained
-    # segment of the command — each segment stays anchored at its own start so a mere mention of
-    # "git commit" inside another argument does not trip the guard.
+    # Only act on an actual `git commit`. Every accepted spelling — and the per-segment anchor
+    # that keeps a mere *mention* of "git commit" from tripping this — lives in the shared
+    # matcher; see its header for the four shapes the old inline regex missed.
     command_has_git_commit "$command" || exit 0
 
     if printf '%s' "$command" | grep -q '<<'; then

@@ -240,15 +240,25 @@ vm_setup: manage_isos create_vm  ## Setup virtual machine environment
 	@echo "════════════════════════════════════════════"
 	@echo ""
 
-permissions:  ## chmod +x every *.sh in the repo
+permissions:  ## chmod +x every *.sh in the repo (skips sourced libs — see below)
 	@echo "Making all scripts executable..."
 	@find distro_config -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find drivers -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find os -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find storage -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@find code_editors -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
-	@find ai_clients -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+	@find ai_clients -name "*.sh" -not -path "*/lib/*" -not -path "*/profile_functions.sh" -exec chmod +x {} \; 2>/dev/null || true
 	@echo "✅ Permissions updated successfully!"
+
+# Boring path-shaped exclusion, not a shebang/main() sniff (dotfiles-dev#312):
+# skip every */lib/* dir under ai_clients/ plus the one top-level exception,
+# profile_functions.sh. Some files under */lib/* are legitimately executable
+# (already committed 755, e.g. ai_clients/lib/restore_env_prompt.sh is
+# dual-mode) — skipping them here is a harmless no-op since chmod would only
+# ever confirm a mode they already have. What this exclusion actually fixes
+# is the four sourced-only libs (review_thread_gate.sh, profiles.sh,
+# shared_agents_md.sh, profile_functions.sh) that git stores 644: without
+# it, `chmod +x` flips them to 755 and dirties the tree on every run.
 
 ai_clients:  ## Configure all AI clients (interactive menu: Claude Code, ...)
 	@echo "Configuring all AI clients (Claude, ...)..."

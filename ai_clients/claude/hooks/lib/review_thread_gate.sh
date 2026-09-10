@@ -20,6 +20,11 @@
 # shellcheck disable=SC2034 # both are read by every caller after the call returns
 set -u
 
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	echo "review_thread_gate.sh is meant to be sourced, not executed." >&2
+	exit 1
+fi
+
 _gate_min_reply_chars=100
 
 _gate_query() {

@@ -8,6 +8,11 @@
 # file ships a placeholder and this step resolves it from the project root
 # .env, same pattern as _install_context7/_install_tavily in mcp_servers.sh.
 
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    echo "profiles.sh is meant to be sourced, not executed." >&2
+    exit 1
+fi
+
 install_profiles() {
     print_status "section" "INSTALLING SESSION PROFILES"
 

@@ -89,7 +89,8 @@ _gate_roster_logins() {
 # network round-trip -- same shape as _gate_query() above.
 #
 # ⚠️ `index()` evaluates its ARGUMENT with `.` bound to index's own input, which here is the
-# $bots ARRAY -- not the comment. Writing `$bots | index(.author.login)` therefore indexes an
+# $bots ARRAY -- not the comment. The same fault sat in _gate_running_filter (`.creator.login`,
+# `.checkSuite.app.slug`) and was found only once that filter became reachable from a test. Writing `$bots | index(.author.login)` therefore indexes an
 # array with a string, and jq aborts the whole program with exit 5:
 #
 #     jq: error (at <stdin>:0): Cannot index array with string "author"
@@ -118,6 +119,72 @@ _gate_problems_filter() {
     "  \($t.path // "?"): replied — still needs RESOLVING"
   else empty end
 JQ
+}
+
+# The jq program behind `truncated`, extracted for the same reason as _gate_problems_filter:
+# a filter a test can reach is a filter a test can break.
+_gate_truncated_filter() {
+	cat <<'JQ'
+.data.repository.pullRequest.reviewThreads as $rt
+| [ (if ($rt.totalCount // 0) > ($rt.nodes | length) then
+       "  UNREADABLE: \($rt.totalCount) review threads exist, only \($rt.nodes | length) fit one page"
+     else empty end),
+    ($rt.nodes[]
+     | select((.comments.totalCount // 0) > (.comments.nodes | length))
+     | "  UNREADABLE: \(.path // "?"): \(.comments.totalCount) comments, only \(.comments.nodes | length) read") ]
+| join("\n")
+JQ
+}
+
+# The jq program behind `running`.
+_gate_running_filter() {
+	cat <<'JQ'
+($roster | split("\n") | map(select(length > 0)) | map(ascii_downcase)
+ | map(select(. != "github-actions"))) as $bots
+| (.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts) as $c
+| ([$c.nodes[]?
+   | . as $n
+   | if $n.__typename == "CheckRun" then
+       select($n.status != "COMPLETED")
+       | select(($bots | index(($n.checkSuite.app.slug // "") | ascii_downcase)) != null)
+       | $n.name
+     elif $n.__typename == "StatusContext" then
+       select($n.state == "PENDING" or $n.state == "EXPECTED")
+       | select(($bots | index(($n.creator.login // "") | ascii_downcase)) != null)
+       | $n.context
+     else empty end]
+   + (if ($c.totalCount // 0) > ($c.nodes | length)
+      then ["\($c.totalCount - ($c.nodes | length)) further check(s) this page could not read"]
+      else [] end))
+| join(", ")
+JQ
+}
+
+# _gate_run_jq JSON FILTER ERRFILE [jq args...]
+# Run FILTER over JSON, echo jq's stdout, return jq's exit status, and leave jq's stderr in
+# ERRFILE -- a path the CALLER owns, because a command substitution runs in a subshell and the
+# helper cannot hand the text back through a variable.
+#
+# ⚠️ Returning the status is the entire point. `jq ... 2>/dev/null` with the status discarded
+# turns a program ABORT into empty output, and empty output is exactly what "nothing to report"
+# looks like -- so a crashed filter reaches the `clean` branch (dotfiles-dev#331). Measured on
+# the #329 bug: under the workflow's `set -euo pipefail` the step died with a bare `exit code 5`,
+# but called from a hook -- neither hook caller uses `set -e` -- the same broken filter returned
+# GATE_STATUS=clean. The `set -e` was an accident of one caller, never a property of this gate.
+_gate_run_jq() {
+	local json="$1" filter="$2" errfile="$3"
+	shift 3
+	printf '%s' "$json" | jq -r "$@" "$filter" 2>"$errfile"
+}
+
+# Record the unreadable verdict for a filter that aborted, carrying jq's own words so the failure
+# is diagnosable from the check output instead of needing a bisect -- #329 took one.
+_gate_filter_aborted() {
+	local errfile="$1" which="$2" detail
+	detail="$(head -1 "$errfile" 2>/dev/null)"
+	rm -f "$errfile"
+	GATE_STATUS="unreadable"
+	GATE_DETAIL="the $which filter aborted -- state unknown, not clean${detail:+: $detail}"
 }
 
 gate_pr_thread_state() {
@@ -149,41 +216,29 @@ gate_pr_thread_state() {
 
 	roster="$(_gate_roster_logins "$roster_file")"
 
-	problems="$(printf '%s' "$threads" | jq -r \
-		--argjson min "$_gate_min_reply_chars" \
-		--arg roster "$roster" "$(_gate_problems_filter)" 2>/dev/null)"
+	local jq_err
+	jq_err="$(mktemp)"
+
+	problems="$(_gate_run_jq "$threads" "$(_gate_problems_filter)" "$jq_err" \
+		--argjson min "$_gate_min_reply_chars" --arg roster "$roster")" || {
+		_gate_filter_aborted "$jq_err" "thread"
+		return 0
+	}
 
 	# ⚠️ A single page is not the whole PR — a dropped thread reads exactly like an absent one.
-	truncated="$(printf '%s' "$threads" | jq -r '
-		.data.repository.pullRequest.reviewThreads as $rt
-		| [ (if ($rt.totalCount // 0) > ($rt.nodes | length) then
-		       "  UNREADABLE: \($rt.totalCount) review threads exist, only \($rt.nodes | length) fit one page"
-		     else empty end),
-		    ($rt.nodes[]
-		     | select((.comments.totalCount // 0) > (.comments.nodes | length))
-		     | "  UNREADABLE: \(.path // "?"): \(.comments.totalCount) comments, only \(.comments.nodes | length) read") ]
-		| join("\n")' 2>/dev/null)"
+	truncated="$(_gate_run_jq "$threads" "$(_gate_truncated_filter)" "$jq_err")" || {
+		_gate_filter_aborted "$jq_err" "truncation"
+		return 0
+	}
 	[ -n "$truncated" ] && problems="$(printf '%s\n%s' "$truncated" "$problems")"
 
 	# Reviewer checks (CheckRun or StatusContext) still running, minus the repo's own CI app.
-	running="$(printf '%s' "$threads" | jq -r --arg roster "$roster" '
-		($roster | split("\n") | map(select(length > 0)) | map(ascii_downcase)
-		 | map(select(. != "github-actions"))) as $bots
-		| (.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts) as $c
-		| ([$c.nodes[]?
-		   | if .__typename == "CheckRun" then
-		       select(.status != "COMPLETED")
-		       | select(($bots | index((.checkSuite.app.slug // "") | ascii_downcase)) != null)
-		       | .name
-		     elif .__typename == "StatusContext" then
-		       select(.state == "PENDING" or .state == "EXPECTED")
-		       | select(($bots | index((.creator.login // "") | ascii_downcase)) != null)
-		       | .context
-		     else empty end]
-		   + (if ($c.totalCount // 0) > ($c.nodes | length)
-		      then ["\($c.totalCount - ($c.nodes | length)) further check(s) this page could not read"]
-		      else [] end))
-		| join(", ")' 2>/dev/null)"
+	running="$(_gate_run_jq "$threads" "$(_gate_running_filter)" "$jq_err" --arg roster "$roster")" || {
+		_gate_filter_aborted "$jq_err" "running-checks"
+		return 0
+	}
+
+	rm -f "$jq_err"
 
 	if [ -n "$problems" ]; then
 		GATE_STATUS="problems"

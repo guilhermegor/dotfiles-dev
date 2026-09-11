@@ -85,6 +85,41 @@ _gate_roster_logins() {
 	printf '__NO_ROSTER__\n'
 }
 
+# The jq program behind `problems`, extracted so tests can run it against a fixture without a
+# network round-trip -- same shape as _gate_query() above.
+#
+# ⚠️ `index()` evaluates its ARGUMENT with `.` bound to index's own input, which here is the
+# $bots ARRAY -- not the comment. Writing `$bots | index(.author.login)` therefore indexes an
+# array with a string, and jq aborts the whole program with exit 5:
+#
+#     jq: error (at <stdin>:0): Cannot index array with string "author"
+#
+# Under the workflow's `set -euo pipefail` that killed the step before it could print a verdict,
+# so the required check failed with no diagnostic at all. Binding the comment to $c first is what
+# keeps the lookup pointed at the comment. The bug was invisible for as long as it existed
+# because it needs BOTH a roster file (else the __NO_ROSTER__ branch runs, which never touches
+# index()) AND at least one review thread (else `nodes[]` yields nothing and the filter is never
+# evaluated) -- every PR gated until PR #325 had zero threads.
+_gate_problems_filter() {
+	cat <<'JQ'
+($roster | split("\n") | map(select(length > 0))) as $bots
+| .data.repository.pullRequest.reviewThreads.nodes[]
+| . as $t
+| ($t.comments.nodes
+   | map(. as $c | select(
+       (if ($bots | index("__NO_ROSTER__"))
+        then (($c.author.__typename // "") != "Bot")
+        else ($bots | index($c.author.login // "") | not) end)
+       and (($c.body // "" | length) >= $min)))
+   | length) as $answers
+| if $answers == 0 then
+    "  \($t.path // "?"): needs a REPLY (and then a resolve)"
+  elif ($t.isResolved | not) then
+    "  \($t.path // "?"): replied — still needs RESOLVING"
+  else empty end
+JQ
+}
+
 gate_pr_thread_state() {
 	local owner="$1" repo="$2" number="$3" roster_file="${4:-.review-bots.yaml}"
 	local threads roster problems truncated running
@@ -116,23 +151,7 @@ gate_pr_thread_state() {
 
 	problems="$(printf '%s' "$threads" | jq -r \
 		--argjson min "$_gate_min_reply_chars" \
-		--arg roster "$roster" '
-		($roster | split("\n") | map(select(length > 0))) as $bots
-		| .data.repository.pullRequest.reviewThreads.nodes[]
-		| . as $t
-		| ($t.comments.nodes
-		   | map(select(
-		       (if ($bots | index("__NO_ROSTER__"))
-		        then ((.author.__typename // "") != "Bot")
-		        else ($bots | index(.author.login // "") | not) end)
-		       and ((.body // "" | length) >= $min)))
-		   | length) as $answers
-		| if $answers == 0 then
-		    "  \($t.path // "?"): needs a REPLY (and then a resolve)"
-		  elif ($t.isResolved | not) then
-		    "  \($t.path // "?"): replied — still needs RESOLVING"
-		  else empty end
-	' 2>/dev/null)"
+		--arg roster "$roster" "$(_gate_problems_filter)" 2>/dev/null)"
 
 	# ⚠️ A single page is not the whole PR — a dropped thread reads exactly like an absent one.
 	truncated="$(printf '%s' "$threads" | jq -r '

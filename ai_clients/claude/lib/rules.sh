@@ -53,6 +53,13 @@ install_bash_rules() {
     copy_rule_file "bash.md" "$rules_dir"
 }
 
+# ── Web / HTTP (concern-scoped, not language-scoped) ──────────────────────────
+
+install_web_rules() {
+    local rules_dir="$1"
+    copy_rule_file "web.md" "$rules_dir"
+}
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 install_rules() {
@@ -65,5 +72,6 @@ install_rules() {
     install_python_rules "$rules_dir"
     install_javascript_rules "$rules_dir"
     install_bash_rules "$rules_dir"
+    install_web_rules "$rules_dir"
     # install_go_rules "$rules_dir"          # future
 }

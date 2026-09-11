@@ -119,3 +119,66 @@ run_filter() {
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
+
+# --- dotfiles-dev#331: an aborted filter must never reach the `clean` verdict -------------------
+#
+# `jq ... 2>/dev/null` with the status discarded turns a program ABORT into empty output, and
+# empty output is what "nothing to report" looks like — so a crashed filter used to fall through
+# to `clean`. That is a silent fail-OPEN on the gate that decides whether findings were answered.
+# Measured on #329: the workflow's `set -euo pipefail` turned it into a bare `exit code 5`, while
+# the two hook callers — neither uses `set -e` — got `clean` from the very same broken filter.
+
+@test "#331: a filter that aborts yields unreadable, never clean" {
+    run bash -c "
+        source '$GATE'
+        errfile=\"\$(mktemp)\"
+        # '.a.b' over an ARRAY is an abort, not an empty match — the shape of the #329 bug.
+        out=\"\$(_gate_run_jq '[1,2]' '.a.b' \"\$errfile\")\" || _gate_filter_aborted \"\$errfile\" 'thread'
+        echo \"status=\${GATE_STATUS:-unset} detail=\${GATE_DETAIL:-}\"
+    "
+    [[ "$output" == *"status=unreadable"* ]]
+    [[ "$output" != *"status=clean"* ]]
+}
+
+@test "#331: the unreadable detail carries jq's own error text" {
+    run bash -c "
+        source '$GATE'
+        errfile=\"\$(mktemp)\"
+        out=\"\$(_gate_run_jq '[1,2]' '.a.b' \"\$errfile\")\" || _gate_filter_aborted \"\$errfile\" 'thread'
+        echo \"\$GATE_DETAIL\"
+    "
+    # Without this the failure is a bare exit code — #329 needed a bisect to find.
+    [[ "$output" == *"Cannot index array"* ]]
+    [[ "$output" == *"not clean"* ]]
+}
+
+@test "#331: a filter that legitimately matches nothing still succeeds" {
+    # The other direction: an abort and an empty result must stay distinguishable.
+    run bash -c "source '$GATE'; errfile=\"\$(mktemp)\"; _gate_run_jq '{\"a\":1}' 'empty' \"\$errfile\""
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+# --- the running filter: the same index() fault, found by extracting it ------------------------
+
+@test "running filter: reports a reviewer check still pending (was an abort)" {
+    fixture='{"data":{"repository":{"pullRequest":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":1,"nodes":[{"__typename":"StatusContext","context":"CodeRabbit","state":"PENDING","creator":{"login":"coderabbitai"}}]}}}}]}}}}}'
+    run bash -c "source '$GATE'; printf '%s' '$fixture' | jq -r --arg roster 'coderabbitai' \"\$(_gate_running_filter)\""
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CodeRabbit"* ]]
+}
+
+@test "running filter: ignores the repo's own completed CI" {
+    fixture='{"data":{"repository":{"pullRequest":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":1,"nodes":[{"__typename":"CheckRun","name":"bats","status":"COMPLETED","checkSuite":{"app":{"slug":"github-actions"}}}]}}}}]}}}}}'
+    run bash -c "source '$GATE'; printf '%s' '$fixture' | jq -r --arg roster 'coderabbitai' \"\$(_gate_running_filter)\""
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "truncated filter: names a page that could not hold every thread" {
+    fixture='{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":3,"nodes":[{"isResolved":true,"path":"a.sh","comments":{"totalCount":9,"nodes":[]}}]}}}}}'
+    run bash -c "source '$GATE'; printf '%s' '$fixture' | jq -r \"\$(_gate_truncated_filter)\""
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"3 review threads exist, only 1"* ]]
+    [[ "$output" == *"9 comments, only 0 read"* ]]
+}

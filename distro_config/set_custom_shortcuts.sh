@@ -41,7 +41,7 @@ verify_keybindings() {
     
     if [ $conflict_found -eq 1 ]; then
         print_status error "\nWarning: One or more keybinding conflicts detected!"
-        read -p "Do you want to continue anyway? [y/N] " -n 1 -r
+        read -p "Do you want to continue anyway? [y/N] " -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             print_status error "Aborting due to keybinding conflicts."
@@ -434,7 +434,7 @@ set_all_keybindings() {
     local bindings=("<Super>e" "<Super>r" "<Super>t" "<Super><Ctrl>s" "<Ctrl><Shift>c" "<Ctrl><Shift>v" "<Super>k" "<Ctrl><Shift>Escape" "<Super>c" "<Super>b" "<Super>j" "<Super><Shift>e" "<Super><Shift>m" "<Super><Alt>e" "<Super><Alt>m" "<Super><Shift>u")
     
     # Ask user if they want to verify conflicts
-    read -p "Do you want to verify for shortcut conflicts before proceeding? [Y/n] " -n 1 -r
+    read -p "Do you want to verify for shortcut conflicts before proceeding? [Y/n] " -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
         verify_keybindings "${bindings[@]}"

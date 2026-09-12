@@ -34,7 +34,7 @@ fi
 print_status "warning" "You are about to format $TARGET"
 lsblk -o NAME,SIZE,MODEL "$TARGET"
 echo ""
-read -rp "Are you absolutely sure? (y/n): " -n 1 CONFIRM
+read -rp "Are you absolutely sure? (y/n): " CONFIRM
 echo ""
 if [[ ! "${CONFIRM,,}" =~ ^[y]$ ]]; then
     print_status "success" "Operation cancelled."

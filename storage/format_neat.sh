@@ -253,7 +253,7 @@ select_filesystem() {
     
     # Ask about encryption
     if [ "$FS_TYPE" != "fat32" ]; then
-        read -p "$(print_status "config" "Enable encryption? (y/n): ")" -n 1 -r
+        read -p "$(print_status "config" "Enable encryption? (y/n): ")" -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             ENCRYPT="yes"

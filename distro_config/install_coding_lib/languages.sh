@@ -152,7 +152,11 @@ npm_global_install_all_nvm_versions() {
     local -a failed_versions=()
     while IFS= read -r ver; do
         print_status "info" "[$ver] npm install -g $package ..."
-        if run_or_echo nvm exec "${ver#v}" npm install -g "$package" 2>&1 | tee -a "$LOG_FILE"; then
+        # `if cmd | tee` tests TEE's status, not npm's -- tee succeeds whatever it is piped,
+        # so every version reported "installed", including the ones where nvm answered
+        # `N/A: version "vX" is not yet installed` (#339). PIPESTATUS[0] is npm's own.
+        run_or_echo nvm exec "${ver#v}" npm install -g "$package" 2>&1 | tee -a "$LOG_FILE"
+        if [ "${PIPESTATUS[0]}" -eq 0 ]; then
             print_status "success" "  $ver: installed"
         else
             print_status "error" "  $ver: failed"
@@ -181,19 +185,11 @@ npm_install_global() {
         versions=$(nvm ls --no-colors 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu)
 
         if [ -n "$versions" ]; then
-            echo -e "\n${CYAN}nvm-managed Node versions detected:${NC}"
-            while IFS= read -r ver; do
-                print_status "config" "  $ver"
-            done <<< "$versions"
-
-            echo -e "\n${YELLOW}Install ${package_spec} across ALL versions above? (y/n):${NC}"
-            echo -e "${CYAN}Ensures the package is available regardless of active Node version${NC}"
-            local install_all_nvm
-            read -r install_all_nvm
-            if [[ "$install_all_nvm" =~ ^[Yy]$ ]]; then
-                npm_global_install_all_nvm_versions "$package_spec"
-                return $?
-            fi
+            # Installing across every nvm version keeps the package available regardless of
+            # which Node is active. This used to ask, and was always answered yes (#339).
+            print_status "info" "nvm detected — installing $package_spec across all its Node versions"
+            npm_global_install_all_nvm_versions "$package_spec"
+            return $?
         fi
     fi
 
@@ -254,12 +250,8 @@ sync_globals_to_all_nvm_versions() {
         return 0
     fi
 
-    echo -e "${YELLOW}Sync the packages above to all nvm versions listed? (y/n):${NC}"
-    read -r confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        print_status "info" "Sync cancelled"
-        return 0
-    fi
+    # Picking this registry entry is already the request to sync (#339).
+    print_status "info" "Syncing the packages above to all nvm versions listed"
 
     local -a failed_packages=()
     for pkg in "${to_sync[@]}"; do
@@ -326,22 +318,14 @@ install_nodejs() {
             return 0
         fi
 
-        echo -e "\n${YELLOW}Do you want to install another version? (y/n):${NC}"
-        read -r install_another
-        if [[ ! "$install_another" =~ ^[Yy]$ ]]; then
-            print_status "info" "Skipping Node.js installation"
-            return 0
-        fi
+        # A version is already installed; adding another is a deliberate one-off, so the
+        # unattended run keeps what is there rather than asking (#339).
+        print_status "info" "Node.js already installed — keeping the existing version(s)"
+        return 0
     fi
 
-    echo -e "\n${YELLOW}Enter Node.js version to install (or press Enter for latest):${NC}"
-    echo -e "${CYAN}Examples: 20.11.0, 18.19.0, latest${NC}"
-    read -r node_version
-
-    if [ -z "$node_version" ]; then
-        node_version="latest"
-        print_status "info" "No version specified, installing latest Node.js"
-    fi
+    local node_version="latest"
+    print_status "info" "Installing latest Node.js"
 
     print_status "info" "Installing Node.js $node_version..."
     print_status "warning" "This may take a few minutes..."
@@ -426,11 +410,10 @@ install_nvm() {
         nvm_version=$(nvm --version 2>/dev/null || echo "unknown")
         print_status "warning" "NVM is already installed (version: $nvm_version)"
 
-        read -r -p "Do you want to reinstall NVM? (y/n): " reinstall_nvm
-        if [[ ! "$reinstall_nvm" =~ ^[Yy]$ ]]; then
-            print_status "info" "Skipping NVM installation"
-            return 0
-        fi
+        # Reinstalling a working nvm over itself buys nothing and risks the shell-rc edits
+        # below running twice, so an unattended run keeps it (#339).
+        print_status "info" "Keeping the existing NVM installation"
+        return 0
     fi
 
     print_status "info" "Installing required dependencies..."
@@ -471,44 +454,12 @@ install_nvm() {
             print_status "info" "NVM version: $nvm_version"
         fi
 
+        # LTS was the documented default of the 1-4 menu that used to stand here (#339).
         echo ""
-        echo -e "${YELLOW}Install a Node.js version with NVM?${NC}"
-        echo -e "${CYAN}1) LTS (recommended)${NC}"
-        echo -e "${CYAN}2) Latest${NC}"
-        echo -e "${CYAN}3) Specific version${NC}"
-        echo -e "${CYAN}4) Skip${NC}"
-        echo -e "${CYAN}Enter 1-4 (default: 1):${NC}"
-        read -r nodejs_choice
-
-        case "$nodejs_choice" in
-            1)
-                print_status "info" "Installing Node.js LTS..."
-                nvm install --lts 2>&1 | tee -a "$LOG_FILE"
-                nvm use --lts 2>&1 | tee -a "$LOG_FILE"
-                print_status "success" "Node.js LTS installed: $(node --version)"
-                ;;
-            2)
-                print_status "info" "Installing latest Node.js..."
-                nvm install node 2>&1 | tee -a "$LOG_FILE"
-                nvm use node 2>&1 | tee -a "$LOG_FILE"
-                print_status "success" "Node.js latest installed: $(node --version)"
-                ;;
-            3)
-                echo -e "${CYAN}Enter Node.js version (e.g., 18.17.0):${NC}"
-                read -r nodejs_version
-                if [ -n "$nodejs_version" ]; then
-                    print_status "info" "Installing Node.js $nodejs_version..."
-                    nvm install "$nodejs_version" 2>&1 | tee -a "$LOG_FILE"
-                    nvm use "$nodejs_version" 2>&1 | tee -a "$LOG_FILE"
-                    print_status "success" "Node.js $nodejs_version installed: $(node --version)"
-                else
-                    print_status "warning" "No version specified. Skipping Node.js installation."
-                fi
-                ;;
-            *)
-                print_status "info" "Skipping Node.js installation"
-                ;;
-        esac
+        print_status "info" "Installing Node.js LTS via nvm (the menu's default)..."
+        nvm install --lts 2>&1 | tee -a "$LOG_FILE"
+        nvm use --lts 2>&1 | tee -a "$LOG_FILE"
+        print_status "success" "Node.js LTS installed: $(node --version)"
 
         print_status "info" "Configuring shell initialization..."
 
@@ -554,16 +505,8 @@ install_npx() {
     print_status "section" "NPX INSTALLATION"
 
     if ! is_tool_installed "nodejs"; then
-        print_status "error" "Node.js is not installed! NPX requires Node.js."
-        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
-        read -r install_nodejs_first
-
-        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
-            install_nodejs
-        else
-            print_status "warning" "Skipping NPX installation as Node.js is required"
-            return 1
-        fi
+        print_status "info" "Node.js is not installed; installing it first (NPX requires it)"
+        install_nodejs
     fi
 
     if ! command_exists npm; then
@@ -578,35 +521,18 @@ install_npx() {
         npx_version=$(npx --version 2>/dev/null || echo "")
     fi
 
+    # npx ships bundled with npm 5.2+, and the standalone package is a deprecated shim. When
+    # a bundled npx is already there, installing over it is a downgrade -- so the unattended
+    # run keeps it and only installs when npx is genuinely missing (#339).
     if [ -n "$npx_version" ]; then
-        print_status "info" "NPX is already available (version: $npx_version)"
-        print_status "info" "NPX typically comes bundled with npm 5.2.0 and above"
-
-        echo -e "\n${YELLOW}Do you want to install/update NPX globally anyway? (y/n):${NC}"
-        echo -e "${CYAN}Note: This will install NPX globally via npm${NC}"
-        read -r update_npx
-        if [[ ! "$update_npx" =~ ^[Yy]$ ]]; then
-            print_status "info" "Keeping existing NPX version"
-            return 0
-        fi
-    else
-        print_status "info" "NPX not found in PATH"
-        print_status "info" "NPX typically comes with npm 5.2+. Your npm version: $(npm --version 2>/dev/null || echo 'unknown')"
-    fi
-
-    echo -e "\n${YELLOW}Install NPX globally via npm? (y/n):${NC}"
-    echo -e "${CYAN}This will install NPX via: npm install -g npx${NC}"
-    echo -e "${YELLOW}Note: If you have npm 5.2+, npx should already be available${NC}"
-    read -r install_npx
-    if [[ ! "$install_npx" =~ ^[Yy]$ ]]; then
-        print_status "info" "Skipping NPX installation"
+        print_status "info" "NPX is already available (version: $npx_version) — bundled with npm, keeping it"
         return 0
     fi
 
-    echo -e "\n${YELLOW}Enter NPX version to install (or press Enter for latest):${NC}"
-    echo -e "${CYAN}Examples: latest, 10.2.0, 7.1.0${NC}"
-    echo -e "${CYAN}Note: Latest versions of npx are included in npm. Installing separately is optional.${NC}"
-    read -r npx_version_input
+    print_status "info" "NPX not found in PATH"
+    print_status "info" "NPX typically comes with npm 5.2+. Your npm version: $(npm --version 2>/dev/null || echo 'unknown')"
+
+    local npx_version_input=""
 
     local package_spec="npx"
     if [ -n "$npx_version_input" ] && [ "$npx_version_input" != "latest" ]; then
@@ -664,15 +590,8 @@ install_typescript() {
     print_status "section" "TYPESCRIPT INSTALLATION"
 
     if ! is_tool_installed "nodejs"; then
-        print_status "error" "Node.js is not installed! TypeScript requires Node.js."
-        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
-        read -r install_nodejs_first
-        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
-            install_nodejs
-        else
-            print_status "warning" "Skipping TypeScript installation as Node.js is required"
-            return 1
-        fi
+        print_status "info" "Node.js is not installed; installing it first (TypeScript requires it)"
+        install_nodejs
     fi
 
     if ! command_exists npm; then
@@ -687,25 +606,11 @@ install_typescript() {
     if [ -n "$tsc_version" ]; then
         print_status "info" "TypeScript is already installed globally (version: $tsc_version)"
 
-        echo -e "\n${YELLOW}Do you want to update TypeScript to the latest version? (y/n):${NC}"
-        read -r update_ts
-        if [[ ! "$update_ts" =~ ^[Yy]$ ]]; then
-            print_status "info" "Keeping existing TypeScript version $tsc_version"
-            return 0
-        fi
+        print_status "info" "Updating TypeScript from $tsc_version to the latest version"
     fi
 
-    echo -e "\n${YELLOW}Install TypeScript globally? (y/n):${NC}"
-    echo -e "${CYAN}This will install TypeScript via: npm install -g typescript${NC}"
-    read -r install_ts
-    if [[ ! "$install_ts" =~ ^[Yy]$ ]]; then
-        print_status "info" "Skipping TypeScript installation"
-        return 0
-    fi
-
-    echo -e "\n${YELLOW}Enter TypeScript version to install (or press Enter for latest):${NC}"
-    echo -e "${CYAN}Examples: latest, 5.3.0, 5.2.0, 4.9.0${NC}"
-    read -r ts_version
+    # "latest" was the documented default of the version prompt that used to stand here (#339).
+    local ts_version=""
 
     local package_spec="typescript"
     if [ -n "$ts_version" ] && [ "$ts_version" != "latest" ]; then
@@ -755,15 +660,8 @@ install_nestjs() {
     print_status "section" "NESTJS CLI INSTALLATION"
 
     if ! is_tool_installed "nodejs"; then
-        print_status "error" "Node.js is not installed! NestJS CLI requires Node.js."
-        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
-        read -r install_nodejs_first
-        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
-            install_nodejs
-        else
-            print_status "warning" "Skipping NestJS CLI installation as Node.js is required"
-            return 1
-        fi
+        print_status "info" "Node.js is not installed; installing it first (NestJS CLI requires it)"
+        install_nodejs
     fi
 
     if ! command_exists npm; then
@@ -778,25 +676,11 @@ install_nestjs() {
     if [ -n "$nestjs_version" ]; then
         print_status "info" "NestJS CLI is already installed globally (version: $nestjs_version)"
 
-        echo -e "\n${YELLOW}Do you want to update NestJS CLI to the latest version? (y/n):${NC}"
-        read -r update_nestjs
-        if [[ ! "$update_nestjs" =~ ^[Yy]$ ]]; then
-            print_status "info" "Keeping existing NestJS CLI version $nestjs_version"
-            return 0
-        fi
+        print_status "info" "Updating NestJS CLI from $nestjs_version to the latest version"
     fi
 
-    echo -e "\n${YELLOW}Install NestJS CLI globally? (y/n):${NC}"
-    echo -e "${CYAN}This will install NestJS CLI via: npm install -g @nestjs/cli${NC}"
-    read -r install_nestjs
-    if [[ ! "$install_nestjs" =~ ^[Yy]$ ]]; then
-        print_status "info" "Skipping NestJS CLI installation"
-        return 0
-    fi
-
-    echo -e "\n${YELLOW}Enter NestJS CLI version to install (or press Enter for latest):${NC}"
-    echo -e "${CYAN}Examples: latest, 10.4.0, 10.3.2${NC}"
-    read -r nestjs_version_input
+    # "latest" was the documented default of the version prompt that used to stand here (#339).
+    local nestjs_version_input=""
 
     local package_spec="@nestjs/cli"
     if [ -n "$nestjs_version_input" ] && [ "$nestjs_version_input" != "latest" ]; then
@@ -896,22 +780,14 @@ install_rust() {
             return 0
         fi
 
-        echo -e "\n${YELLOW}Do you want to install another version? (y/n):${NC}"
-        read -r install_another
-        if [[ ! "$install_another" =~ ^[Yy]$ ]]; then
-            print_status "info" "Skipping Rust installation"
-            return 0
-        fi
+        # A version is already installed; adding another is a deliberate one-off, so the
+        # unattended run keeps what is there rather than asking (#339).
+        print_status "info" "Rust already installed — keeping the existing version(s)"
+        return 0
     fi
 
-    echo -e "\n${YELLOW}Enter Rust version to install (or press Enter for latest):${NC}"
-    echo -e "${CYAN}Examples: 1.75.0, 1.74.1, stable, nightly, latest${NC}"
-    read -r rust_version
-
-    if [ -z "$rust_version" ]; then
-        rust_version="latest"
-        print_status "info" "No version specified, installing latest stable Rust"
-    fi
+    local rust_version="latest"
+    print_status "info" "Installing latest stable Rust"
 
     print_status "info" "Installing Rust $rust_version..."
     print_status "warning" "This may take several minutes (Rust compiles from source)..."
@@ -1041,15 +917,20 @@ install_blueprintx() {
         return 1
     fi
 
-    echo -e "\n${YELLOW}Choose installation method:${NC}"
-    echo -e "  ${GREEN}1)${NC} apt  (Debian/Ubuntu — adds signed repository)"
-    if command_exists brew; then
-        echo -e "  ${GREEN}2)${NC} Homebrew"
+    # This menu had no documented default, so the method is derived from the repo's own
+    # App Installation Preference Order (distro_config/CLAUDE.md): a signed vendor
+    # repository first, Homebrew next, git clone as the portable fallback (#339).
+    local bpx_method
+    if command_exists apt-get; then
+        bpx_method=1
+        print_status "info" "Installing via apt (signed BlueprintX repository)"
+    elif command_exists brew; then
+        bpx_method=2
+        print_status "info" "Installing via Homebrew"
+    else
+        bpx_method=3
+        print_status "info" "Installing via git clone"
     fi
-    echo -e "  ${GREEN}3)${NC} Git clone (any platform)"
-    echo -e "  ${GREEN}4)${NC} Snap  (coming soon — not yet available)"
-    echo -e "\n${CYAN}Choice:${NC} "
-    read -r bpx_method
 
     case "$bpx_method" in
         1)

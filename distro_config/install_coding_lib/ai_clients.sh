@@ -193,15 +193,8 @@ install_claude_code() {
     print_status "section" "CLAUDE CODE INSTALLATION"
 
     if ! is_tool_installed "nodejs"; then
-        print_status "error" "Node.js is not installed! Claude Code requires Node.js."
-        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
-        read -r install_nodejs_first
-        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
-            install_nodejs
-        else
-            print_status "warning" "Skipping Claude Code installation as Node.js is required"
-            return 1
-        fi
+        print_status "info" "Node.js is not installed; installing it first (Claude Code requires it)"
+        install_nodejs
     fi
 
     if ! command_exists npm; then
@@ -217,24 +210,10 @@ install_claude_code() {
     fi
 
     if [ -n "$claude_version" ]; then
-        print_status "info" "Claude Code is already installed ($claude_version)"
-
-        echo -e "\n${YELLOW}Do you want to update Claude Code to the latest version? (y/n):${NC}"
-        read -r update_claude
-        if [[ ! "$update_claude" =~ ^[Yy]$ ]]; then
-            print_status "info" "Keeping existing Claude Code installation"
-            return 0
-        fi
+        print_status "info" "Claude Code is already installed ($claude_version) — updating to latest"
     fi
 
-    echo -e "\n${YELLOW}Install Claude Code globally? (y/n):${NC}"
-    echo -e "${CYAN}This will run: npm install -g @anthropic-ai/claude-code${NC}"
-    read -r install_claude
-    if [[ ! "$install_claude" =~ ^[Yy]$ ]]; then
-        print_status "info" "Skipping Claude Code installation"
-        return 0
-    fi
-
+    print_status "info" "Running: npm install -g @anthropic-ai/claude-code"
     print_status "warning" "This may take a moment..."
 
     npm_install_global "@anthropic-ai/claude-code" || {
@@ -257,15 +236,10 @@ install_claude_code() {
         fi
     fi
 
-    echo -e "\n${YELLOW}Do you want to run Claude login now? (y/n):${NC}"
-    read -r run_claude_login
-    if [[ "$run_claude_login" =~ ^[Yy]$ ]]; then
-        print_status "info" "Starting Claude login..."
-        claude login 2>&1 | tee -a "$LOG_FILE" || print_status "warning" "Claude login was not completed in this run"
-    else
-        print_status "info" "You can login later with: claude login"
-        print_status "info" "Or set API key manually: export ANTHROPIC_API_KEY=\"your_key_here\""
-    fi
+    # Never auto-launch the OAuth flow: it is interactive by nature and this installer runs
+    # unattended inside the `make run` chain (#339).
+    print_status "info" "You can login later with: claude login"
+    print_status "info" "Or set API key manually: export ANTHROPIC_API_KEY=\"your_key_here\""
 
     echo ""
     print_status "info" "Claude Code usage:"
@@ -284,15 +258,8 @@ install_github_copilot_cli() {
     print_status "section" "GITHUB COPILOT CLI INSTALLATION"
 
     if ! is_tool_installed "nodejs"; then
-        print_status "error" "Node.js is not installed! GitHub Copilot CLI requires Node.js."
-        echo -e "\n${YELLOW}Do you want to install Node.js first? (y/n):${NC}"
-        read -r install_nodejs_first
-        if [[ "$install_nodejs_first" =~ ^[Yy]$ ]]; then
-            install_nodejs
-        else
-            print_status "warning" "Skipping GitHub Copilot CLI installation as Node.js is required"
-            return 1
-        fi
+        print_status "info" "Node.js is not installed; installing it first (Copilot CLI requires it)"
+        install_nodejs
     fi
 
     if ! command_exists npm; then
@@ -308,72 +275,18 @@ install_github_copilot_cli() {
     fi
 
     if [ -n "$copilot_version" ]; then
-        print_status "info" "GitHub Copilot CLI is already installed (version: $copilot_version)"
-
-        echo -e "\n${YELLOW}Do you want to update GitHub Copilot CLI to the latest version? (y/n):${NC}"
-        read -r update_copilot
-        if [[ ! "$update_copilot" =~ ^[Yy]$ ]]; then
-            print_status "info" "Keeping existing GitHub Copilot CLI version $copilot_version"
-            return 0
-        fi
+        print_status "info" "GitHub Copilot CLI is already installed (version: $copilot_version) — updating to latest"
     fi
 
-    echo -e "\n${YELLOW}Install GitHub Copilot CLI? (y/n):${NC}"
-    read -r install_copilot
-    if [[ ! "$install_copilot" =~ ^[Yy]$ ]]; then
-        print_status "info" "Skipping GitHub Copilot CLI installation"
-        return 0
-    fi
-
-    echo -e "\n${YELLOW}Choose installation method:${NC}"
-    echo -e "${CYAN}1) npm (recommended)${NC}"
-    if command_exists brew; then
-        echo -e "${CYAN}2) Homebrew${NC}"
-    fi
-    if command_exists brew; then
-        echo -e "${CYAN}Enter 1 or 2 (default: 1):${NC}"
-    else
-        echo -e "${CYAN}Enter 1 (default: 1):${NC}"
-    fi
-    read -r method_choice
-
-    local install_method package_name
-    if [ "$method_choice" = "2" ] && command_exists brew; then
-        install_method="brew"
-        print_status "info" "Using Homebrew for installation"
-    else
-        install_method="npm"
-        print_status "info" "Using npm for installation"
-    fi
-
-    echo -e "\n${YELLOW}Install stable or prerelease version?${NC}"
-    echo -e "${CYAN}1) Stable (recommended)${NC}"
-    echo -e "${CYAN}2) Prerelease${NC}"
-    echo -e "${CYAN}Enter 1 or 2 (default: 1):${NC}"
-    read -r version_choice
+    # npm is the recommended method and the only one every supported distro has after
+    # bootstrapping, and stable is the channel a setup run wants. Both were prompts that
+    # were always answered the same way (#339) -- the registry menu is already the consent.
+    local package_name="@github/copilot"
+    print_status "info" "Installing GitHub Copilot CLI stable version via npm..."
+    print_status "warning" "This may take a moment..."
 
     local install_ok=true
-    if [ "$install_method" = "brew" ]; then
-        if [ "$version_choice" = "2" ]; then
-            package_name="copilot-cli@prerelease"
-            print_status "info" "Installing GitHub Copilot CLI prerelease version via Homebrew..."
-        else
-            package_name="copilot-cli"
-            print_status "info" "Installing GitHub Copilot CLI stable version via Homebrew..."
-        fi
-        print_status "warning" "This may take a moment..."
-        run_or_echo brew install "$package_name" 2>&1 | tee -a "$LOG_FILE" || install_ok=false
-    else
-        if [ "$version_choice" = "2" ]; then
-            package_name="@github/copilot@prerelease"
-            print_status "info" "Installing GitHub Copilot CLI prerelease version via npm..."
-        else
-            package_name="@github/copilot"
-            print_status "info" "Installing GitHub Copilot CLI stable version via npm..."
-        fi
-        print_status "warning" "This may take a moment..."
-        npm_install_global "$package_name" || install_ok=false
-    fi
+    npm_install_global "$package_name" || install_ok=false
 
     if $install_ok; then
         copilot_version=$(timeout 5 copilot --version 2>/dev/null | head -n1 | sed 's/.*v//' || echo "")
@@ -384,12 +297,7 @@ install_github_copilot_cli() {
             print_status "success" "GitHub Copilot CLI installed successfully"
         fi
 
-        local update_cmd
-        if [ "$install_method" = "brew" ]; then
-            update_cmd="brew upgrade $package_name"
-        else
-            update_cmd="npm update -g $package_name"
-        fi
+        local update_cmd="npm update -g $package_name"
 
         print_status "info" "Verifying installation..."
         if command_exists copilot; then
@@ -424,22 +332,7 @@ install_qwen() {
     fi
 
     if [ -n "$qwen_version" ]; then
-        print_status "info" "Qwen Code is already installed ($qwen_version)"
-
-        echo -e "\n${YELLOW}Do you want to reinstall/update Qwen Code? (y/n):${NC}"
-        read -r update_qwen
-        if [[ ! "$update_qwen" =~ ^[Yy]$ ]]; then
-            print_status "info" "Keeping existing Qwen Code installation"
-            return 0
-        fi
-    fi
-
-    echo -e "\n${YELLOW}Install Qwen Code? (y/n):${NC}"
-    echo -e "${CYAN}This will run the official Qwen Code installer script${NC}"
-    read -r install_qwen_confirm
-    if [[ ! "$install_qwen_confirm" =~ ^[Yy]$ ]]; then
-        print_status "info" "Skipping Qwen Code installation"
-        return 0
+        print_status "info" "Qwen Code is already installed ($qwen_version) — reinstalling to latest"
     fi
 
     if ! command_exists curl; then
@@ -450,27 +343,33 @@ install_qwen() {
     print_status "info" "Downloading and running Qwen Code installer..."
     print_status "warning" "This may take a moment..."
 
-    if bash -c "$(curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen.sh)" -s --source qwenchat 2>&1 | tee -a "$LOG_FILE"; then
-        print_status "success" "Qwen Code installed successfully"
+    # The vendor installer ends in an unconditional `exec qwen`, which replaces itself with
+    # the interactive TUI and stops the whole `make run` chain until someone quits it (#339).
+    # Its argument parser exits 1 on any flag but -s/--source and -h/--help, so there is no
+    # opt-out to pass -- redirecting stdin is the only lever on our side of the boundary, and
+    # `qwen` with stdin at EOF exits immediately instead of waiting.
+    #
+    # That same `exec` is why the pipeline's status is not the install's: it reports the TUI's
+    # exit code (1 on the EOF path), and `| tee` would report tee's 0 regardless. So success
+    # is taken from the verification below, which is what actually answers the question.
+    bash -c "$(curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen.sh)" \
+        -s --source qwenchat < /dev/null 2>&1 | tee -a "$LOG_FILE"
 
-        export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+    export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
 
-        print_status "info" "Verifying Qwen Code installation..."
-        if command_exists qwen; then
-            print_status "success" "Qwen Code is available: $(timeout 10 qwen --version 2>/dev/null | head -n1 || echo 'Not available')"
-        else
-            print_status "warning" "qwen command not found in PATH. You may need to reload your shell."
-        fi
-
-        echo ""
-        print_status "info" "Qwen Code usage:"
-        print_status "config" "  Check version: qwen --version"
-        print_status "config" "  Run in project: cd /path/to/project && qwen"
-        print_status "config" "  Update: re-run the installer script"
-    else
-        print_status "error" "Failed to install Qwen Code"
+    print_status "info" "Verifying Qwen Code installation..."
+    if ! command_exists qwen; then
+        print_status "error" "Failed to install Qwen Code — qwen not found in PATH"
         return 1
     fi
+
+    print_status "success" "Qwen Code is available: $(timeout 10 qwen --version 2>/dev/null | head -n1 || echo 'Not available')"
+
+    echo ""
+    print_status "info" "Qwen Code usage:"
+    print_status "config" "  Check version: qwen --version"
+    print_status "config" "  Run in project: cd /path/to/project && qwen"
+    print_status "config" "  Update: re-run the installer script"
 }
 
 # ============================================================================
@@ -483,12 +382,7 @@ install_codex() {
     if command_exists codex; then
         print_status "info" "OpenAI Codex CLI is already installed ($(timeout 10 codex --version 2>/dev/null | head -n1 || echo "unknown"))"
 
-        echo -e "\n${YELLOW}Do you want to reinstall/update OpenAI Codex CLI? (y/n):${NC}"
-        read -r update_codex
-        if [[ ! "$update_codex" =~ ^[Yy]$ ]]; then
-            print_status "info" "Keeping existing OpenAI Codex CLI installation"
-            return 0
-        fi
+        print_status "info" "Reinstalling OpenAI Codex CLI to the latest version"
     fi
 
     if ! command_exists npm; then
@@ -534,12 +428,7 @@ install_kimi() {
     if command_exists kimi; then
         print_status "info" "Kimi Code CLI is already installed ($(timeout 10 kimi --version 2>/dev/null | head -n1 || echo "unknown"))"
 
-        echo -e "\n${YELLOW}Do you want to reinstall/update Kimi Code CLI? (y/n):${NC}"
-        read -r update_kimi
-        if [[ ! "$update_kimi" =~ ^[Yy]$ ]]; then
-            print_status "info" "Keeping existing Kimi Code CLI installation"
-            return 0
-        fi
+        print_status "info" "Reinstalling Kimi Code CLI to the latest version"
     fi
 
     if ! command_exists npm; then

@@ -53,3 +53,18 @@ teardown() {
         fi
     done
 }
+
+# Issue #342: an uninstall_* entry placed after its install_* counterpart in
+# INSTALL_REGISTRY runs during Full Installation too (entry order = run
+# order), immediately undoing the install it just did. Uninstallers must stay
+# plain functions the user invokes manually, never registry entries.
+@test "no INSTALL_REGISTRY entry runs an uninstall_* function in Full Installation" {
+    local entry fn _label _folder _desktop
+    for entry in "${INSTALL_REGISTRY[@]}"; do
+        IFS=':' read -r fn _label _folder _desktop <<< "$entry"
+        if [[ "$fn" == uninstall_* ]]; then
+            echo "INSTALL_REGISTRY runs '$fn' during Full Installation — uninstallers must not be registered" >&2
+            return 1
+        fi
+    done
+}

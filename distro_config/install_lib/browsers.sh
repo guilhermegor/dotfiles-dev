@@ -55,8 +55,17 @@ install_chrome() {
             ;;
     esac
 
-    print_status "success" "Google Chrome installed"
+    local chrome_installed=0
+    command_exists google-chrome && chrome_installed=1
+
     cd - > /dev/null || return 1
+
+    if [ "$chrome_installed" -eq 1 ]; then
+        print_status "success" "Google Chrome installed"
+    else
+        print_status "warning" "Google Chrome installation could not be verified"
+        return 1
+    fi
 }
 
 install_opera() {
@@ -135,7 +144,12 @@ https://brave-browser-apt-release.s3.brave.com/ stable main" \
             ;;
     esac
 
-    print_status "success" "Brave installed"
+    if command_exists brave-browser || command_exists brave; then
+        print_status "success" "Brave installed"
+    else
+        print_status "warning" "Brave installation could not be verified"
+        return 1
+    fi
 }
 
 # ============================================================================

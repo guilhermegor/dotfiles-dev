@@ -362,12 +362,14 @@ install_rustdesk() {
             ;;
     esac
 
+    local rustdesk_verified=0
     if command_exists rustdesk || dpkg -l 2>/dev/null | grep -q "^ii  rustdesk " || flatpak list 2>/dev/null | grep -q "com.rustdesk.RustDesk"; then
         print_status "success" "RustDesk is ready to use"
         print_status "info" "RustDesk: Open-source remote desktop software"
         print_status "config" "Alternative to TeamViewer and AnyDesk"
         print_status "config" "Launch with: rustdesk"
         print_status "config" "You can set up your own relay server for better performance"
+        rustdesk_verified=1
 
         if command_exists rustdesk; then
             rustdesk --version 2>&1 | head -n1 >> "$LOG_FILE" || true
@@ -380,6 +382,7 @@ install_rustdesk() {
     fi
 
     cd - > /dev/null || return 1
+    [ "$rustdesk_verified" -eq 1 ] || return 1
 }
 
 # ============================================================================
@@ -441,6 +444,7 @@ install_insync() {
                         print_status "success" "Insync started"
                     else
                         print_status "warning" "Insync installed but command not found"
+                        return 1
                     fi
                 else
                     print_status "error" "Failed to install Insync package"

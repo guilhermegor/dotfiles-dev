@@ -1083,7 +1083,7 @@ install_utilities() {
         fi
     done
 
-    install_4k_video_downloader
+    install_4k_video_downloader || print_status "warning" "4K Video Downloader Plus installation failed — continuing with system utilities"
 
     print_status "info" "Installing Piper (gaming device configuration)..."
     case "$PACKAGE_MANAGER" in

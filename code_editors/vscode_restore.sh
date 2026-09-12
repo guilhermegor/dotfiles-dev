@@ -278,7 +278,7 @@ main() {
     # List available backups
     if list_backups; then
         echo ""
-        read -p "$(echo -e ${YELLOW}Do you want to restore from backup? [Y/n]: ${NC})" -n 1 -r
+        read -p "$(echo -e ${YELLOW}Do you want to restore from backup? [Y/n]: ${NC})" -r
         echo ""
         
         if [[ $REPLY =~ ^[Nn]$ ]]; then
@@ -298,7 +298,7 @@ main() {
     echo "  3. Show manual instructions only"
     echo ""
     
-    read -p "$(echo -e ${YELLOW}Enter choice [1-3]: ${NC})" -n 1 choice
+    read -p "$(echo -e ${YELLOW}Enter choice [1-3]: ${NC})" choice
     echo ""
     
     case $choice in

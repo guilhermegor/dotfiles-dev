@@ -605,6 +605,7 @@ configure_gsconnect() {
         print_status "success" "GSConnect enabled"
     else
         print_status "warning" "GSConnect extension not found. Install it from extensions.gnome.org"
+        return 1
     fi
 }
 
@@ -1036,6 +1037,7 @@ verify_openlogi() {
     else
         print_status "warning" "openlogi could not be verified"
         print_status "info" "Install manually from: https://openlogi.org/download/linux"
+        return 1
     fi
 }
 

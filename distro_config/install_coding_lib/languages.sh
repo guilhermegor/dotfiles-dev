@@ -152,7 +152,11 @@ npm_global_install_all_nvm_versions() {
     local -a failed_versions=()
     while IFS= read -r ver; do
         print_status "info" "[$ver] npm install -g $package ..."
-        if run_or_echo nvm exec "${ver#v}" npm install -g "$package" 2>&1 | tee -a "$LOG_FILE"; then
+        # `if cmd | tee` tests TEE's status, not npm's -- tee succeeds whatever it is piped,
+        # so every version reported "installed", including the ones where nvm answered
+        # `N/A: version "vX" is not yet installed` (#339). PIPESTATUS[0] is npm's own.
+        run_or_echo nvm exec "${ver#v}" npm install -g "$package" 2>&1 | tee -a "$LOG_FILE"
+        if [ "${PIPESTATUS[0]}" -eq 0 ]; then
             print_status "success" "  $ver: installed"
         else
             print_status "error" "  $ver: failed"
@@ -181,19 +185,11 @@ npm_install_global() {
         versions=$(nvm ls --no-colors 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu)
 
         if [ -n "$versions" ]; then
-            echo -e "\n${CYAN}nvm-managed Node versions detected:${NC}"
-            while IFS= read -r ver; do
-                print_status "config" "  $ver"
-            done <<< "$versions"
-
-            echo -e "\n${YELLOW}Install ${package_spec} across ALL versions above? (y/n):${NC}"
-            echo -e "${CYAN}Ensures the package is available regardless of active Node version${NC}"
-            local install_all_nvm
-            read -r install_all_nvm
-            if [[ "$install_all_nvm" =~ ^[Yy]$ ]]; then
-                npm_global_install_all_nvm_versions "$package_spec"
-                return $?
-            fi
+            # Installing across every nvm version keeps the package available regardless of
+            # which Node is active. This used to ask, and was always answered yes (#339).
+            print_status "info" "nvm detected — installing $package_spec across all its Node versions"
+            npm_global_install_all_nvm_versions "$package_spec"
+            return $?
         fi
     fi
 

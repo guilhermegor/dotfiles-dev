@@ -104,10 +104,16 @@ repo_slug() {
 
 sweep_worktrees() {
 	local cwd="$1"
-	local wt b st un any=0
+	local wt b st un any=0 main_wt
+	# Every linked worktree, not just `worktrees/agent-*`. The old filter matched the name the
+	# harness happens to pick, so a worktree created by hand (or by a resumed agent, named
+	# `worktrees/issue-356`) held two uncommitted files while this step printed "none" — the
+	# exact silence the step exists to break (dotfiles-dev#162 is about residue, not naming).
+	# The main checkout is still skipped: the operator's own dirty tree is not agent residue.
+	main_wt="$($GIT -C "$cwd" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')"
 	while read -r wt; do
 		[ -n "$wt" ] || continue
-		case "$wt" in *worktrees/agent-*) ;; *) continue ;; esac
+		[ "$wt" = "$main_wt" ] && continue
 		b="$($GIT -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null)"
 		st="$($GIT -C "$wt" status --porcelain 2>/dev/null | wc -l)"
 		un="$($GIT -C "$wt" rev-list --count "origin/$b..$b" 2>/dev/null || echo no-remote)"

@@ -107,7 +107,7 @@ STUB
     [[ "$output" == "UNKNOWN" ]]
 }
 
-# --- sweep_worktrees: residue is scoped to worktrees/agent-*, exactly the #162 pattern -----------
+# --- sweep_worktrees: every linked worktree is residue, whatever it is named ---------------------
 
 @test "a clean worktree reports none" {
     run sweep_worktrees "$REPO"
@@ -115,10 +115,26 @@ STUB
     [[ "$output" == "    none" ]]
 }
 
-@test "uncommitted changes in the current tree are reported" {
-    # git worktree list always includes the main tree itself; give it a name that matches the
-    # residue filter (case "$wt" in *worktrees/agent-*) so this test exercises the report line,
-    # not just the "no matching path" skip.
+@test "a worktree not named agent-* is residue too" {
+    # A resumed agent's worktree was created by hand as `worktrees/issue-356`; the old
+    # `*worktrees/agent-*` filter skipped it and the step printed "none" while it held two
+    # uncommitted files.
+    WT="$REPO/worktrees/issue-356"
+    mkdir -p "$(dirname "$WT")"
+    git worktree add -q -b issuebranch "$WT" >/dev/null
+    echo dirty > "$WT/f.txt"
+    run sweep_worktrees "$REPO"
+    [[ "$output" == *"issuebranch: 1 uncommitted"* ]]
+}
+
+@test "the main checkout is not reported as residue" {
+    echo dirty > "$REPO/mainfile.txt"
+    run sweep_worktrees "$REPO"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "    none" ]]
+}
+
+@test "uncommitted changes in a linked worktree are reported" {
     WT="$REPO/worktrees/agent-test"
     mkdir -p "$(dirname "$WT")"
     git worktree add -q -b wtbranch "$WT" >/dev/null

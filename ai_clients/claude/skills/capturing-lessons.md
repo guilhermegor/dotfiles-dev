@@ -1,6 +1,6 @@
 ---
 name: s:capturing-lessons
-description: Use when capturing or writing a lesson — logging a user correction to the project lessons log, or saving a generalizable scaffold/toolchain improvement to a lessons store and deciding which store (BlueprintX vs dotfiles-dev) it belongs in. Load it the moment you decide "this is worth capturing", before writing the lesson.
+description: Use when capturing or writing a lesson — logging a user correction to the project lessons log, or saving a generalizable scaffold/toolchain improvement to a lessons store and deciding which store (BlueprintX, dotfiles-dev, or any other repo) it belongs in. Load it the moment you decide "this is worth capturing", before writing the lesson.
 effort: medium
 argument-hint: [none]
 allowed-tools: Read Glob Grep Write Edit
@@ -53,8 +53,8 @@ this skill.)*
 tooling, convention, guardrail, command/skill/agent/rule/hook/config/installer change — **not**
 a project-specific business rule. Capture it **before moving on**.
 
-There are two stores with different backport targets. **Route by where the fix ultimately
-lands, never by what the lesson is about.**
+There are three stores, two with a fixed backport target and one with none. **Route by where the
+fix ultimately lands, never by what the lesson is about.**
 
 ### Which store?
 
@@ -73,22 +73,46 @@ lands, never by what the lesson is about.**
   Format: `# Title` then `Area / Lesson / Why / Apply to (dotfiles-dev) / PR / Origin`.
   Backport target: `~/github/dotfiles-dev/ai_clients/claude/`, each landing via its own PR.
 
+- Fix edits neither of the above — the repo is a standalone project (a scaffolded-but-independent
+  app, or a future extraction like the `determinism` package, dotfiles-dev#119) with **no**
+  template to re-scaffold from and **no** shared toolchain to reinstall — a fresh environment can
+  only inherit the fix by that specific repo being fixed again
+  → **third-party store** `~/.claude/memory/lessons-other/`.
+  Format: `# Title` then `Lesson / Why / Portable to / Status / Origin`. `Portable to` is
+  freeform: name a sibling repo likely to hit the same seam, or `unclear` when none is known yet —
+  it exists so a *future* standalone repo can grep for this store's lessons, not because anything
+  backports automatically. Backport target: **none** — see the mirror exception below.
+
 **Decision test** — ask *"how does a fresh environment inherit this fix?"*: via **scaffolding a
 new project** → BlueprintX; via **reinstalling the Claude toolchain (`make ai_clients`)**,
-surviving across all projects → dotfiles-dev.
+surviving across all projects → dotfiles-dev; via **neither — only by fixing that one repo again**
+→ the third-party store.
 
 A lesson *about* the dotfiles toolchain whose fix lands in a **template** is a **BlueprintX**
 lesson; a hook that helps *capture* scaffold lessons is a **dotfiles-dev** lesson. If one
 finding needs changes in **both** a template and the toolchain, write **two** lessons, one per
 store, cross-referencing. Misrouting parks a fix in a queue that never applies it.
 
-### Steps for either store
+⚠️ **All three stores are global and concurrently written — by other sessions, other projects, at
+the same time as you.** Measured 2026-09-13: three different sessions wrote into two of the
+stores inside one 40-minute window. Never assume a file you didn't write yourself is idle: before
+touching a store's `README.md` or a lesson file, re-read it — a stale in-memory copy from earlier
+in the session can silently lose another session's concurrent write when you overwrite the whole
+file instead of appending. When *auditing* a store for what changed recently (e.g. deciding what a
+given round captured), detect a candidate by **modification time**, then attribute it by
+**content** (does it actually name this round's work?) — recency alone attributes other sessions'
+lessons to work that never touched them.
+
+### Steps for any store
 
 1. Save it as **one file per lesson** (kebab-case) in the store, using that store's format.
 2. Add it to the store's `README.md` index.
 3. Mirror it in the originating repo as a **git-ignored**, docs-site-excluded note
    (`docs/blueprintx-lessons.md` or `docs/dotfiles-dev-lessons.md`) — *unless* the origin repo
-   **is** the backport target repo, where the same-repo mirror is redundant (skip it).
+   **is** the backport target repo, where the same-repo mirror is redundant (skip it), **or the
+   store is `lessons-other`**, which never gets a mirror: it has no backport target other than
+   the origin repo itself, so a mirror there would just restate the file already sitting beside
+   it — the same "no distinct target" logic, applied unconditionally instead of per-lesson.
 
    **Every mirror entry MUST carry a `- **Source:** \`<filename>.md\`` field — a required
    field alongside Tier/Area, Lesson, Why, and Origin, never a footnote.** The audit that
@@ -114,7 +138,11 @@ store, cross-referencing. Misrouting parks a fix in a queue that never applies i
    If the mirror file has a `## Source files` index near the top, append the basename
    there too, in the same call — that index gets the same mandatory-field treatment, not
    optional bookkeeping.
-4. Later, apply the captured lessons to the backport target so future work inherits them.
+4. Later, apply the captured lessons to the backport target so future work inherits them — for
+   `lessons-other`, this step is a no-op: the origin repo already **is** the backport target, so
+   fixing it once already applied the lesson.
 
 Full conventions: `~/.claude/memory/lessons/README.md` and
-`~/.claude/memory/lessons-dotfiles/README.md`.
+`~/.claude/memory/lessons-dotfiles/README.md`. `lessons-other/` has no README yet (nothing has
+been written there) — its format is fully specified inline above; create the README index the
+first time a lesson lands there.

@@ -23,18 +23,32 @@
 # to stdout — NOT via `print_status` (status/diagnostics go to stderr). Kept
 # dependency-free (no lib/common.sh) so it runs early and never fails a session.
 # Fails OPEN everywhere: any uncertainty is skipped, never a hard error.
+#
+# Concurrent README appends (dotfiles-dev#356): the stores are global and written by
+# multiple sessions at once (measured — three sessions inside one 40-minute window,
+# dotfiles-dev#356). Two sessions appending a new index line to the same store
+# README.md at once COULD interleave and lose one line — investigated: neither
+# `~/.claude/memory/lessons/` nor `lessons-dotfiles/` is version-controlled, so there
+# is no history to confirm it has ever actually happened, and no clobbered README has
+# been observed. Per the issue's own instruction, NOT adding a lock speculatively —
+# add one if a lost/interleaved README line is ever actually observed.
 set -uo pipefail
 
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
-# Both generalizable-lessons stores, each as "dir|mirror-basename|kind|target-repo".
+# All generalizable-lessons stores, each as "dir|mirror-basename|kind|target-repo".
 # kind=blueprintx also gets the Tier-line presence check (tier is an OPEN field:
 # an unknown tier value is a no-op, never a rejection — only a MISSING line flags).
 # target-repo is the store's backport target: a lesson that ORIGINATED in that repo
 # needs no mirror there (the mirror would be redundant), so the mirror check skips it.
+# target-repo "-" (lessons-other, dotfiles-dev#356) is a sentinel, not a repo name: that
+# store has NO distinct backport target — a fix there lands in the origin repo itself, so
+# check_mirrors() below treats "-" as "never expect a mirror for this store," in every repo,
+# not just when repo==target-repo.
 LESSON_STORES=(
 	"$CLAUDE_DIR/memory/lessons|blueprintx-lessons|blueprintx|blueprintx"
 	"$CLAUDE_DIR/memory/lessons-dotfiles|dotfiles-dev-lessons|dotfiles|dotfiles-dev"
+	"$CLAUDE_DIR/memory/lessons-other|lessons-other|other|-"
 )
 
 resolve_cwd() {
@@ -131,8 +145,11 @@ check_mirrors() {
 		IFS='|' read -r store mirror_base kind target_repo <<<"$entry"
 		[ -d "$store" ] || continue
 		# When this repo IS the store's backport target, the same-repo mirror is
-		# redundant by convention and deliberately absent — never flag it.
+		# redundant by convention and deliberately absent — never flag it. target-repo
+		# "-" (lessons-other) means the store has no distinct backport target at all —
+		# never flag it, in any repo, not just when repo happens to equal "-".
 		[ "$repo" = "$target_repo" ] && continue
+		[ "$target_repo" = "-" ] && continue
 		mirror="$cwd/docs/$mirror_base.md"
 		for file in "$store"/*.md; do
 			[ -e "$file" ] || continue
@@ -145,6 +162,15 @@ check_mirrors() {
 				add_gap "[lessons] '$name' originated here but docs/$mirror_base.md mirror is missing"
 			elif ! grep -qF "$name" "$mirror"; then
 				add_gap "[lessons] '$name' originated here but is not in docs/$mirror_base.md"
+			elif [ "$file" -nt "$mirror" ]; then
+				# Filename-only matching (dotfiles-dev#356): the name was in the mirror
+				# BEFORE an append, so the presence check above stays green forever even
+				# when the append itself never propagated. Measured: a follow-up append to
+				# a-vendor-installer-can-exec-a-tui-and-own-your-chain.md reached its
+				# mirror only by hand. mtime-newer is a heuristic, not proof (the mirror
+				# may just have been written first in the same edit) — worded as
+				# "verify", same register as the branch/upstream gaps above.
+				add_gap "[lessons] '$name' changed after docs/$mirror_base.md — verify the append still matches (mtime-newer, not filename-only)"
 			fi
 		done
 	done
@@ -323,7 +349,7 @@ emit_report() {
 	printf '%s\n' "  - [ ] Completeness BOTH ways (above): resolve each 'orphan' open issue (write its lesson or list it under the store README's 'Issues not born of a lesson') and each 'genuinely unaccounted' lesson (file the issue or record a delivered/advisory/superseded Status:) — a one-directional check hides the B-side orphan."
 	printf '%s\n' "  - [ ] 'genuinely unaccounted' above is the debt that is real: no PR ref and no delivered/advisory/superseded Status. Zero is expected only right after a triage."
 	printf '%s\n' "  - [ ] Checkpoint: project memory has a resume point covering this session's work."
-	printf '%s\n' "  - [ ] Lessons: every generalizable finding is captured in the right store (BlueprintX vs dotfiles-dev) — routed by where the fix lands."
+	printf '%s\n' "  - [ ] Lessons: every generalizable finding is captured in the right store (BlueprintX, dotfiles-dev, or lessons-other) — routed by where the fix lands."
 }
 
 write_handoff() {

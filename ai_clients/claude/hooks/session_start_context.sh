@@ -14,6 +14,9 @@
 # fails the session.
 set -uo pipefail
 
+# shellcheck source=lib/deploy_drift.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/deploy_drift.sh"
+
 emit_cross_project_context() {
 	local claude_dir lessons_store proving_mem cwd
 	claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
@@ -253,6 +256,7 @@ emit_fanout_status() {
 
 main() {
 	emit_cross_project_context
+	emit_deploy_drift_status
 	emit_fanout_status
 	exit 0
 }

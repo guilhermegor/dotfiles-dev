@@ -1129,8 +1129,12 @@ install_utilities() {
 # ============================================================================
 # REGISTRY
 # ============================================================================
-# Entry order = run order. uninstall_dim_calendar_events is exposed in custom
-# mode but not desktop-bound (no folder placement).
+# Entry order = run order. uninstall_dim_calendar_events is NOT registered
+# here on purpose (issue #342): a registry entry runs during Full
+# Installation too, which would install the extension and immediately
+# uninstall it again. It stays a plain function — run it manually with
+# `bash -c 'source distro_config/install_lib/system_utils.sh; uninstall_dim_calendar_events'`
+# if you need to remove the extension.
 
 INSTALL_REGISTRY+=(
     "install_utilities:System Utilities::"
@@ -1146,6 +1150,5 @@ INSTALL_REGISTRY+=(
     "install_flatpak_apps:Flatpak Applications::"
     "install_vitals:Vitals System Monitor::"
     "install_dim_calendar_events:Calendar Events Enhancement::"
-    "uninstall_dim_calendar_events:Uninstall Calendar Events Extension::"
     "configure_gsconnect:GSConnect::"
 )

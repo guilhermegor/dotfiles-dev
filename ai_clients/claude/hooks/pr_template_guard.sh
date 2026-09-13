@@ -13,6 +13,10 @@
 
 set -u
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/gh_body_guard_common.sh
+source "$SCRIPT_DIR/lib/gh_body_guard_common.sh"
+
 # Fail open if jq (used to parse the hook payload) is unavailable.
 command -v jq >/dev/null 2>&1 || exit 0
 
@@ -128,21 +132,6 @@ find_template() {
     return 0
 }
 
-# Echo the OWNER/NAME value passed to --repo/-R, if present. gh also accepts a full URL for
-# --repo; that form is not parsed here.
-# ponytail: shorthand covers the issue's repro and the overwhelmingly common case — extend to a
-# URL form only if that ever bites.
-extract_target_repo() {
-    local s="$1" re val
-    re='(--repo[[:space:]=]+|-R[[:space:]]+)("[^"]+"|'\''[^'\'']+'\''|[^[:space:]]+)'
-    [[ "$s" =~ $re ]] || return 0
-    val="${BASH_REMATCH[2]}"
-    val="${val#[\"\']}"   # strip a leading quote, if any
-    val="${val%[\"\']}"   # strip a trailing quote, if any
-    [[ "$val" == */* ]] || return 0   # not owner/name shorthand → nothing to resolve from it
-    printf '%s' "$val"
-}
-
 block_unresolved_repo() {
     # A verdict from a template we could not locate is "unknown", not "approved" — same principle
     # as block_unresolved_body_file below. This must never share text with the "Missing required
@@ -162,13 +151,6 @@ block_unresolved_repo() {
         echo "gh command."
     } >&2
     exit 2
-}
-
-# True if the command carries a --body-file/-F flag at all — regardless of whether its value
-# resolves to a readable file. Lets the caller tell "no body-file given" (scan inline command)
-# apart from "body-file given but unreadable" (fail loud). Mirrors the flag set in extract_body_file.
-has_body_file_flag() {
-    printf '%s' "$1" | grep -Eq -- '(--body-file[[:space:]=]|-F[[:space:]])'
 }
 
 block_unresolved_body_file() {
@@ -208,48 +190,6 @@ block_unresolved_body_file() {
         fi
     } >&2
     exit 2
-}
-
-extract_body_file() {
-    # Echo the path passed to --body-file/-F, if present. Scraping the flag out
-    # of a raw shell command string has two fragilities, both handled here:
-    #   * the value may be bare, "double-quoted", or 'single-quoted' (a quoted
-    #     path may even contain spaces) — capture the quoted token whole, then
-    #     strip the surrounding quotes;
-    #   * the literal "--body-file"/"-F " may ALSO appear inside another
-    #     argument (e.g. a --title that mentions it), so taking the first match
-    #     grabs the wrong token. Disambiguate with the one invariant a real
-    #     body-file value always satisfies: it names a readable file on disk.
-    # Walk every candidate left-to-right and return the first readable one; if
-    # none is readable the caller falls back to scanning the inline command.
-    # ponytail: readability is the disambiguator, not a shell parse — a title
-    # that names a path which happens to exist could still fool it; acceptable
-    # ceiling, upgrade to real argv parsing only if that ever bites.
-    local s="$1" re val matched
-    re='(--body-file[[:space:]=]+|-F[[:space:]]+)("[^"]+"|'\''[^'\'']+'\''|[^[:space:]]+)'
-    while [[ "$s" =~ $re ]]; do
-        val="${BASH_REMATCH[2]}"
-        matched="${BASH_REMATCH[0]}"
-        val="${val#[\"\']}"   # strip a leading quote, if any
-        val="${val%[\"\']}"   # strip a trailing quote, if any
-        [[ -r "$val" ]] && { printf '%s' "$val"; return 0; }
-        s="${s#*"$matched"}"  # advance past this candidate, keep looking
-    done
-    return 0
-}
-
-# Echo the FIRST --body-file/-F candidate value, unfiltered by readability. Used only for
-# diagnostics once every candidate in extract_body_file has already failed the readable check —
-# it needs the literal, as-written path to tell "unexpanded shell var" from "outside the project
-# dir" apart, which a readability-filtered result (always empty at that point) cannot do.
-extract_body_file_raw() {
-    local s="$1" re val
-    re='(--body-file[[:space:]=]+|-F[[:space:]]+)("[^"]+"|'\''[^'\'']+'\''|[^[:space:]]+)'
-    [[ "$s" =~ $re ]] || return 0
-    val="${BASH_REMATCH[2]}"
-    val="${val#[\"\']}"   # strip a leading quote, if any
-    val="${val%[\"\']}"   # strip a trailing quote, if any
-    printf '%s' "$val"
 }
 
 main "$@"

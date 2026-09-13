@@ -19,9 +19,12 @@ named in `SETTINGS_PRUNE_KEYS` (`enabledPlugins` today), never a blanket
 diff, so machine-local keys the additive merge exists to protect still
 survive (dotfiles-dev#272).
 
-Only `ai_clients/claude/` is wired up today. New clients follow the same
-pattern: add `ai_clients/<name>/main.sh` and it is auto-discovered by
-`ai_clients/main.sh`.
+`ai_clients/claude/`, `codex/`, `qwen/`, `copilot/`, and `kimi/` are wired up
+today (dotfiles-dev#346). A new client follows the same pattern: add
+`ai_clients/<name>/main.sh` and it is auto-discovered by `ai_clients/main.sh`
+— `claude/main.sh` is the full model (settings, plugins, marketplaces, prune,
+…); `codex/main.sh` is the small model, and `qwen/`, `copilot/`, `kimi/` are
+smaller still (a single step: deliver the shared AGENTS.md).
 
 ## Permissions model (`claude/settings.json`)
 
@@ -85,8 +88,8 @@ must run before client discovery.
 | | |
 |---|---|
 | **Source** | `ai_clients/shared/AGENTS.md` |
-| **Installs to** | `~/.claude/AGENTS.md` (Claude, via `@AGENTS.md` import in `~/.claude/CLAUDE.md`) |
-| **Lib script** | `ai_clients/claude/lib/shared_agents_md.sh` → `install_shared_agents_md()`, step key `shared_agents_md` |
+| **Installs to** | `~/.claude/AGENTS.md` (Claude, via `@AGENTS.md` import in `~/.claude/CLAUDE.md`); `~/.codex/AGENTS.md`; `~/.qwen/AGENTS.md`; `$COPILOT_HOME/copilot-instructions.md` (default `~/.copilot/`; Copilot does not read AGENTS.md); `$KIMI_CODE_HOME/AGENTS.md` (default `~/.kimi-code/`, **unverified** — Kimi Code CLI is not installed on this machine, dotfiles-dev#346) |
+| **Lib script** | `ai_clients/lib/shared_agents_md.sh` → `install_shared_agents_md(dest)`, called once per client with that client's live path — Claude and Codex both use step key `agents_md`/`shared_agents_md`; Qwen, Copilot, and Kimi each have exactly one step, also named `agents_md` |
 
 **The seam: `AGENTS.md` is the source; each tool's config is a generated
 view (or an import) of it, never a second hand-authored copy.** One
@@ -98,17 +101,24 @@ files covering the same policy always will. Concretely:
   `@RTK.md` import — so the shared content is never re-typed there. Only
   genuinely Claude-Code-specific mechanics (hook names, tool names,
   `dangerouslyDisableSandbox`, ...) stay inline in `config/CLAUDE.md`.
-- Any tool whose global-instructions format has no import syntax deploys
-  its own literal copy of the same source file (see
-  `ai_clients/codex/config/AGENTS.md` / `ai_clients/codex/lib/agents_md.sh`
-  for the existing example of that deploy pattern — that file is
-  hand-authored today, a follow-up should point it at this shared source
-  instead of maintaining independent prose).
+- Every other adopted tool (Codex, Qwen, Copilot, Kimi) has no import syntax
+  of its own, so each deploys a literal copy of the same source file via
+  `install_shared_agents_md(dest)` — never a second hand-authored copy.
+  Codex used to hand-author its own `config/AGENTS.md` and drift from this
+  source; that gap is closed (dotfiles-dev#346) by pointing it at the shared
+  helper like every other non-Claude client.
 - Content belongs in `ai_clients/shared/AGENTS.md` only if it holds for any
   agent driving this machine (RTK proxy policy, verifying git writes
   landed, Conventional Commits, `Decimal` policy). Anything that names a
   hook, a skill, a subagent, plan mode, or a memory path is Claude-Code-
   specific and stays under `ai_clients/claude/`.
+- Only the AGENTS.md-shaped file is versioned for Qwen/Copilot/Kimi.
+  Everything else in their live config dirs — credentials, session ids,
+  usage/tip history, IDE locks, debug logs, first-launch timestamps, and
+  (for Qwen) a `settings.json` that mixes real model-provider config with a
+  live API key — is machine-local state or a possible secret, deliberately
+  left unversioned (dotfiles-dev#346's inventory of `~/.qwen`/`~/.copilot`
+  on the reporting machine).
 
 Do not symlink the deployed copies to the source — a symlink degrades to a
 broken plain-text file on a Windows checkout without Developer Mode

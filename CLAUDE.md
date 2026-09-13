@@ -31,7 +31,9 @@ Two-level menu system:
 ```
 ai_clients/main.sh              ← top-level router; auto-discovers ai_clients/*/main.sh
 ai_clients/lib/utils.sh         ← shared print_status(), colour vars, LOG_FILE
-ai_clients/claude/main.sh       ← Claude Code orchestrator with STEPS registry
+ai_clients/lib/shared_agents_md.sh ← install_shared_agents_md(dest) — copies ai_clients/shared/AGENTS.md
+                                      to any client's live path; every client below calls it
+ai_clients/claude/main.sh       ← Claude Code orchestrator with STEPS registry (the full model)
 ai_clients/claude/lib/          ← one file per step:
     prerequisites.sh            ← checks for claude CLI, jq, python3, node
     settings.sh                 ← merges settings.json into ~/.claude/settings.json
@@ -43,11 +45,17 @@ ai_clients/claude/lib/          ← one file per step:
     mcp_servers.sh              ← installs MCP servers
     integrations.sh             ← runs /terminal-setup, /install-github-app, /install-slack-app
     prune.sh                    ← removes ~/.claude artifacts absent from source (asks first)
+ai_clients/codex/main.sh        ← OpenAI Codex CLI orchestrator (the small model: 2 steps)
+ai_clients/qwen/main.sh         ← Qwen Code orchestrator (1 step: shared AGENTS.md → ~/.qwen/)
+ai_clients/copilot/main.sh      ← GitHub Copilot CLI orchestrator (1 step: shared AGENTS.md →
+                                    copilot-instructions.md — Copilot does not read AGENTS.md)
+ai_clients/kimi/main.sh         ← Kimi Code CLI orchestrator (1 step; NOT installed on this
+                                    machine, config path verified only against upstream docs)
 ```
 
-`STEPS` array in `ai_clients/claude/main.sh` uses `"key|label"` pairs. `dispatch_step "$key"` routes each key to its lib function. To add a new step: add an entry to `STEPS`, add a `case` branch in `dispatch_step`, and create the lib function.
+`STEPS` array in each client's `main.sh` uses `"key|label"` pairs. `dispatch_step "$key"` routes each key to its lib function (or, for the smaller clients, directly to a shared helper). To add a new step: add an entry to `STEPS`, add a `case` branch in `dispatch_step`, and create the lib function.
 
-`ai_clients/main.sh` discovers client subdirectories at runtime — adding a new AI client only requires creating `ai_clients/<name>/main.sh`.
+`ai_clients/main.sh` discovers client subdirectories at runtime — adding a new AI client only requires creating `ai_clients/<name>/main.sh`. Only durable config is versioned per client; credentials, caches, session history, and other machine-local state living in a client's real config dir are deliberately left out (see `ai_clients/CLAUDE.md`'s "Agent-agnostic bridge" section).
 
 ## Specs (`.specs/`)
 

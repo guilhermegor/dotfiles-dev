@@ -43,6 +43,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/review_thread_gate.sh
 source "$HOOK_DIR/lib/review_thread_gate.sh"
+# shellcheck source=lib/free_surface.sh
+source "$HOOK_DIR/lib/free_surface.sh"
 
 emit() {
 	# $1 = plain-text report body. Wraps it as SubagentStop additionalContext.
@@ -180,24 +182,23 @@ sweep_behind_base() {
 	[ "$any" = "0" ] && echo "    none"
 }
 
-# Free dispatch surface: open issues not already claimed by an open branch
-# (house convention: branch name ends in -<issue-number>) or an open PR body
-# (Closes/Fixes/Resolves #N). Prints "#N #M ..." (one line, space-separated)
-# or nothing when every open issue is already claimed.
+# Free dispatch surface: calls the shared gate_free_surface (lib/free_surface.sh) instead of
+# re-deriving it — the branch-name `-<issue>` heuristic this used to run is disqualified by
+# measurement (it missed a PR open four days closing the same issue an agent was dispatched
+# for; dotfiles-dev#340). Prints "#N #M ..." (space-separated), "UNKNOWN" on an API failure
+# (never an empty string — empty is indistinguishable from "nothing left to dispatch"), or
+# nothing when every open issue is already claimed.
 free_dispatch_surface() {
-	local cwd="$1" repo="$2"
-	local issues branches prbodies n claimed free_list=()
-	issues="$(gh issue list --repo "$repo" --state open --limit 200 --json number --jq '.[].number' 2>/dev/null)"
-	[ -n "$issues" ] || return 0
-	branches="$($GIT -C "$cwd" ls-remote --heads origin 2>/dev/null | sed 's#.*refs/heads/##')"
-	prbodies="$(gh api "repos/$repo/pulls?state=open" --jq '.[].body' 2>/dev/null)"
+	local repo="$1" owner="${1%%/*}" name="${1##*/}"
+	if ! gate_free_surface "$owner" "$name"; then
+		echo "UNKNOWN"
+		return 1
+	fi
+	local n free_list=()
 	while read -r n; do
 		[ -n "$n" ] || continue
-		claimed=0
-		if printf '%s\n' "$branches" | grep -qE "(^|-)${n}(\$|-)"; then claimed=1; fi
-		if [ "$claimed" = 0 ] && printf '%s' "$prbodies" | grep -qiE "(closes|fixes|resolves)[^0-9]*#${n}([^0-9]|\$)"; then claimed=1; fi
-		[ "$claimed" = 0 ] && free_list+=("#$n")
-	done <<<"$issues"
+		free_list+=("#$n")
+	done <<<"$FREE_UNCLAIMED_ISSUES"
 	[ "${#free_list[@]}" -gt 0 ] && printf '%s\n' "${free_list[*]}"
 }
 
@@ -232,8 +233,10 @@ dispatch: free surface empty"
 		echo "[5] PR behind base ($db)"
 		sweep_behind_base "$cwd" "$repo" "$db"
 		echo "[6] free dispatch surface"
-		free="$(free_dispatch_surface "$cwd" "$repo")"
-		if [ -n "$free" ]; then
+		free="$(free_dispatch_surface "$repo")"
+		if [ "$free" = "UNKNOWN" ]; then
+			echo "dispatch: UNKNOWN — free surface unreadable (gh API failure), not empty"
+		elif [ -n "$free" ]; then
 			# shellcheck disable=SC2086 # word-splitting is intentional: count the tokens
 			set -- $free
 			echo "dispatch these $#: $free"

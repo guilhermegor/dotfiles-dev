@@ -21,12 +21,13 @@ setup() {
     export PATH="$BIN:$PATH"
 
     # Functions only — main() is never invoked by sourcing this. HOOK_DIR resolves relative to
-    # wherever this gets sourced from, so its `source "$HOOK_DIR/lib/review_thread_gate.sh"`
-    # line needs a real copy of that file sitting next to it.
+    # wherever this gets sourced from, so its `source "$HOOK_DIR/lib/review_thread_gate.sh"` and
+    # `source "$HOOK_DIR/lib/free_surface.sh"` lines each need a real copy sitting next to it.
     FUNCS="$REPO/sweep_funcs.sh"
     head -n -1 "$SWEEP_SRC" > "$FUNCS"
     mkdir -p "$REPO/lib"
     cp "$(dirname "$SWEEP_SRC")/lib/review_thread_gate.sh" "$REPO/lib/"
+    cp "$(dirname "$SWEEP_SRC")/lib/free_surface.sh" "$REPO/lib/"
     source "$FUNCS"
 
     cd "$REPO" || return 1
@@ -47,57 +48,63 @@ teardown() {
 }
 
 stub_gh() {
-    # $1 = issues JSON array of numbers, $2 = PR bodies (newline-separated)
+    # Env-driven stub for every call gate_free_surface makes. Where the library passes --jq, the
+    # stub prints the post-jq value; where it pipes to jq itself, the stub prints raw JSON.
+    #   $1 = open issue numbers (newline-separated)
+    #   $2 = closingIssuesReferences numbers across ALL PRs, open and merged (space-separated)
+    #   GH_FAIL=1 makes every call fail, to exercise the UNKNOWN path
+    local refs="" n
+    for n in $2; do refs="$refs{\"closingIssuesReferences\":{\"nodes\":[{\"number\":$n}]}},"; done
+    refs="${refs%,}"
     cat > "$BIN/gh" <<STUB
 #!/bin/bash
-case "\$1 \$2" in
-"issue list")
-    printf '%s\\n' '$1'
-    ;;
-"api repos/o/r/pulls?state=open")
-    printf '%s\\n' "$2"
-    ;;
+[ "\${GH_FAIL:-0}" = 1 ] && exit 1
+case "\$*" in
+"api repos/o/r --jq .default_branch") echo main ;;
+"pr list"*) echo '[]' ;;
+"api repos/o/r/branches"*) echo main ;;
+"api graphql"*) printf '%s\n' '{"data":{"search":{"pageInfo":{"hasNextPage":false},"nodes":[$refs]}}}' ;;
+"issue list"*) printf '%s\n' '$1' ;;
+*) exit 1 ;;
 esac
 STUB
     chmod +x "$BIN/gh"
 }
 
-# --- free_dispatch_surface: exact claim, not a guess ---------------------------------------------
+# --- free_dispatch_surface: exact claim via closingIssuesReferences, not a guess -----------------
 
-@test "an issue with no matching branch and no matching PR body is free" {
+@test "an issue no PR closes is free" {
     stub_gh '10
 20
-30' 'Closes #20'
-    git push -q origin HEAD:refs/heads/feat/thing-10
-    run free_dispatch_surface "$REPO" "o/r"
+30' '20'
+    run free_dispatch_surface "o/r"
     [ "$status" -eq 0 ]
-    [[ "$output" == "#30" ]]
+    [[ "$output" == "#10 #30" ]]
 }
 
-@test "a branch name ending in -<issue> claims it" {
+@test "a branch name ending in -<issue> no longer claims it (heuristic disqualified, #340)" {
     stub_gh '10
 20' ''
     git push -q origin HEAD:refs/heads/feat/widget-10
-    run free_dispatch_surface "$REPO" "o/r"
+    run free_dispatch_surface "o/r"
     [ "$status" -eq 0 ]
-    [[ "$output" == "#20" ]]
-}
-
-@test "an open PR body with Closes/Fixes/Resolves claims the issue" {
-    stub_gh '10
-20' 'Fixes #10'
-    run free_dispatch_surface "$REPO" "o/r"
-    [ "$status" -eq 0 ]
-    [[ "$output" == "#20" ]]
+    [[ "$output" == "#10 #20" ]]
 }
 
 @test "every issue claimed leaves no output at all" {
     # Exit status 1 here is the function's own last-command status (an empty free_list makes its
     # trailing `[ ... -gt 0 ] && printf` false) — harmless, since main() only ever reads stdout.
-    stub_gh '10' 'Closes #10'
-    run free_dispatch_surface "$REPO" "o/r"
+    stub_gh '10' '10'
+    run free_dispatch_surface "o/r"
     [ "$status" -eq 1 ]
     [ -z "$output" ]
+}
+
+@test "a gh API failure reports UNKNOWN, never an empty surface" {
+    stub_gh '10' ''
+    GH_FAIL=1 run free_dispatch_surface "o/r"
+    [ "$status" -eq 1 ]
+    [[ "$output" == "UNKNOWN" ]]
 }
 
 # --- sweep_worktrees: residue is scoped to worktrees/agent-*, exactly the #162 pattern -----------

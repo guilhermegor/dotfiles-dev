@@ -142,7 +142,7 @@ project `.env`. Both files are written mode `600`.
 | Key | Purpose | Scopes | Consumers |
 |---|---|---|---|
 | `GH_REVIEW_TRIGGER_PAT` | User PAT so CodeRabbit answers a review request — it silently ignores bot-authored (`GITHUB_TOKEN`) comments | Fine-grained PAT, **All repositories**, `Pull requests: Read and write` | `.github/workflows/coderabbit_trigger.yml` in `blueprintx` and every project it scaffolds |
-| `CLAUDE_BACKUP_DIR` | Default target dir for `/backup-env` / `/restore-env` | n/a (local path) | `ai_clients/claude/commands/backup-env.md`, `restore-env.md` |
+| `CLAUDE_BACKUP_DIR` | Default target dir for `/backup-env` / `/restore-env` | n/a (local path) | `ai_clients/claude/commands/backup-env.md`, `restore-env.md`, `storage/backup_env.sh`, `storage/restore_env.sh` |
 
 **Re-minting `GH_REVIEW_TRIGGER_PAT` on a new/lost machine** (a PAT is re-minted,
 not restored — a backed-up value may already be expired):

@@ -122,6 +122,25 @@ get_current_global_version() {
 # NPM HELPERS
 # ============================================================================
 
+# Node versions nvm has actually installed, one per line, version-sorted. Reads the install dir
+# rather than `nvm ls`: that output also prints the LTS alias table
+# (`lts/carbon -> v8.17.0 (-> N/A)`) and the system node, so a version grep over it targeted
+# eleven versions nvm had never installed, each failing with `N/A: version ... is not yet
+# installed`. `--no-alias` still lists `system (-> vX)`, which `nvm exec` cannot run either.
+nvm_installed_versions() {
+    local node_dir="${NVM_DIR:-$HOME/.nvm}/versions/node"
+    [ -d "$node_dir" ] || return 0
+    find "$node_dir" -mindepth 1 -maxdepth 1 -type d -name 'v*' -printf '%f\n' | sort -V
+}
+
+# Lowest Node major a package accepts per its engines.node, or nothing when it declares none or
+# the registry is unreachable. npm only WARNS on EBADENGINE, so without this an install into a
+# too-old Node "succeeds" and leaves a binary that cannot run there.
+# ponytail: parses the `>=N` form only; any other range falls back to installing everywhere.
+npm_engine_min_major() {
+    npm view "$1" engines.node 2>/dev/null | sed -nE 's/^>=[[:space:]]*v?([0-9]+).*/\1/p' | head -n1
+}
+
 npm_global_install_all_nvm_versions() {
     local package="$1"
     local nvm_dir="${NVM_DIR:-$HOME/.nvm}"
@@ -136,7 +155,7 @@ npm_global_install_all_nvm_versions() {
     . "$NVM_DIR/nvm.sh"
 
     local versions
-    versions=$(nvm ls --no-colors 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu)
+    versions=$(nvm_installed_versions)
 
     if [ -z "$versions" ]; then
         print_status "warning" "No nvm-managed Node versions found"
@@ -149,8 +168,18 @@ npm_global_install_all_nvm_versions() {
     done <<< "$versions"
     echo ""
 
+    local min_major
+    min_major="$(npm_engine_min_major "$package")"
+
     local -a failed_versions=()
+    local installed=0 major
     while IFS= read -r ver; do
+        major="${ver#v}"
+        major="${major%%.*}"
+        if [ -n "$min_major" ] && [ "$major" -lt "$min_major" ]; then
+            print_status "info" "  $ver: skipped ($package requires Node >=$min_major)"
+            continue
+        fi
         print_status "info" "[$ver] npm install -g $package ..."
         # `if cmd | tee` tests TEE's status, not npm's -- tee succeeds whatever it is piped,
         # so every version reported "installed", including the ones where nvm answered
@@ -158,6 +187,7 @@ npm_global_install_all_nvm_versions() {
         run_or_echo nvm exec "${ver#v}" npm install -g "$package" 2>&1 | tee -a "$LOG_FILE"
         if [ "${PIPESTATUS[0]}" -eq 0 ]; then
             print_status "success" "  $ver: installed"
+            installed=$((installed + 1))
         else
             print_status "error" "  $ver: failed"
             failed_versions+=("$ver")
@@ -166,6 +196,11 @@ npm_global_install_all_nvm_versions() {
 
     if [ "${#failed_versions[@]}" -gt 0 ]; then
         print_status "warning" "Failed for Node versions: ${failed_versions[*]}"
+        return 1
+    fi
+
+    if [ "$installed" -eq 0 ]; then
+        print_status "error" "No installed Node version satisfies $package (needs >=$min_major)"
         return 1
     fi
 
@@ -182,7 +217,7 @@ npm_install_global() {
         . "$NVM_DIR/nvm.sh"
 
         local versions
-        versions=$(nvm ls --no-colors 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu)
+        versions=$(nvm_installed_versions)
 
         if [ -n "$versions" ]; then
             # Installing across every nvm version keeps the package available regardless of
@@ -211,7 +246,7 @@ sync_globals_to_all_nvm_versions() {
     . "$NVM_DIR/nvm.sh"
 
     local versions
-    versions=$(nvm ls --no-colors 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu)
+    versions=$(nvm_installed_versions)
 
     if [ -z "$versions" ]; then
         print_status "warning" "No nvm-managed Node versions found"

@@ -68,6 +68,61 @@ non-obvious points below are **not**, and a future audit must not relitigate the
    was a probabilistic instruction; it is replaced by `commit`→`allow`,
    `push`→`ask`. Re-adding it duplicates the gate and brings back the friction.
 
+## Body-template guards: PR and issue
+
+Two `PreToolUse` hooks enforce a repo's own body templates on `gh`, so a
+non-compliant PR/issue body is blocked (exit 2) with the template fed back,
+rather than relying on prose memory:
+
+| | Source | Applies to | Template it reads |
+|---|---|---|---|
+| PR guard | `hooks/pr_template_guard.sh` | `gh pr create` / `gh pr edit` | `.github/PULL_REQUEST_TEMPLATE.md` (single file, personal fallback if the repo ships none) |
+| Issue guard | `hooks/issue_template_guard.sh` | `gh issue create` / `gh issue edit` | every `.github/ISSUE_TEMPLATE/*.md` (no fallback — a repo shipping none is untouched) |
+
+Both are generic and data-driven: neither hardcodes a repo name or a
+template's wording. Both find their `gh <noun> create|edit` invocation by
+REAL ARGV, not by scanning raw command text: `hooks/lib/gh_cmd_match.py`
+splits the command into simple commands on `;`/`&&`/`||`/`|`/`&`/newlines
+(skipping heredoc bodies), tokenizes the matching one with `shlex`, and
+reads `--repo`/`-R`, `--body`/`-b`, `--body-file`/`-F`, and
+`--label`/`-l`/`--add-label` off that real argv — never off a regex over
+the whole string, which could be fooled by that same flag text appearing
+inside an unrelated quoted argument (e.g. inside `--title`), or miss an
+invocation chained after a shell operator entirely (dotfiles-dev, PR #371
+CodeRabbit review). `hooks/lib/gh_body_guard_common.sh`'s
+`resolve_gh_command()` is the ONE shared bash entry point into that
+tokenizer both guards call — each guard keeps its own message wording
+(pinned by its own bats suite) rather than sharing a parameterized
+formatter. A command that can't be tokenized at all (an unbalanced quote or
+an unterminated heredoc) is "unknown", not "non-compliant": both guards
+fail open on it, same as everywhere else uncertainty is possible.
+
+The issue guard derives its requirements straight from each template file:
+
+- a bold (`**`) and/or `·`-separated first non-empty body line, if the
+  template's own first line is shaped that way;
+- every `##`/`###` header in the template must appear (by text) in the
+  body — same rule the PR guard applies to `##` sections;
+- if a template's section under a header contains a `- [ ]` checklist
+  item, the body's matching section must contain at least one too;
+- a **conditional** requirement, declared inside the template's HTML
+  comment as a one-line directive (never hardcoded in the hook):
+
+  ```
+  issue-template-guard: require "<literal text>" [if-label <label>]
+  ```
+
+  Without `if-label` the literal is always required; with it, the
+  requirement is enforced only when the label is *positively known* on
+  this command — `gh issue create --label`/`-l` states the new issue's
+  full label set, but `gh issue edit --add-label` only ever reveals a
+  label being added, never the issue's current set, so a directive whose
+  label can't be determined this way is skipped (fails open), never
+  enforced on a guess.
+
+A repo with several issue templates passes if the body satisfies **any
+one** of them — an issue follows one template, not all.
+
 ## The restore-`.env` prompt
 
 `ai_clients/lib/restore_env_prompt.sh` defines `prompt_restore_env()`, which

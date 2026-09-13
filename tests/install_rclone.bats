@@ -132,7 +132,10 @@ STUB
     local unit="$HOME/.config/systemd/user/rclone-gdrive.service"
     [ -f "$unit" ]
     grep -qF "rclone mount gdrive: $HOME/GoogleDrive" "$unit"
-    ! grep -q '{{' "$unit"
+    # The directives (from [Unit] onward) are fully substituted; the header
+    # comments above them deliberately keep the literal placeholders (#365
+    # — asserted separately below).
+    ! sed -n '/^\[Unit\]/,$p' "$unit" | grep -q '{{'
 }
 
 @test "install_rclone_mount_unit never enables or starts the unit" {
@@ -147,4 +150,117 @@ STUB
     install_rclone_mount_unit "gdrive" "$HOME/GoogleDrive"
 
     [ ! -f "$TMP/systemctl_invocations.log" ]
+}
+
+# --- issue #365: default mount point, folder creation, non-empty refusal ---
+
+@test "install_rclone_mount_unit creates the mount point folder when absent" {
+    _write_rclone_stub
+    [ ! -d "$HOME/OneDrive" ]
+
+    run install_rclone_mount_unit "onedrive" "$HOME/OneDrive"
+
+    [ "$status" -eq 0 ]
+    [ -d "$HOME/OneDrive" ]
+    [ -f "$HOME/.config/systemd/user/rclone-onedrive.service" ]
+}
+
+@test "install_rclone_mount_unit refuses when the mount point exists and is non-empty" {
+    _write_rclone_stub
+    mkdir -p "$HOME/OneDrive"
+    echo "keep me" > "$HOME/OneDrive/existing-file.txt"
+
+    run install_rclone_mount_unit "onedrive" "$HOME/OneDrive"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not empty"* ]]
+    [ -f "$HOME/OneDrive/existing-file.txt" ]
+    [ ! -f "$HOME/.config/systemd/user/rclone-onedrive.service" ]
+}
+
+@test "install_rclone_mount_unit falls back to RCLONE_REMOTE and RCLONE_MOUNT_POINT env vars" {
+    _write_rclone_stub
+    export RCLONE_REMOTE="workdrive"
+    export RCLONE_MOUNT_POINT="$HOME/WorkDrive"
+
+    run install_rclone_mount_unit
+
+    [ "$status" -eq 0 ]
+    [ -d "$HOME/WorkDrive" ]
+    local unit="$HOME/.config/systemd/user/rclone-workdrive.service"
+    [ -f "$unit" ]
+    grep -qF "rclone mount workdrive: $HOME/WorkDrive" "$unit"
+}
+
+@test "install_rclone_mount_unit default with no args and no env vars uses onedrive / ~/OneDrive" {
+    _write_rclone_stub
+
+    run install_rclone_mount_unit
+
+    [ "$status" -eq 0 ]
+    [ -d "$HOME/OneDrive" ]
+    [ -f "$HOME/.config/systemd/user/rclone-onedrive.service" ]
+}
+
+@test "install_rclone_mount_unit keeps the header placeholders literal after substitution" {
+    _write_rclone_stub
+
+    install_rclone_mount_unit "onedrive" "$HOME/OneDrive"
+
+    local unit="$HOME/.config/systemd/user/rclone-onedrive.service"
+    local header
+    header="$(sed -n '1,/^\[Unit\]/p' "$unit")"
+    [[ "$header" == *"{{REMOTE}}"* ]]
+    [[ "$header" == *"{{MOUNTPOINT}}"* ]]
+    grep -qF "AssertPathIsDirectory=$HOME/OneDrive" "$unit"
+    grep -qF "Description=rclone on-demand mount: onedrive" "$unit"
+}
+
+# --- issue #365: rclone.conf skeleton, mode 600, no overwrite, reconnect ----
+
+@test "install_rclone_config writes the skeleton with mode 600" {
+    _write_rclone_stub
+
+    run install_rclone_config "onedrive" "onedrive" "global" < /dev/null
+
+    [ "$status" -eq 0 ]
+    local conf="$HOME/.config/rclone/rclone.conf"
+    [ -f "$conf" ]
+    grep -qF "[onedrive]" "$conf"
+    grep -qF "type = onedrive" "$conf"
+    grep -qF "region = global" "$conf"
+    [ "$(stat -c '%a' "$conf")" = "600" ]
+}
+
+@test "install_rclone_config refuses to overwrite an existing rclone.conf" {
+    _write_rclone_stub
+    mkdir -p "$HOME/.config/rclone"
+    printf '[onedrive]\ntype = onedrive\ntoken = {"already":"configured"}\n' \
+        > "$HOME/.config/rclone/rclone.conf"
+
+    run install_rclone_config "onedrive" < /dev/null
+
+    [ "$status" -ne 0 ]
+    grep -qF 'token' "$HOME/.config/rclone/rclone.conf"
+}
+
+@test "install_rclone_config skips the browser reconnect and prints the command when not interactive" {
+    _write_rclone_stub
+
+    run install_rclone_config "onedrive" < /dev/null
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"rclone config reconnect onedrive:"* ]]
+    if [ -f "$RCLONE_LOG" ]; then
+        ! grep -q '^config reconnect' "$RCLONE_LOG"
+    fi
+}
+
+@test "install_rclone_config invokes only 'rclone config reconnect', never the bare wizard" {
+    # The bare 'rclone config' wizard is what offers "set configuration
+    # password", which the systemd mount cannot unlock at boot (#365).
+    local fn
+    fn="$(sed -n '/^install_rclone_config()/,/^}/p' "$REPO_ROOT/distro_config/install_lib/sharing.sh")"
+    [[ "$fn" == *'rclone config reconnect'* ]]
+    [[ "$fn" != *'run_or_echo rclone config"'* ]]
 }

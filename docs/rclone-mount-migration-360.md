@@ -1,4 +1,4 @@
-# Replacing Insync with an on-demand rclone mount (issue #360)
+# Replacing Insync with an on-demand rclone mount (issues #360, #365)
 
 ## Why
 
@@ -19,11 +19,29 @@ cache ceiling replaces a 1.3 T mirror.
 
 - `install_rclone` (`distro_config/install_lib/sharing.sh`) — installs the `rclone` package via
   the distro's package manager. Never runs `rclone config`, never writes anything under
-  `~/.config/rclone/` — that step is interactive and account-bound, so it stays manual.
-- `install_rclone_mount_unit <remote> <mountpoint>` (same file) — writes
+  `~/.config/rclone/`.
+- `install_rclone_config [remote] [type] [region]` (same file, issue #365) — writes the
+  non-secret skeleton of `~/.config/rclone/rclone.conf` (mode `600`):
+  ```ini
+  [onedrive]
+  type = onedrive
+  region = global
+  ```
+  Refuses to overwrite an existing `rclone.conf` — it may already hold a working token. Args
+  fall back to the `RCLONE_REMOTE` / `RCLONE_TYPE` / `RCLONE_REGION` env vars, then to
+  `onedrive` / `onedrive` / `global`. When stdin is a terminal it then runs
+  `rclone config reconnect <remote>:` for the one-time browser sign-in; an unattended run (no
+  tty) skips that step and prints the command instead of hanging or failing. It never runs the
+  interactive `rclone config` wizard, so rclone's "set configuration password" option is never
+  offered — an encrypted config can't be unlocked by the systemd mount at boot.
+- `install_rclone_mount_unit [remote] [mountpoint]` (same file) — writes
   `~/.config/systemd/user/rclone-<remote>.service` from the repo-tracked template at
-  `distro_config/dotfiles/rclone/rclone-mount.service.template`. Never enables or starts the
-  unit; refuses if `<mountpoint>` is `~/Insync`.
+  `distro_config/dotfiles/rclone/rclone-mount.service.template`, **creating `<mountpoint>` when
+  it is absent**. Refuses (does not warn) when `<mountpoint>` already exists and is non-empty,
+  and always refuses `~/Insync` regardless of emptiness. Never enables or starts the unit. Args
+  fall back to `RCLONE_REMOTE` / `RCLONE_MOUNT_POINT`, then to `onedrive` / `~/OneDrive` (issue
+  #365) — so `install_rclone_mount_unit` with no arguments reproduces the `mkdir -p ~/OneDrive`
+  + `install_rclone_mount_unit onedrive ~/OneDrive` sequence that was previously done by hand.
 - `uninstall_insync <remote> [account-dir]` (same file) — the 5-step ordered removal below, as a
   single function. Not registered in `INSTALL_REGISTRY` (a registry entry runs during Full
   Installation too, which would fight `install_insync` — see #342), so it is invoked directly:
@@ -31,6 +49,18 @@ cache ceiling replaces a 1.3 T mirror.
   ```bash
   bash -c 'source distro_config/install_lib/sharing.sh; uninstall_insync <remote> <account-dir>'
   ```
+
+### Where the operator is asked (issue #365)
+
+`install_lib/sharing.sh` never prompts (#339 — an `install_*` function must run unattended).
+The non-secret questions (remote name, type, region, Personal/Business, mount point) are asked
+only by `prompt_rclone_choices` in `distro_config/install_programs.sh`'s **Custom Installation**
+path, right before the `install_rclone` entry runs; the answers are exported as
+`RCLONE_REMOTE` / `RCLONE_TYPE` / `RCLONE_REGION` / `RCLONE_ACCOUNT_KIND` / `RCLONE_MOUNT_POINT`
+and consumed by `install_rclone_config` and `install_rclone_mount_unit`, which
+`run_rclone_followups` runs right after `install_rclone`. **Full Installation and any
+unattended run take the defaults silently** — no question is asked, and the two followup
+functions just fall back to `onedrive` / `onedrive` / `global` / `~/OneDrive`.
 
 ## Operator runbook — the 5 mandatory ordered steps
 
@@ -56,10 +86,13 @@ precondition fails.
 
 ## Steps that remain manual (cannot be automated safely)
 
-- **`rclone config`** — interactive, account-bound; adding an OAuth-authenticated remote requires
-  a browser flow this repo has no business scripting, and no token may ever be committed.
-- **Choosing and creating the mount point** — must not be `~/Insync` until step 4 above has run;
-  the operator decides where the mount lives.
+- **The browser sign-in** — `rclone config reconnect <remote>:` is a real OAuth flow this repo
+  has no business scripting further than invoking it, and no token may ever be committed.
+  `install_rclone_config` runs it automatically in an interactive session; an unattended run
+  prints the command instead.
+- **Choosing the mount point path** — the operator (or the Custom Installation questions) picks
+  where the mount lives; it must not be `~/Insync` until step 4 above has run.
+  `install_rclone_mount_unit` creates the directory once it's chosen, but never chooses it.
 - **`systemctl --user daemon-reload` and `systemctl --user enable --now rclone-<remote>.service`**
   — `install_rclone_mount_unit` only writes the unit file and prints these two commands; the
   operator runs them after reviewing the generated unit.

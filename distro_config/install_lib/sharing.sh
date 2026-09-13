@@ -545,17 +545,70 @@ install_rclone() {
     print_status "info" "Then generate the mount unit with install_rclone_mount_unit <remote> <mountpoint>"
 }
 
-# Write (never enable or start) a systemd USER unit for an rclone mount.
-#   install_rclone_mount_unit <remote-name> <mountpoint>
+# Write the non-secret skeleton of ~/.config/rclone/rclone.conf and run the
+# one-time browser sign-in (issue #365). Never runs the interactive
+# `rclone config` wizard — it offers "set configuration password", which
+# encrypts the file and leaves the systemd mount unable to unlock it at
+# boot. Writing the skeleton directly and deferring only the OAuth step to
+# `rclone config reconnect` sidesteps that option entirely.
+#   install_rclone_config [remote] [type] [region]
+# Args fall back to RCLONE_REMOTE/RCLONE_TYPE/RCLONE_REGION (env, set by the
+# Custom Installation orchestrator) and then to onedrive/onedrive/global —
+# `${1-...}` (no colon) so an explicitly empty arg is kept, not defaulted.
+install_rclone_config() {
+    local remote="${1-${RCLONE_REMOTE:-onedrive}}"
+    local rclone_type="${2-${RCLONE_TYPE:-onedrive}}"
+    local region="${3-${RCLONE_REGION:-global}}"
+
+    if ! command_exists rclone; then
+        print_status "error" "rclone is not installed — run install_rclone first"
+        return 1
+    fi
+
+    local conf_dir="$HOME/.config/rclone"
+    local conf_file="$conf_dir/rclone.conf"
+
+    if [ -f "$conf_file" ]; then
+        print_status "error" "Refusing to overwrite existing $conf_file — it may hold a working token"
+        return 1
+    fi
+
+    run_or_echo mkdir -p "$conf_dir"
+    {
+        echo "[$remote]"
+        echo "type = $rclone_type"
+        echo "region = $region"
+    } > "$conf_file" || return 1
+    chmod 600 "$conf_file"
+
+    print_status "success" "Wrote skeleton $conf_file (mode 600)"
+
+    if [ -t 0 ]; then
+        print_status "info" "Browser sign-in required for ${remote}:"
+        run_or_echo rclone config reconnect "${remote}:"
+    else
+        print_status "warning" "Unattended run — skipping the browser sign-in"
+        print_status "config" "Run manually: rclone config reconnect ${remote}:"
+    fi
+}
+
+# Write (never enable or start) a systemd USER unit for an rclone mount,
+# creating the mount point when it is absent.
+#   install_rclone_mount_unit [remote-name] [mountpoint]
+#
+# Args fall back to RCLONE_REMOTE/RCLONE_MOUNT_POINT (env, set by the Custom
+# Installation orchestrator) and then to onedrive/~/OneDrive (issue #365).
+# `${1-...}` (no colon) so an explicitly empty arg is kept, not defaulted —
+# callers relying on the "usage" error below still get it.
 #
 # Enabling/starting the mount is operator work (issue #360): the operator
 # must have already run `rclone config` for <remote-name>, and reviewing the
 # generated unit before it goes live is the whole point of not auto-enabling
-# it. Never registered in INSTALL_REGISTRY — it requires arguments the
-# registry's parameterless run_install() cannot supply.
+# it. Never registered in INSTALL_REGISTRY — Full Installation should not
+# silently claim a mount point without the operator picking one first.
 install_rclone_mount_unit() {
-    local remote="$1"
-    local mountpoint="$2"
+    local remote="${1-${RCLONE_REMOTE:-onedrive}}"
+    local mountpoint="${2-${RCLONE_MOUNT_POINT:-$HOME/OneDrive}}"
 
     if [ -z "$remote" ] || [ -z "$mountpoint" ]; then
         print_status "error" "Usage: install_rclone_mount_unit <remote-name> <mountpoint>"
@@ -572,6 +625,20 @@ install_rclone_mount_unit() {
         return 1
     fi
 
+    if [ -e "$mountpoint" ]; then
+        if [ ! -d "$mountpoint" ]; then
+            print_status "error" "$mountpoint exists and is not a directory"
+            return 1
+        fi
+        if [ -n "$(find "$mountpoint" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+            print_status "error" "Refusing to mount over $mountpoint — it already exists and is not empty"
+            return 1
+        fi
+    else
+        print_status "info" "Creating mount point $mountpoint"
+        run_or_echo mkdir -p "$mountpoint" || return 1
+    fi
+
     local repo_root template_file unit_dir unit_file
     repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || return 1
     template_file="$repo_root/distro_config/dotfiles/rclone/rclone-mount.service.template"
@@ -585,9 +652,13 @@ install_rclone_mount_unit() {
 
     run_or_echo mkdir -p "$unit_dir"
 
+    # Substitute only from [Unit] onward — the header comments above it use
+    # the same {{REMOTE}}/{{MOUNTPOINT}} tokens to document the placeholders
+    # themselves, and a blanket substitution made every generated unit's
+    # header read "substitutes onedrive and /home/.../OneDrive..." (#365).
     sed \
-        -e "s|{{REMOTE}}|${remote}|g" \
-        -e "s|{{MOUNTPOINT}}|${mountpoint}|g" \
+        -e "/^\[Unit\]/,\$ s|{{REMOTE}}|${remote}|g" \
+        -e "/^\[Unit\]/,\$ s|{{MOUNTPOINT}}|${mountpoint}|g" \
         "$template_file" > "$unit_file" || return 1
 
     print_status "success" "Wrote $unit_file"

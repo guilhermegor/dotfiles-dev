@@ -164,6 +164,56 @@ payload() {
     rm -rf "$fake_home"
 }
 
+# --- command matching is real argv, not a start-anchored regex (CodeRabbit review, PR #371) ----
+
+@test "catches a bad body-file chained after && (was a bypass)" {
+    run bash -c "payload 'cd /tmp && gh pr create --title x --body-file $REPO/nope.md' | '$GUARD'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"could not be read"* ]]
+}
+
+@test "catches a bad body-file chained after ; (was a bypass)" {
+    run bash -c "payload 'true; gh pr create --title x --body-file $REPO/nope.md' | '$GUARD'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"could not be read"* ]]
+}
+
+@test "catches a bad body-file chained after | (was a bypass)" {
+    run bash -c "payload 'echo x | gh pr create --title x --body-file $REPO/nope.md' | '$GUARD'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"could not be read"* ]]
+}
+
+@test "a gh pr create mentioned only inside a heredoc body is not executed, not matched" {
+    local cmd
+    cmd="cat <<'EOF'
+gh pr create --title fake --body-file $REPO/nope.md
+EOF"
+    run bash -c 'payload "$1" | "$2"' _ "$cmd" "$GUARD"
+    [ "$status" -eq 0 ]
+}
+
+@test "an unparseable command (unbalanced quote) fails open" {
+    run bash -c "payload 'gh pr create --title x --body \"unterminated' | '$GUARD'"
+    [ "$status" -eq 0 ]
+}
+
+@test "resolves the REAL --repo even when --title contains decoy --repo text" {
+    local fake_home target
+    fake_home="$(mktemp -d)"
+    target="$fake_home/github/other-repo"
+    mkdir -p "$target/.github"
+    git init -q "$target"
+    printf '## Sign-off\n' > "$target/.github/PULL_REQUEST_TEMPLATE.md"
+
+    # The --title value contains "--repo someowner/decoy-repo", which the old regex-scraping
+    # extract_target_repo took as the FIRST --repo match; the REAL --repo (after --title) must
+    # win, resolving to `other-repo`'s Sign-off template rather than a nonexistent decoy repo.
+    run env HOME="$fake_home" bash -c "payload 'gh pr create --title \"see --repo someowner/decoy-repo\" --repo someowner/other-repo --body \"## Sign-off\"' | '$GUARD'"
+    [ "$status" -eq 0 ]
+    rm -rf "$fake_home"
+}
+
 @test "passes when the resolved --repo target has no PR template of its own" {
     local fake_home target
     fake_home="$(mktemp -d)"

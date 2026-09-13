@@ -5,8 +5,9 @@
 # GUI flow (zenity — works from GNOME keyboard shortcut):
 #   1. Pick the source drive from drives mounted under /media/$USER/
 #   2. Enter / confirm the cloud destination path (remembered between runs)
-#   3. Show a pulsing progress dialog while the drive is zipped
-#   4. Notify on success or failure
+#   3. Pick the zip compression level, 0-9 (remembered between runs, default 6)
+#   4. Show a pulsing progress dialog while the drive is zipped
+#   5. Notify on success or failure
 #
 # The backup is written as a single compressed .zip archived directly from the
 # source drive — no uncompressed mirror is ever staged, so the cloud folder
@@ -22,11 +23,44 @@ CURRENT_USER=$(id -un)
 MEDIA_BASE="/media/$CURRENT_USER"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-# zip compression level (0=store … 9=max). 6 is zip's default: a balanced
-# trade-off between archive size and CPU time. Lossless at every level.
-ZIP_LEVEL=6
+# zip's own compression scale (0=store … 9=max). 6 is zip's balanced default —
+# the fallback used when the saved LAST_ZIP_LEVEL is missing or not a single
+# digit 0-9, and the pre-selected radio button on the Super+B compression
+# dialog. The operator picks the actual level at runtime (see
+# choose_zip_level); this constant is only the fallback, never the final value.
+DEFAULT_ZIP_LEVEL=6
+
+ZIP_LEVEL_LABELS=(
+    "Store — no compression (fastest; best for already-compressed media)"
+    "Fastest compression"
+    "Compression level 2"
+    "Compression level 3"
+    "Compression level 4"
+    "Compression level 5"
+    "Balanced — zip's own default"
+    "Compression level 7"
+    "Compression level 8"
+    "Maximum compression (slowest)"
+)
 
 # ── Config helpers ────────────────────────────────────────────────────────────
+
+# Writes/replaces a single KEY=value line in $CONF_FILE without disturbing any
+# other key already saved there (LAST_DEST and LAST_ZIP_LEVEL live side by side).
+save_conf_value() {
+    local key="$1" value="$2"
+    local conf_dir
+    conf_dir="$(dirname "$CONF_FILE")"
+    mkdir -p "$conf_dir"
+    local tmp
+    tmp="$(mktemp "$conf_dir/.backup-external-ssd.conf.XXXXXX")"
+    if [ -f "$CONF_FILE" ]; then
+        # grep -v exits 1 when the file held only this key — not an error here.
+        grep -v "^${key}=" "$CONF_FILE" > "$tmp" || true
+    fi
+    echo "${key}=${value}" >> "$tmp"
+    mv "$tmp" "$CONF_FILE"
+}
 
 load_last_dest() {
     [ -f "$CONF_FILE" ] || return
@@ -47,8 +81,52 @@ last_dest_is_stale() {
 }
 
 save_last_dest() {
-    mkdir -p "$(dirname "$CONF_FILE")"
-    echo "LAST_DEST=$1" > "$CONF_FILE"
+    save_conf_value LAST_DEST "$1"
+}
+
+load_last_zip_level() {
+    [ -f "$CONF_FILE" ] || return
+    grep '^LAST_ZIP_LEVEL=' "$CONF_FILE" | cut -d= -f2-
+}
+
+save_last_zip_level() {
+    save_conf_value LAST_ZIP_LEVEL "$1"
+}
+
+# Falls back to DEFAULT_ZIP_LEVEL unless $1 is a single digit 0-9.
+normalize_zip_level() {
+    local level="$1"
+    if [[ "$level" =~ ^[0-9]$ ]]; then
+        echo "$level"
+    else
+        echo "$DEFAULT_ZIP_LEVEL"
+    fi
+}
+
+# Shows zip's own 0-9 levels as a radio list with $1 pre-selected. Echoes the
+# chosen digit; returns non-zero with no output if the operator cancels.
+choose_zip_level() {
+    local default_level="$1"
+    local -a rows=()
+    local i mark
+    for i in 0 1 2 3 4 5 6 7 8 9; do
+        mark=FALSE
+        [ "$i" = "$default_level" ] && mark=TRUE
+        rows+=("$mark" "$i" "${ZIP_LEVEL_LABELS[$i]}")
+    done
+    zenity --list --radiolist \
+        --title="Backup — compression level" \
+        --text="Choose the zip compression level.\nSize reduction depends on the drive's content." \
+        --column="" --column="Level" --column="Description" \
+        --print-column=2 \
+        "${rows[@]}"
+}
+
+# Zips $1 into $2 at compression level $3, run from inside $1 so archive
+# paths are relative to the drive root.
+zip_archive() {
+    local src="$1" dest="$2" level="$3"
+    ( cd "$src" || exit 1; zip -r -y -q -"$level" "$dest" . -x 'lost+found/*' )
 }
 
 # ── Drive discovery ───────────────────────────────────────────────────────────
@@ -124,6 +202,16 @@ main() {
 
     save_last_dest "$dest_base"
 
+    # 4. Ask for the zip compression level (remembered between runs)
+    local last_level
+    last_level=$(normalize_zip_level "$(load_last_zip_level)")
+
+    local zip_level
+    zip_level=$(choose_zip_level "$last_level") || exit 0
+    [ -n "$zip_level" ] || exit 0
+
+    save_last_zip_level "$zip_level"
+
     local dest_dir="${dest_base%/}/${source_name}"
     local dest="${dest_dir}/${TIMESTAMP}.zip"
 
@@ -133,14 +221,13 @@ main() {
         exit 1
     fi
 
-    # 4. Zip the drive into a single archive with a pulsing progress dialog.
-    #    Zipping is run from inside $src so archive paths are relative to the
-    #    drive root; -r recurses, -y stores symlinks as links rather than
-    #    following them, -q stays quiet, and lost+found is excluded.
+    # 5. Zip the drive into a single archive with a pulsing progress dialog.
+    #    -r recurses, -y stores symlinks as links rather than following them,
+    #    -q stays quiet, and lost+found is excluded.
     notify-send --urgency=low "Backup started" \
         "$source_name → $dest_base" 2>/dev/null || true
 
-    ( cd "$src" || exit 1; zip -r -y -q -"$ZIP_LEVEL" "$dest" . -x 'lost+found/*' ) &
+    zip_archive "$src" "$dest" "$zip_level" &
     local zip_pid=$!
 
     zenity --progress --pulsate --no-cancel --auto-close \
@@ -154,7 +241,7 @@ main() {
     kill "$zenity_pid" 2>/dev/null || true
     wait "$zenity_pid" 2>/dev/null || true
 
-    # 5. Report result
+    # 6. Report result
     if [ "$exit_code" -eq 0 ]; then
         notify-send --urgency=normal "Backup complete" \
             "$source_name → $dest" 2>/dev/null || true

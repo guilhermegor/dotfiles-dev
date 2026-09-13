@@ -686,8 +686,8 @@ INSTALL_REGISTRY+=(
     "install_instapaper:Instapaper (PWA):Reading:instapaper.desktop"
     "install_valor_digital:Valor Digital (Valor Econômico):Reading:valor-digital.desktop"
     "install_linear:Linear (Project Management):Planning:linear.desktop"
-    "install_miro:Miro Collaboration Tool:Planning:miro.desktop"
-    "install_figma:Figma (via figma-linux snap, unofficial):Design:figma-linux.desktop"
+    "install_miro:Miro Collaboration Tool:Planning:miro_miro.desktop"
+    "install_figma:Figma (via figma-linux snap, unofficial):Design:figma-linux_figma-linux.desktop"
     "install_mousam:Mousam Weather App:Utilitarios:io.github.amit9838.mousam.desktop"
     "install_espanso:Espanso (Text Expander)::"
 )

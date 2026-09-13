@@ -483,12 +483,20 @@ organize_app_folders() {
             fi
             if result=$(find_app_desktop_file "$derived"); then
                 out_arr+=("'$result'")
+            else
+                # A declared id that matches no file on disk places nothing, and used to do so in
+                # silence: figma sat loose in the app grid for as long as the registry said
+                # `figma-linux.desktop` while snap had installed it as
+                # `figma-linux_figma-linux.desktop` (snap's `<snap>_<app>.desktop` naming).
+                # Not an error — the app may simply not be installed — but it must be visible.
+                MISSING_DESKTOP_IDS+=("$derived ($fn -> $folder_name)")
             fi
         done
     }
     
     # Initialize array to store folder IDs
     local folder_ids=()
+    local MISSING_DESKTOP_IDS=()
     
     # ==================== SYSTEM FOLDER ====================
     print_status "info" "Creating System folder..."
@@ -1425,7 +1433,15 @@ EOF
     else
         print_status "warning" "No folders were created"
     fi
-    
+
+    if [ ${#MISSING_DESKTOP_IDS[@]} -gt 0 ]; then
+        print_status "warning" "Registry apps not placed — no matching .desktop found (not installed, or wrong id):"
+        local missing
+        for missing in "${MISSING_DESKTOP_IDS[@]}"; do
+            print_status "config" "  $missing"
+        done
+    fi
+
     print_status "info" "Application organization complete"
 }
 

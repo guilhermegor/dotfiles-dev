@@ -212,6 +212,40 @@ show_menu() {
     echo -e "\n${CYAN}Choice:${NC} "
 }
 
+# Ask the non-secret rclone questions (remote name, type, region, account
+# kind, mount point) — issue #365. Only called from the interactive Custom
+# Installation path; install_lib/sharing.sh itself never prompts (#339), and
+# Full/unattended runs take the defaults silently by leaving these unset.
+prompt_rclone_choices() {
+    echo -e "\n${YELLOW}rclone setup — press Enter to accept the default:${NC}"
+
+    read -r -p "Remote name [onedrive]: " RCLONE_REMOTE
+    RCLONE_REMOTE="${RCLONE_REMOTE:-onedrive}"
+
+    read -r -p "Remote type [onedrive]: " RCLONE_TYPE
+    RCLONE_TYPE="${RCLONE_TYPE:-onedrive}"
+
+    read -r -p "Region [global]: " RCLONE_REGION
+    RCLONE_REGION="${RCLONE_REGION:-global}"
+
+    read -r -p "Account kind, Personal or Business [Personal]: " RCLONE_ACCOUNT_KIND
+    RCLONE_ACCOUNT_KIND="${RCLONE_ACCOUNT_KIND:-Personal}"
+
+    read -r -p "Mount point [$HOME/OneDrive]: " RCLONE_MOUNT_POINT
+    RCLONE_MOUNT_POINT="${RCLONE_MOUNT_POINT:-$HOME/OneDrive}"
+
+    export RCLONE_REMOTE RCLONE_TYPE RCLONE_REGION RCLONE_ACCOUNT_KIND RCLONE_MOUNT_POINT
+}
+
+# Write the rclone.conf skeleton and the mount unit right after the binary
+# installs — the operator-work steps (browser sign-in, systemctl enable)
+# still never run automatically; see install_rclone_config/
+# install_rclone_mount_unit in install_lib/sharing.sh.
+run_rclone_followups() {
+    install_rclone_config
+    install_rclone_mount_unit
+}
+
 run_full_installation() {
     print_status "section" "FULL INSTALLATION MODE"
 
@@ -219,6 +253,7 @@ run_full_installation() {
     for entry in "${INSTALL_REGISTRY[@]}"; do
         IFS=':' read -r fn label _ _ <<< "$entry"
         run_install "$fn" "$label"
+        [ "$fn" = "install_rclone" ] && run_rclone_followups
     done
 
     print_status "section" "INSTALLATION COMPLETE"
@@ -247,7 +282,9 @@ run_custom_installation() {
     for num in $selection; do
         if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#INSTALL_REGISTRY[@]}" ]; then
             IFS=':' read -r fn label _ _ <<< "${INSTALL_REGISTRY[$((num-1))]}"
+            [ "$fn" = "install_rclone" ] && prompt_rclone_choices
             run_install "$fn" "$label"
+            [ "$fn" = "install_rclone" ] && run_rclone_followups
         fi
     done
 

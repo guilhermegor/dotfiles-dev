@@ -526,7 +526,7 @@ install_clamav() {
 # ============================================================================
 
 INSTALL_REGISTRY+=(
-    "install_localsend:LocalSend File Sharing:Sharing:org.localsend.localsend_app.desktop"
+    "install_localsend:LocalSend File Sharing:Sharing:localsend_app.desktop"
     "install_rustdesk:RustDesk Remote Desktop:Sharing:rustdesk.desktop"
     "install_insync:Insync (Google Drive):Sharing:insync.desktop"
     "install_clamav:ClamAV Antivirus:Seguranca:clamtk.desktop"

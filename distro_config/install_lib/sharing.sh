@@ -504,6 +504,199 @@ install_insync() {
 }
 
 # ============================================================================
+# RCLONE (on-demand cloud mount — replaces Insync, see issue #360)
+# ============================================================================
+# Prefer the distro package over the rclone.org install script. Ubuntu noble
+# ships rclone 1.60.1+dfsg-3ubuntu0.24.04.6 (checked via `apt-cache policy
+# rclone`, 2026-09-13) — well past the 1.39/1.40 releases that introduced
+# --vfs-cache-max-size / --vfs-cache-max-age (rclone's own changelog puts VFS
+# caching in the 1.39 series), so no version-based fallback to the official
+# install script is needed here.
+#
+# rclone is a CLI, not a GUI app: its INSTALL_REGISTRY entry leaves
+# gnome_folder and desktop_file empty (#357 — a wrong desktop id places
+# nothing in the app grid, silently).
+#
+# `rclone config` is interactive and account-bound: it is operator work, not
+# installer work (issue #360). This function never runs it and never writes
+# anything under ~/.config/rclone/ — it only installs the binary and prints
+# the next manual step.
+install_rclone() {
+    print_status "section" "RCLONE (ON-DEMAND CLOUD MOUNT)"
+
+    if command_exists rclone; then
+        print_status "info" "rclone already installed: $(rclone version 2>/dev/null | head -n1)"
+    else
+        print_status "info" "Installing rclone..."
+        if ! install_package "rclone" "rclone" "rclone" "rclone"; then
+            print_status "error" "Failed to install rclone via $PACKAGE_MANAGER"
+            return 1
+        fi
+    fi
+
+    if ! command_exists rclone; then
+        print_status "error" "rclone installation could not be verified — command not found"
+        return 1
+    fi
+
+    print_status "success" "rclone is ready: $(rclone version 2>/dev/null | head -n1)"
+    print_status "info" "Next step (operator, not automated): run 'rclone config' to add a remote"
+    print_status "config" "This installer never runs 'rclone config' and stores no token"
+    print_status "info" "Then generate the mount unit with install_rclone_mount_unit <remote> <mountpoint>"
+}
+
+# Write (never enable or start) a systemd USER unit for an rclone mount.
+#   install_rclone_mount_unit <remote-name> <mountpoint>
+#
+# Enabling/starting the mount is operator work (issue #360): the operator
+# must have already run `rclone config` for <remote-name>, and reviewing the
+# generated unit before it goes live is the whole point of not auto-enabling
+# it. Never registered in INSTALL_REGISTRY — it requires arguments the
+# registry's parameterless run_install() cannot supply.
+install_rclone_mount_unit() {
+    local remote="$1"
+    local mountpoint="$2"
+
+    if [ -z "$remote" ] || [ -z "$mountpoint" ]; then
+        print_status "error" "Usage: install_rclone_mount_unit <remote-name> <mountpoint>"
+        return 1
+    fi
+
+    if ! command_exists rclone; then
+        print_status "error" "rclone is not installed — run install_rclone first"
+        return 1
+    fi
+
+    if [ "$mountpoint" = "$HOME/Insync" ]; then
+        print_status "error" "Refusing to mount over $HOME/Insync — that directory must be gone first (issue #360)"
+        return 1
+    fi
+
+    local repo_root template_file unit_dir unit_file
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || return 1
+    template_file="$repo_root/distro_config/dotfiles/rclone/rclone-mount.service.template"
+    unit_dir="$HOME/.config/systemd/user"
+    unit_file="$unit_dir/rclone-${remote}.service"
+
+    if [ ! -f "$template_file" ]; then
+        print_status "error" "Template not found: $template_file"
+        return 1
+    fi
+
+    run_or_echo mkdir -p "$unit_dir"
+
+    sed \
+        -e "s|{{REMOTE}}|${remote}|g" \
+        -e "s|{{MOUNTPOINT}}|${mountpoint}|g" \
+        "$template_file" > "$unit_file" || return 1
+
+    print_status "success" "Wrote $unit_file"
+    print_status "info" "Not enabled or started — review it, then run:"
+    print_status "config" "  systemctl --user daemon-reload"
+    print_status "config" "  systemctl --user enable --now rclone-${remote}.service"
+}
+
+# ============================================================================
+# UNINSTALL INSYNC (replaced by rclone mount, see issue #360)
+# ============================================================================
+# ⚠️ Deleting ~/Insync while Insync is running propagates the deletion to
+# Google Drive — that is exactly what a sync client is for, and it is the one
+# way this could destroy remote data. These 5 steps are mandatory and
+# ordered; each refuses to continue when its precondition fails rather than
+# pressing on. Never registered in INSTALL_REGISTRY (#342 — a registry entry
+# runs during Full Installation too, which would fight install_insync). Call
+# manually:
+#   bash -c 'source distro_config/install_lib/sharing.sh; uninstall_insync <remote> [account-dir]'
+#
+# Step 4 (deleting ~/Insync and ~/.config/Insync) additionally requires the
+# explicit opt-in INSYNC_CONFIRM_DELETE=1 env var — it is the one step that
+# destroys local data, and it must never run just because steps 1-3 passed.
+uninstall_insync() {
+    local remote="$1"
+    local account_dir="${2:-$HOME/Insync}"
+
+    print_status "section" "UNINSTALL INSYNC (5-step ordered removal)"
+
+    # Step 1: quit Insync, verify no process survives, no autostart entry remains.
+    print_status "info" "Step 1/5: quitting Insync and checking for a surviving process..."
+    if command_exists insync; then
+        insync quit &>> "$LOG_FILE" || true
+        sleep 2
+    fi
+    if pgrep -a insync > /dev/null 2>&1; then
+        print_status "error" "Step 1/5: an insync process is still running — refusing to continue"
+        pgrep -a insync | tee -a "$LOG_FILE"
+        return 1
+    fi
+    local autostart_file="$HOME/.config/autostart/insync.desktop"
+    if [ -f "$autostart_file" ]; then
+        run_or_echo rm -f "$autostart_file"
+        print_status "info" "Step 1/5: removed autostart entry $autostart_file"
+    fi
+    print_status "success" "Step 1/5: no insync process running, no autostart entry"
+
+    # Step 2: verify remote-side integrity while the local copy still exists.
+    if [ -z "$remote" ]; then
+        print_status "error" "Step 2/5: remote name required — usage: uninstall_insync <remote> [account-dir]"
+        return 1
+    fi
+    if ! command_exists rclone; then
+        print_status "error" "Step 2/5: rclone is not installed — cannot verify the remote, refusing to continue"
+        return 1
+    fi
+    if [ ! -d "$account_dir" ]; then
+        print_status "error" "Step 2/5: local account directory not found: $account_dir"
+        return 1
+    fi
+    print_status "info" "Step 2/5: comparing remote '$remote:' against local '$account_dir' (read-only)..."
+    local check_output check_rc
+    check_output=$(rclone check "$remote:" "$account_dir" --one-way --dry-run 2>&1)
+    check_rc=$?
+    echo "$check_output" >> "$LOG_FILE"
+    if [ "$check_rc" -ne 0 ]; then
+        print_status "error" "Step 2/5: remote verification failed — refusing to delete anything"
+        print_status "info" "$check_output"
+        print_status "info" "Resolve the discrepancy, then re-run uninstall_insync"
+        return 1
+    fi
+    print_status "success" "Step 2/5: remote matches local — comparison recorded in $LOG_FILE"
+
+    # Step 3: uninstall the package. Touches only the local machine; Google
+    # Drive keeps everything regardless of which client is installed.
+    print_status "info" "Step 3/5: removing the insync package..."
+    run_or_echo sudo apt remove --purge -y insync
+    if dpkg -l 2>/dev/null | grep -q '^ii  insync'; then
+        print_status "error" "Step 3/5: insync package is still installed — refusing to continue"
+        return 1
+    fi
+    print_status "success" "Step 3/5: insync package removed"
+
+    # Step 4: only now delete local data — no daemon is watching the
+    # directory anymore, so this is a local disk operation with no remote
+    # consequence. Still gated behind an explicit opt-in.
+    if [ "${INSYNC_CONFIRM_DELETE:-0}" != "1" ]; then
+        print_status "warning" "Step 4/5: skipped — set INSYNC_CONFIRM_DELETE=1 to delete $account_dir and $HOME/.config/Insync"
+        print_status "info" "No local data was deleted. Re-run with INSYNC_CONFIRM_DELETE=1 when ready."
+        return 0
+    fi
+    print_status "info" "Step 4/5: deleting local data (no daemon is watching it)..."
+    run_or_echo rm -rf "$account_dir"
+    run_or_echo rm -rf "$HOME/.config/Insync"
+    print_status "success" "Step 4/5: local Insync data removed"
+
+    # Step 5: re-check the remote after deletion. Proof, not assurance.
+    print_status "info" "Step 5/5: re-checking remote counts after deletion..."
+    local lsjson_output lsjson_rc
+    lsjson_output=$(rclone lsjson "$remote:" --stat 2>&1)
+    lsjson_rc=$?
+    echo "$lsjson_output" >> "$LOG_FILE"
+    if [ "$lsjson_rc" -ne 0 ]; then
+        print_status "warning" "Step 5/5: could not re-list remote — check manually"
+    fi
+    print_status "success" "Uninstall complete — compare the before/after counts recorded in $LOG_FILE"
+}
+
+# ============================================================================
 # CLAMAV ANTIVIRUS
 # ============================================================================
 
@@ -529,5 +722,6 @@ INSTALL_REGISTRY+=(
     "install_localsend:LocalSend File Sharing:Sharing:localsend_app.desktop"
     "install_rustdesk:RustDesk Remote Desktop:Sharing:rustdesk.desktop"
     "install_insync:Insync (Google Drive):Sharing:insync.desktop"
+    "install_rclone:rclone (on-demand cloud mount)::"
     "install_clamav:ClamAV Antivirus:Seguranca:clamtk.desktop"
 )

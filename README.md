@@ -21,6 +21,7 @@
 - [IRPF Download Utility](distro_config/irpf_download.sh) - Brazilian tax software downloader (`make irpf_download`)
 - [Bash Profile Loader](code_editors/bash_profile_snippet.sh) - Ensure login shells load `~/.bashrc` (`make bash_profile`)
 - [Starship + Bash Setup](code_editors/setup_starship_bash.sh) - Installs Starship with plain-text symbols, Bash integration, autocomplete, and rollback targets (`make starship_setup`)
+- [rclone On-Demand Cloud Mount](distro_config/install_lib/sharing.sh) - Installs `rclone` and writes (but never enables) a systemd user mount unit, replacing Insync's full local mirror — see [docs/rclone-mount-migration-360.md](docs/rclone-mount-migration-360.md) for the operator runbook
 
 ### 🔧 Hardware Drivers
 

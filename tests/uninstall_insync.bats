@@ -1,0 +1,183 @@
+#!/usr/bin/env bats
+#
+# Unit tests for uninstall_insync (issue #360: replace Insync with an
+# on-demand rclone mount). The 5-step ordered removal is the whole safety
+# story here — deleting ~/Insync while the daemon is still running
+# propagates the deletion to Google Drive. Every precondition is stubbed
+# (pgrep, rclone, sudo, apt, dpkg, insync); no real process is inspected, no
+# real package is removed, and nothing under a real $HOME is ever touched.
+#
+# Run locally: bats tests/
+
+setup() {
+    REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+    TMP="$(mktemp -d)"
+    HOME="$TMP/home"
+    mkdir -p "$HOME"
+    export HOME
+    export LOG_FILE="$TMP/log"
+    mkdir -p "$TMP/bin"
+    export PATH="$TMP/bin:$PATH"
+
+    ACCOUNT_DIR="$HOME/Insync/testaccount"
+    mkdir -p "$ACCOUNT_DIR"
+    echo "remote-backed file" > "$ACCOUNT_DIR/file.txt"
+
+    # No live process by default.
+    cat > "$TMP/bin/pgrep" <<'STUB'
+#!/bin/bash
+if [ "${PGREP_INSYNC_RUNNING:-0}" = "1" ]; then
+    echo "12345 insync"
+    exit 0
+fi
+exit 1
+STUB
+    chmod +x "$TMP/bin/pgrep"
+
+    # rclone: check/lsjson controllable via env; never a real network call.
+    cat > "$TMP/bin/rclone" <<'STUB'
+#!/bin/bash
+echo "$*" >> "$RCLONE_LOG"
+case "$1" in
+    check)  [ "${RCLONE_CHECK_FAIL:-0}" = "1" ] && exit 1; echo "0 differences found"; exit 0 ;;
+    lsjson) echo "[]"; exit 0 ;;
+    *) exit 0 ;;
+esac
+STUB
+    chmod +x "$TMP/bin/rclone"
+    export RCLONE_LOG="$TMP/rclone_invocations.log"
+
+    # dpkg -l: report insync present/absent per DPKG_INSYNC_PRESENT.
+    cat > "$TMP/bin/dpkg" <<'STUB'
+#!/bin/bash
+if [ "$1" = "-l" ]; then
+    if [ "${DPKG_INSYNC_PRESENT:-0}" = "1" ]; then
+        echo "ii  insync  3.9.6  amd64  Insync"
+    fi
+    exit 0
+fi
+exit 0
+STUB
+    chmod +x "$TMP/bin/dpkg"
+    export DPKG_INSYNC_PRESENT=0
+
+    # sudo/apt: log only, never a real removal.
+    cat > "$TMP/bin/sudo" <<'STUB'
+#!/bin/bash
+echo "sudo $*" >> "$SUDO_LOG"
+"$@"
+STUB
+    chmod +x "$TMP/bin/sudo"
+    cat > "$TMP/bin/apt" <<'STUB'
+#!/bin/bash
+echo "apt $*" >> "$APT_LOG"
+exit 0
+STUB
+    chmod +x "$TMP/bin/apt"
+    export SUDO_LOG="$TMP/sudo_invocations.log"
+    export APT_LOG="$TMP/apt_invocations.log"
+
+    # insync quit: a no-op stub, tracked so we can assert it was called.
+    cat > "$TMP/bin/insync" <<'STUB'
+#!/bin/bash
+echo "insync $*" >> "$INSYNC_LOG"
+exit 0
+STUB
+    chmod +x "$TMP/bin/insync"
+    export INSYNC_LOG="$TMP/insync_invocations.log"
+
+    # shellcheck source=../distro_config/install_lib/_common.sh
+    source "$REPO_ROOT/distro_config/install_lib/_common.sh"
+    PACKAGE_MANAGER="apt"
+
+    # shellcheck source=../distro_config/install_lib/sharing.sh
+    source "$REPO_ROOT/distro_config/install_lib/sharing.sh"
+}
+
+teardown() {
+    rm -rf "$TMP"
+}
+
+# --- never registered: a registry entry would fight install_insync (#342) --
+
+@test "uninstall_insync is not in INSTALL_REGISTRY" {
+    local entry
+    for entry in "${INSTALL_REGISTRY[@]}"; do
+        [[ "$entry" != uninstall_insync:* ]]
+    done
+}
+
+@test "no INSTALL_REGISTRY entry runs an uninstall_* function" {
+    local entry fn
+    for entry in "${INSTALL_REGISTRY[@]}"; do
+        IFS=':' read -r fn _ _ _ <<< "$entry"
+        [[ "$fn" != uninstall_* ]]
+    done
+}
+
+# --- step 1: refuses to continue while a live process survives -------------
+
+@test "uninstall_insync refuses when a live insync process is detected" {
+    export PGREP_INSYNC_RUNNING=1
+    run uninstall_insync gdrive "$ACCOUNT_DIR"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"still running"* ]]
+    # No deletion path was even reached.
+    [ -d "$ACCOUNT_DIR" ]
+    [ -f "$ACCOUNT_DIR/file.txt" ]
+}
+
+# --- step 2: refuses when the remote comparison fails -----------------------
+
+@test "uninstall_insync refuses when the remote verification step fails" {
+    export RCLONE_CHECK_FAIL=1
+    run uninstall_insync gdrive "$ACCOUNT_DIR"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"remote verification failed"* ]]
+    # Package removal must not have been attempted past this precondition.
+    [ ! -f "$APT_LOG" ]
+    [ -d "$ACCOUNT_DIR" ]
+}
+
+@test "uninstall_insync refuses when the remote name is missing" {
+    run uninstall_insync "" "$ACCOUNT_DIR"
+    [ "$status" -eq 1 ]
+}
+
+@test "uninstall_insync refuses when the local account directory does not exist" {
+    run uninstall_insync gdrive "$HOME/Insync/does-not-exist"
+    [ "$status" -eq 1 ]
+}
+
+# --- step 4: local deletion requires the explicit opt-in --------------------
+
+@test "uninstall_insync does not delete local data without INSYNC_CONFIRM_DELETE=1" {
+    unset INSYNC_CONFIRM_DELETE
+    run uninstall_insync gdrive "$ACCOUNT_DIR"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"skipped"* ]]
+    [ -d "$ACCOUNT_DIR" ]
+    [ -f "$ACCOUNT_DIR/file.txt" ]
+}
+
+@test "uninstall_insync deletes local data only with INSYNC_CONFIRM_DELETE=1" {
+    export INSYNC_CONFIRM_DELETE=1
+    run uninstall_insync gdrive "$ACCOUNT_DIR"
+    [ "$status" -eq 0 ]
+    [ ! -d "$ACCOUNT_DIR" ]
+    [ ! -d "$HOME/.config/Insync" ]
+}
+
+@test "uninstall_insync full run reaches step 5 and re-checks the remote" {
+    export INSYNC_CONFIRM_DELETE=1
+    run uninstall_insync gdrive "$ACCOUNT_DIR"
+    [ "$status" -eq 0 ]
+    grep -q '^lsjson' "$RCLONE_LOG"
+}
+
+@test "uninstall_insync quits insync before checking for a surviving process" {
+    export INSYNC_CONFIRM_DELETE=1
+    run uninstall_insync gdrive "$ACCOUNT_DIR"
+    [ -f "$INSYNC_LOG" ]
+    grep -qF 'insync quit' "$INSYNC_LOG"
+}

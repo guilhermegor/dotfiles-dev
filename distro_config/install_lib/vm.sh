@@ -57,10 +57,13 @@ install_balena_etcher() {
             print_status "success" "Balena Etcher installed from official .deb"
         else
             print_status "warning" "Download failed. Visit https://etcher.balena.io"
+            rm -rf "$tmp_dir"
+            return 1
         fi
         rm -rf "$tmp_dir"
     else
         print_status "warning" "Could not resolve .deb URL. Visit https://etcher.balena.io"
+        return 1
     fi
 }
 
@@ -84,7 +87,7 @@ install_ventoy() {
         return 1
     fi
 
-    local tmp_dir
+    local tmp_dir ventoy_installed=0
     tmp_dir=$(mktemp -d)
     print_status "info" "Downloading Ventoy..."
     if wget -q -O "$tmp_dir/ventoy.tar.gz" "$tarball_url" 2>>"$LOG_FILE" || \
@@ -114,10 +117,12 @@ Type=Application
 Categories=System;Utility;
 DESKTOP
         print_status "success" "Ventoy installed to $ventoy_dir"
+        ventoy_installed=1
     else
         print_status "warning" "Download failed. Visit https://ventoy.net"
     fi
     rm -rf "$tmp_dir"
+    [ "$ventoy_installed" -eq 1 ] || return 1
 }
 
 # ============================================================================

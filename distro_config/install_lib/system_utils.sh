@@ -125,6 +125,7 @@ verify_vitals_installation() {
             print_status "error" "Vitals files not found"
             print_status "info" "You may need to install it manually from extensions.gnome.org"
         fi
+        return 1
     fi
 }
 
@@ -448,6 +449,7 @@ verify_dim_calendar_events() {
             print_status "error" "Extension files not found"
             print_status "info" "Install manually from: https://extensions.gnome.org/extension/5979/"
         fi
+        return 1
     fi
 }
 
@@ -576,21 +578,26 @@ install_slack() {
             ;;
     esac
 
+    local slack_verified=0
     if command_exists slack; then
         print_status "success" "Slack is ready to use"
         print_status "info" "Launch with: slack"
+        slack_verified=1
     elif snap list 2>/dev/null | grep -q "^slack "; then
         print_status "success" "Slack installed via Snap"
         print_status "info" "Launch with: slack"
+        slack_verified=1
     elif flatpak list 2>/dev/null | grep -q com.slack.Slack; then
         print_status "success" "Slack installed via Flatpak"
         print_status "info" "Launch with: flatpak run com.slack.Slack"
+        slack_verified=1
     else
         print_status "warning" "Slack installation could not be verified"
         print_status "info" "You can install Slack manually from https://slack.com/downloads/linux"
     fi
 
     cd - > /dev/null || return 1
+    [ "$slack_verified" -eq 1 ] || return 1
 }
 
 configure_gsconnect() {
@@ -605,6 +612,7 @@ configure_gsconnect() {
         print_status "success" "GSConnect enabled"
     else
         print_status "warning" "GSConnect extension not found. Install it from extensions.gnome.org"
+        return 1
     fi
 }
 
@@ -717,6 +725,7 @@ install_fastfetch() {
         print_status "success" "fastfetch is ready: $(fastfetch --version 2>/dev/null | head -n1)"
     else
         print_status "warning" "fastfetch could not be installed automatically"
+        return 1
     fi
 }
 
@@ -831,6 +840,7 @@ install_pinta() {
         print_status "info" "You can install Pinta manually:"
         print_status "config" "Flatpak: flatpak install flathub com.github.PintaProject.Pinta"
         print_status "config" "Or visit: https://www.pinta-project.com/"
+        return 1
     fi
 }
 
@@ -1036,6 +1046,7 @@ verify_openlogi() {
     else
         print_status "warning" "openlogi could not be verified"
         print_status "info" "Install manually from: https://openlogi.org/download/linux"
+        return 1
     fi
 }
 
@@ -1048,7 +1059,7 @@ verify_openlogi() {
 install_utilities() {
     print_status "section" "SYSTEM UTILITIES"
 
-    install_fastfetch
+    install_fastfetch || print_status "warning" "fastfetch installation failed — continuing with system utilities"
 
     local utilities=(
         "vim:vim:vim:vim"
@@ -1072,7 +1083,7 @@ install_utilities() {
         fi
     done
 
-    install_4k_video_downloader
+    install_4k_video_downloader || print_status "warning" "4K Video Downloader Plus installation failed — continuing with system utilities"
 
     print_status "info" "Installing Piper (gaming device configuration)..."
     case "$PACKAGE_MANAGER" in

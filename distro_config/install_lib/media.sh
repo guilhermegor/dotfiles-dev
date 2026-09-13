@@ -89,6 +89,7 @@ install_asunder() {
         print_status "info" "Asunder: CD ripper and encoder"
     else
         print_status "warning" "Asunder installation could not be verified"
+        return 1
     fi
 }
 
@@ -141,6 +142,7 @@ install_handbrake() {
         print_status "config" "Supports MP4/MKV output, subtitle and audio track selection"
     else
         print_status "warning" "HandBrake installation could not be verified"
+        return 1
     fi
 }
 

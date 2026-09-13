@@ -590,7 +590,7 @@ install_espanso() {
     if ! check_internet; then
         print_status "error" "Internet connection required to install espanso"
         print_status "warning" "Skipping espanso installation due to no internet"
-        return 0
+        return 1
     fi
 
     print_status "info" "Installing espanso using the official installer..."
@@ -667,9 +667,8 @@ install_espanso() {
         print_status "config" "  - Use official installer: curl -sS https://get.espanso.org/install.sh | sh"
         print_status "config" "  - Download .deb: wget https://github.com/espanso/espanso/releases/latest/download/espanso-debian-x11-amd64.deb && sudo apt install ./espanso-debian-x11-amd64.deb"
         print_status "config" "  - Or install the AppImage into ~/opt and run: ~/opt/Espanso.AppImage env-path register"
+        return 1
     fi
-
-    return 0
 }
 
 # ============================================================================

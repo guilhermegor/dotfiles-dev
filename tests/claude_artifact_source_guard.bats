@@ -118,3 +118,52 @@ run_guard() {
     run run_guard "Write" "$HOME/.qwen/tip_history.json"
     [ "$status" -eq 0 ]
 }
+
+# --- path normalization: an unnormalized path must not walk past the allowlist -------------------
+#
+# The routing strips the live dir's prefix and matches what remains against a literal allowlist, so
+# `~/.qwen/./AGENTS.md` used to leave rel as `./AGENTS.md`, miss every arm and exit 0 (fail open)
+# while the write still landed on the real file. Measured on all four client branches, the
+# pre-existing Claude one included (dotfiles-dev#346, PR #355 review).
+
+@test "a './' component does not bypass the Qwen arm" {
+    run run_guard Write "$HOME/.qwen/./AGENTS.md"
+    [ "$status" -eq 2 ]
+}
+
+@test "a repeated separator does not bypass the Qwen arm" {
+    run run_guard Write "$HOME/.qwen//AGENTS.md"
+    [ "$status" -eq 2 ]
+}
+
+@test "a '..' component does not bypass the Qwen arm" {
+    run run_guard Write "$HOME/.qwen/nested/../AGENTS.md"
+    [ "$status" -eq 2 ]
+}
+
+@test "a './' component does not bypass the Claude arm" {
+    run run_guard Edit "$CLAUDE_CONFIG_DIR/./CLAUDE.md"
+    [ "$status" -eq 2 ]
+}
+
+@test "a '..' out of an allowlisted subdir still blocks on the Claude arm" {
+    run run_guard Write "$CLAUDE_CONFIG_DIR/hooks/../CLAUDE.md"
+    [ "$status" -eq 2 ]
+}
+
+@test "a './' component does not bypass the Copilot arm" {
+    run run_guard Write "$COPILOT_HOME/./copilot-instructions.md"
+    [ "$status" -eq 2 ]
+}
+
+@test "a './' component does not bypass the Kimi arm" {
+    run run_guard Edit "$KIMI_CODE_HOME/./AGENTS.md"
+    [ "$status" -eq 2 ]
+}
+
+@test "normalization does not turn an exempt path into a blocked one" {
+    run run_guard Write "$CLAUDE_CONFIG_DIR/./projects/proj/memory/note.md"
+    [ "$status" -eq 0 ]
+    run run_guard Write "$HOME/.qwen/./settings.json"
+    [ "$status" -eq 0 ]
+}

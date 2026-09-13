@@ -34,6 +34,26 @@ QWEN_DIR="$HOME/.qwen"
 COPILOT_DIR="${COPILOT_HOME:-$HOME/.copilot}"
 KIMI_DIR="${KIMI_CODE_HOME:-$HOME/.kimi-code}"
 
+# Lexically normalize a path: collapse repeated separators, drop "." components, and fold ".."
+# against what precedes it. No filesystem access and no symlink resolution — the hook must decide
+# identically whether or not the target exists yet, which is the usual case for a Write.
+# Without this the routing below reads `~/.qwen/./AGENTS.md` as rel `./AGENTS.md`, misses the
+# allowlist and exits 0 — the write then lands on the real file (measured, every client branch).
+normalize_path() {
+	local path="$1" lead="" comp out=() parts=()
+	[[ "$path" == /* ]] && lead=/
+	IFS=/ read -r -a parts <<<"$path"
+	for comp in "${parts[@]}"; do
+		case "$comp" in
+		'' | .) ;;
+		..) [[ "${#out[@]}" -gt 0 ]] && unset 'out[-1]' ;;
+		*) out+=("$comp") ;;
+		esac
+	done
+	local IFS=/
+	printf '%s%s' "$lead" "${out[*]}"
+}
+
 main() {
     local payload tool path
 
@@ -46,6 +66,7 @@ main() {
 
     path="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
     [[ -n "$path" ]] || exit 0
+    path="$(normalize_path "$path")"
 
     # Only paths inside a guarded live client dir are candidates. Each branch strips its own dir's
     # prefix and maps the remaining relative path to its source, or exits 0 (fail open) if the

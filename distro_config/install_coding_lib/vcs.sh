@@ -9,23 +9,50 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     exit 1
 fi
 
+# GitHub rotates the gh apt signing key: 23F3D4EA75716059 expired in 2026-09 and the published
+# keyring now also carries 5612B36462313325. apt then fails with EXPKEYSIG and silently keeps
+# stale package lists. Re-fetching on every run, not only on first install, is what survives a
+# rotation. No-op when the published keyring is byte-identical to the installed one.
+refresh_github_cli_keyring() {
+    local keyring="${GITHUB_CLI_KEYRING:-/etc/apt/keyrings/githubcli-archive-keyring.gpg}"
+    local out rc
+    out=$(mktemp)
+    if ! curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "$out" 2>> "$LOG_FILE"; then
+        rm -f "$out"
+        print_status "error" "Could not download the GitHub CLI signing key"
+        return 1
+    fi
+    if cmp -s "$out" "$keyring"; then
+        rm -f "$out"
+        return 0
+    fi
+    run_or_echo sudo install -D -m 644 "$out" "$keyring"
+    rc=$?
+    rm -f "$out"
+    [ "$rc" -eq 0 ] && print_status "success" "GitHub CLI signing key refreshed"
+    return "$rc"
+}
+
 install_github_cli() {
     print_status "section" "GITHUB CLI"
 
     if command_exists gh; then
         print_status "info" "GitHub CLI already installed"
+        # Only a gh installed from the apt repo reads that keyring.
+        if [ -f /etc/apt/sources.list.d/github-cli.list ]; then
+            refresh_github_cli_keyring || return 1
+        fi
         return 0
     fi
 
     print_status "info" "Adding GitHub CLI repository..."
-    (type -p wget >/dev/null || (sudo apt update && run_or_echo sudo apt-get install -y wget)) \
-        && sudo mkdir -p -m 755 /etc/apt/keyrings \
-        && out=$(mktemp) && run_or_echo wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-        && cat $out | run_or_echo sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    if ! { refresh_github_cli_keyring \
         && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | run_or_echo sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-        && sudo apt update \
-        && run_or_echo sudo apt install -y gh
+        && run_or_echo sudo apt update \
+        && run_or_echo sudo apt install -y gh; }; then
+        print_status "error" "GitHub CLI install failed — check $LOG_FILE"
+        return 1
+    fi
 
     gh --version >> "$LOG_FILE"
     print_status "success" "GitHub CLI installed"

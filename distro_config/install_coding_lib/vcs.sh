@@ -289,7 +289,11 @@ install_coderabbit() {
     fi
 
     print_status "info" "Running the CodeRabbit installer..."
-    if run_or_echo sh "$tmp_dir/install.sh" &>> "$LOG_FILE"; then
+    # The script ends in a "Sign in to CodeRabbit?" prompt that reads stdin, falling back to
+    # /dev/tty — with its output in the log the prompt is invisible and the run hangs. CI=1 is
+    # the vendor's own switch to skip it; closing stdin alone is not enough because of the tty
+    # fallback.
+    if run_or_echo env CI=1 sh "$tmp_dir/install.sh" < /dev/null &>> "$LOG_FILE"; then
         print_status "success" "coderabbit installed (command: coderabbit, alias: cr)"
         # Auth opens a browser and is per-user — never trigger it from the installer.
         print_status "config" "Authenticate manually: coderabbit auth login"

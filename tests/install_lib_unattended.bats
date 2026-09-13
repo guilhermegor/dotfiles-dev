@@ -63,6 +63,16 @@ interactive_reads_in() {
     [[ "$line" == *"< /dev/null"* ]]
 }
 
+@test "the CodeRabbit vendor installer skips its sign-in prompt" {
+    # It prompts on stdin and falls back to /dev/tty, so a closed stdin alone still hangs;
+    # CI=1 is the script's own switch to skip the prompt.
+    local line
+    line="$(grep -E 'run_or_echo .*install\.sh' "$REPO_ROOT/distro_config/install_coding_lib/vcs.sh" || true)"
+    [ -n "$line" ]
+    [[ "$line" == *"CI=1"* ]]
+    [[ "$line" == *"< /dev/null"* ]]
+}
+
 @test "npm multi-version install reads npm's exit status, not tee's" {
     # `if run_or_echo ... | tee` reports tee's status (always 0), so every Node version was
     # reported installed -- including ones nvm had never installed.

@@ -80,11 +80,22 @@ rather than relying on prose memory:
 | Issue guard | `hooks/issue_template_guard.sh` | `gh issue create` / `gh issue edit` | every `.github/ISSUE_TEMPLATE/*.md` (no fallback — a repo shipping none is untouched) |
 
 Both are generic and data-driven: neither hardcodes a repo name or a
-template's wording. `hooks/lib/gh_body_guard_common.sh` holds the ONE shared
-implementation of `--repo`/`-R` target resolution and `--body-file`/`-F`
-extraction both guards use — each guard keeps its own message wording
+template's wording. Both find their `gh <noun> create|edit` invocation by
+REAL ARGV, not by scanning raw command text: `hooks/lib/gh_cmd_match.py`
+splits the command into simple commands on `;`/`&&`/`||`/`|`/`&`/newlines
+(skipping heredoc bodies), tokenizes the matching one with `shlex`, and
+reads `--repo`/`-R`, `--body`/`-b`, `--body-file`/`-F`, and
+`--label`/`-l`/`--add-label` off that real argv — never off a regex over
+the whole string, which could be fooled by that same flag text appearing
+inside an unrelated quoted argument (e.g. inside `--title`), or miss an
+invocation chained after a shell operator entirely (dotfiles-dev, PR #371
+CodeRabbit review). `hooks/lib/gh_body_guard_common.sh`'s
+`resolve_gh_command()` is the ONE shared bash entry point into that
+tokenizer both guards call — each guard keeps its own message wording
 (pinned by its own bats suite) rather than sharing a parameterized
-formatter.
+formatter. A command that can't be tokenized at all (an unbalanced quote or
+an unterminated heredoc) is "unknown", not "non-compliant": both guards
+fail open on it, same as everywhere else uncertainty is possible.
 
 The issue guard derives its requirements straight from each template file:
 

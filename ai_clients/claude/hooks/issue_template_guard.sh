@@ -46,7 +46,7 @@ source "$SCRIPT_DIR/lib/gh_body_guard_common.sh"
 command -v jq >/dev/null 2>&1 || exit 0
 
 main() {
-    local payload tool command target_repo root bodyfile body_source
+    local payload tool command root body_source labels
     local -a templates=() best_missing=()
     local template best_template="" best_count=-1
 
@@ -57,24 +57,20 @@ main() {
     command="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
     [[ -n "$command" ]] || exit 0
 
-    # Only guard an actual `gh issue create` / `gh issue edit` invocation (optionally
-    # `rtk`-prefixed): anchor to a line start so a mere mention of "gh issue create" inside e.g. a
-    # commit message body does not trip it. Mirrors pr_template_guard.sh's anchor exactly.
-    printf '%s' "$command" \
-        | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?gh[[:space:]]+issue[[:space:]]+(create|edit)([[:space:]]|$)' \
-        || exit 0
-
+    # Find a `[rtk] gh issue create|edit` invocation by real argv, not by scanning raw text —
+    # mirrors pr_template_guard.sh's resolve_gh_command call exactly (see its comment for the
+    # bypasses a start-anchored regex missed: chained after `;`/`&&`/`||`/`|`/`&`/a newline, or
+    # fooled by flag-shaped text inside an unrelated quoted argument).
+    resolve_gh_command "$command" "issue" || exit 0   # unparseable → unknown, not non-compliant
+    [[ "$GH_MATCHED" == "true" ]] || exit 0
     # Only when a body is actually being set (skip title/label-only edits, editor-mode create).
-    printf '%s' "$command" \
-        | grep -Eq -- '(--body([[:space:]]|=)|-b[[:space:]]|--body-file([[:space:]]|=)|-F[[:space:]])' \
-        || exit 0
+    [[ "$GH_HAS_BODY" == "true" || "$GH_HAS_BODY_FILE" == "true" ]] || exit 0
 
     # Resolve the TARGET repo, not the session cwd's, mirroring pr_template_guard.sh exactly —
     # a `--repo`/`-R owner/name` on the command always wins over cwd.
-    target_repo="$(extract_target_repo "$command")"
-    if [[ -n "$target_repo" ]]; then
-        root="$HOME/github/${target_repo##*/}"
-        [[ -d "$root/.git" ]] || block_unresolved_repo "$target_repo" "$root"
+    if [[ -n "$GH_REPO" ]]; then
+        root="$HOME/github/${GH_REPO##*/}"
+        [[ -d "$root/.git" ]] || block_unresolved_repo "$GH_REPO" "$root"
     else
         root="$(git rev-parse --show-toplevel 2>/dev/null)"
     fi
@@ -82,24 +78,20 @@ main() {
     mapfile -t templates < <(find_issue_templates "$root")
     [[ ${#templates[@]} -gt 0 ]] || exit 0   # no issue template anywhere → nothing to enforce
 
-    bodyfile="$(extract_body_file "$command")"
-    if [[ -n "$bodyfile" && -r "$bodyfile" ]]; then
-        body_source="$(cat "$bodyfile")"
-    elif has_body_file_flag "$command"; then
-        block_unresolved_body_file "$command" "$root"
+    if [[ "$GH_HAS_BODY_FILE" == "true" ]]; then
+        if [[ -r "$GH_BODY_FILE" ]]; then
+            body_source="$(cat "$GH_BODY_FILE")"
+        else
+            block_unresolved_body_file "$GH_BODY_FILE" "$root"
+        fi
     else
-        # Unlike pr_template_guard.sh's plain substring search, the checks below are
-        # POSITION-sensitive (first line, per-header sections) — scanning the whole raw command
-        # string (which is prefixed by `gh issue create --title ... --body `) would misread that
-        # prefix as the body's first line. Extract the actual --body/-b value instead.
-        body_source="$(extract_inline_body "$command")"
+        body_source="$GH_BODY"
     fi
     # Tolerate a literal two-character `\n` inside an inline --body (as opposed to a real
     # newline) so the section-aware checks below still see line structure either way.
     body_source=${body_source//'\n'/$'\n'}
 
-    local labels
-    labels="$(extract_labels "$command")"
+    labels="$(printf '%s\n' "${GH_LABELS[@]}")"
 
     for template in "${templates[@]}"; do
         evaluate_template "$template" "$body_source" "$labels"
@@ -166,40 +158,6 @@ section_has_checklist() {
         section="$(sed -n "$((start_line + 1)),\$p" <<<"$text")"
     fi
     grep -Eq '^[[:space:]]*[-*][[:space:]]+\[[ xX]\]' <<<"$section"
-}
-
-# Echo the value passed to --body/-b on an inline (non-body-file) command, if present. Same
-# quoting handling as extract_body_file in lib/gh_body_guard_common.sh, minus the readability
-# disambiguation (an inline value is not a path, so "does it exist on disk" doesn't apply).
-extract_inline_body() {
-    local s="$1" re val
-    re='(--body[[:space:]=]+|-b[[:space:]]+)("[^"]*"|'\''[^'\'']*'\''|[^[:space:]]+)'
-    [[ "$s" =~ $re ]] || return 0
-    val="${BASH_REMATCH[2]}"
-    val="${val#[\"\']}"
-    val="${val%[\"\']}"
-    printf '%s' "$val"
-}
-
-# Collect every --label/-l/--add-label value (comma-separated, repeatable) from the raw command
-# string, one per line. This is the ONLY label information ever visible to this hook: for `gh
-# issue create` it is the complete label set; for `gh issue edit` it is only labels being ADDED,
-# never the issue's pre-existing set — callers must treat absence from this list as "unknown", not
-# "not present", which is exactly what the if-label directive check below does.
-extract_labels() {
-    local s="$1" re val matched part
-    re='(--label[[:space:]=]+|-l[[:space:]]+|--add-label[[:space:]=]+)("[^"]+"|'\''[^'\'']+'\''|[^[:space:]]+)'
-    while [[ "$s" =~ $re ]]; do
-        val="${BASH_REMATCH[2]}"
-        matched="${BASH_REMATCH[0]}"
-        val="${val#[\"\']}"
-        val="${val%[\"\']}"
-        local IFS=','
-        for part in $val; do
-            [[ -n "$part" ]] && printf '%s\n' "$part"
-        done
-        s="${s#*"$matched"}"
-    done
 }
 
 # Populate the global `missing` array with every requirement of $1 (a template file) that $2 (the
@@ -270,8 +228,7 @@ block_unresolved_body_file() {
     # Same reasoning as pr_template_guard.sh's block_unresolved_body_file (dotfiles-dev#78/#109):
     # a PreToolUse hook sees the command BEFORE shell expansion and sandboxed to the project
     # directory, so a generic "check the path" sends the author chasing a bug that isn't there.
-    local cmd="$1" root="${2:-}" path
-    path="$(extract_body_file_raw "$cmd")"
+    local path="$1" root="${2:-}"
 
     {
         echo "BLOCKED: the --body-file could not be read, so the issue body was never verified."
@@ -282,8 +239,9 @@ block_unresolved_body_file() {
         if [[ "$path" == *'$'* || "$path" == *'`'* ]]; then
             echo
             echo "The path contains an unexpanded shell variable or \$(…) — this hook sees the"
-            echo "command before the shell expands it. Pass a literal path, or inline the body"
-            echo "with --body \"\$(cat file.md)\" (the substituted text then reaches the hook)."
+            echo "command before the shell expands it, so that advice would ALSO arrive"
+            echo "unexpanded. Pass a literal path instead, or inline the literal body text with"
+            echo "--body \"...\" (written out, not produced by a substitution)."
         elif [[ -n "$root" && "$path" == /* && "$path" != "$root"/* ]]; then
             echo
             echo "The path is outside the project directory ($root), which this hook cannot"

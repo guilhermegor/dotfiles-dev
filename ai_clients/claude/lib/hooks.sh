@@ -37,6 +37,7 @@ install_hooks() {
     copy_hook_file "pr_template_guard.sh" "$hooks_dir"
     copy_hook_file "issue_template_guard.sh" "$hooks_dir"
     copy_hook_file "lib/gh_body_guard_common.sh" "$hooks_dir"
+    copy_hook_file "lib/gh_cmd_match.py" "$hooks_dir"
     copy_hook_file "lib/commit_command_matcher.sh" "$hooks_dir"
     copy_hook_file "lib/deploy_drift.sh" "$hooks_dir"
     copy_hook_file "commit_title_length_guard.sh" "$hooks_dir"

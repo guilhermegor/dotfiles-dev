@@ -21,8 +21,8 @@ source "$SCRIPT_DIR/lib/gh_body_guard_common.sh"
 command -v jq >/dev/null 2>&1 || exit 0
 
 main() {
-    local payload tool command template bodyfile body_source header line
-    local missing=() target_repo root
+    local payload tool command template body_source header line
+    local missing=() root
 
     payload="$(cat)"
     tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
@@ -31,32 +31,25 @@ main() {
     command="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
     [[ -n "$command" ]] || exit 0
 
-    # Only guard an actual `gh pr create` / `gh pr edit` invocation (optionally `rtk`-prefixed):
-    # anchor to a line start so a mere mention of "gh pr create" in e.g. a commit message body
-    # does not trip the guard (which would then misread `git commit -F -` as a gh body flag).
-    # This anchor is ALSO what keeps `gh issue create` untouched (dotfiles-dev#154 defect 1): an
-    # issue has no PR-template obligation, and "pr" is a required literal here, so "gh issue
-    # create" never reaches this point.
-    # ponytail: line-anchored, not a full shell parse — a body line literally starting with
-    # "gh pr create" plus a body flag could still match; tighten to a real parser only if it bites.
-    printf '%s' "$command" \
-        | grep -Eq '^[[:space:]]*(rtk[[:space:]]+)?gh[[:space:]]+pr[[:space:]]+(create|edit)([[:space:]]|$)' \
-        || exit 0
-
+    # Find a `[rtk] gh pr create|edit` invocation by real argv, not by scanning raw text: a regex
+    # anchored to the START of the command missed every invocation chained after `;`/`&&`/`||`/
+    # `|`/`&`/a newline, and could be fooled by "--repo"/"--body" text appearing inside an
+    # unrelated quoted argument like --title (CodeRabbit review, PR #371). This is ALSO what keeps
+    # `gh issue create` untouched (dotfiles-dev#154 defect 1): "pr" is a required argv position
+    # here, so an issue command never matches.
+    resolve_gh_command "$command" "pr" || exit 0   # unparseable → unknown, not non-compliant
+    [[ "$GH_MATCHED" == "true" ]] || exit 0
     # Only when a body is actually being set (skip title-only edits, editor-mode create, --fill).
-    printf '%s' "$command" \
-        | grep -Eq -- '(--body([[:space:]]|=)|-b[[:space:]]|--body-file([[:space:]]|=)|-F[[:space:]])' \
-        || exit 0
+    [[ "$GH_HAS_BODY" == "true" || "$GH_HAS_BODY_FILE" == "true" ]] || exit 0
 
     # Resolve the TARGET repo's template, not the session cwd's (dotfiles-dev#154 defect 2). A
     # `--repo`/`-R owner/name` on the gh command itself always wins over cwd — the command can
     # target a different repo than the session is sitting in (`cd other-repo; gh pr create --repo
     # this-repo ...` is routine in a multi-repo session), and judging it against the wrong repo's
     # template is worse than not judging it at all (it fails in the *permitting* direction too).
-    target_repo="$(extract_target_repo "$command")"
-    if [[ -n "$target_repo" ]]; then
-        root="$HOME/github/${target_repo##*/}"
-        [[ -d "$root/.git" ]] || block_unresolved_repo "$target_repo" "$root"
+    if [[ -n "$GH_REPO" ]]; then
+        root="$HOME/github/${GH_REPO##*/}"
+        [[ -d "$root/.git" ]] || block_unresolved_repo "$GH_REPO" "$root"
         template="$(find_template "$root" 0)"   # no personal-template fallback for a foreign repo
     else
         root="$(git rev-parse --show-toplevel 2>/dev/null)"
@@ -64,21 +57,22 @@ main() {
     fi
     [[ -n "$template" && -r "$template" ]] || exit 0   # no template anywhere → nothing to enforce
 
-    # Inspect the --body-file contents if given, else the inline command string (an inline --body
-    # embeds the section headers directly in the command text).
+    # Inspect the --body-file contents if given, else the inline --body value (which embeds the
+    # section headers directly).
     #
     # A --body-file/-F flag that we cannot resolve to a readable file is NOT the same as "no
     # body-file" (dotfiles-dev#78): falling back to scanning the command string then produces a
     # verdict from the wrong source — it can false-PASS when the header texts happen to appear in
     # e.g. --title, or block with a misleading "missing sections". A verdict from unresolved input
     # is "unknown", not "approved": fail loud instead.
-    bodyfile="$(extract_body_file "$command")"
-    if [[ -n "$bodyfile" && -r "$bodyfile" ]]; then
-        body_source="$(cat "$bodyfile")"
-    elif has_body_file_flag "$command"; then
-        block_unresolved_body_file "$command" "$root"
+    if [[ "$GH_HAS_BODY_FILE" == "true" ]]; then
+        if [[ -r "$GH_BODY_FILE" ]]; then
+            body_source="$(cat "$GH_BODY_FILE")"
+        else
+            block_unresolved_body_file "$GH_BODY_FILE" "$root"
+        fi
     else
-        body_source="$command"
+        body_source="$GH_BODY"
     fi
 
     # Every `## Heading` in the template must appear (by its text) in the body.
@@ -161,8 +155,7 @@ block_unresolved_body_file() {
     # so name the actual cause: an unexpanded shell variable, a path outside the project
     # directory (this hook's filesystem view is sandboxed to the project — dotfiles-dev#109), or
     # the file genuinely not existing yet (dotfiles-dev#78, e.g. create-and-consume in one call).
-    local cmd="$1" root="${2:-}" path
-    path="$(extract_body_file_raw "$cmd")"
+    local path="$1" root="${2:-}"
 
     {
         echo "BLOCKED: the --body-file could not be read, so the PR body was never verified."
@@ -173,8 +166,9 @@ block_unresolved_body_file() {
         if [[ "$path" == *'$'* || "$path" == *'`'* ]]; then
             echo
             echo "The path contains an unexpanded shell variable or \$(…) — this hook sees the"
-            echo "command before the shell expands it. Pass a literal path, or inline the body"
-            echo "with --body \"\$(cat file.md)\" (the substituted text then reaches the hook)."
+            echo "command before the shell expands it, so that advice would ALSO arrive"
+            echo "unexpanded. Pass a literal path instead, or inline the literal body text with"
+            echo "--body \"...\" (written out, not produced by a substitution)."
         elif [[ -n "$root" && "$path" == /* && "$path" != "$root"/* ]]; then
             echo
             echo "The path is outside the project directory ($root), which this hook cannot"

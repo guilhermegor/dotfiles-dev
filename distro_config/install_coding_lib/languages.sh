@@ -944,6 +944,11 @@ install_blueprintx() {
 
     if command_exists blueprintx; then
         print_status "info" "blueprintx already installed"
+        # Installed from the vendor apt repo → its key can rotate under us (#353).
+        if [ -f /etc/apt/sources.list.d/blueprintx.list ]; then
+            refresh_apt_keyring https://guilhermegor.github.io/blueprintx/apt/gpg.key \
+                /usr/share/keyrings/blueprintx.gpg --dearmor || return 1
+        fi
         return 0
     fi
 

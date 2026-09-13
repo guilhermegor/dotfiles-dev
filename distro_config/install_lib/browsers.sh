@@ -112,6 +112,11 @@ install_brave() {
 
     if command_exists brave-browser || command_exists brave; then
         print_status "info" "Brave already installed"
+        # Installed from the vendor apt repo → its key can rotate under us (#353).
+        if [ -f /etc/apt/sources.list.d/brave-browser.list ]; then
+            refresh_apt_keyring https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg \
+                /usr/share/keyrings/brave-browser-archive-keyring.gpg || return 1
+        fi
         return 0
     fi
 

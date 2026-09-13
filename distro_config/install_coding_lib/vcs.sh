@@ -14,23 +14,8 @@ fi
 # stale package lists. Re-fetching on every run, not only on first install, is what survives a
 # rotation. No-op when the published keyring is byte-identical to the installed one.
 refresh_github_cli_keyring() {
-    local keyring="${GITHUB_CLI_KEYRING:-/etc/apt/keyrings/githubcli-archive-keyring.gpg}"
-    local out rc
-    out=$(mktemp)
-    if ! curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "$out" 2>> "$LOG_FILE"; then
-        rm -f "$out"
-        print_status "error" "Could not download the GitHub CLI signing key"
-        return 1
-    fi
-    if cmp -s "$out" "$keyring"; then
-        rm -f "$out"
-        return 0
-    fi
-    run_or_echo sudo install -D -m 644 "$out" "$keyring"
-    rc=$?
-    rm -f "$out"
-    [ "$rc" -eq 0 ] && print_status "success" "GitHub CLI signing key refreshed"
-    return "$rc"
+    refresh_apt_keyring https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        "${GITHUB_CLI_KEYRING:-/etc/apt/keyrings/githubcli-archive-keyring.gpg}"
 }
 
 install_github_cli() {

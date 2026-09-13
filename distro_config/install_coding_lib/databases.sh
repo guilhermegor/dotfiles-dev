@@ -14,6 +14,11 @@ install_postgresql() {
 
     if command_exists psql; then
         print_status "info" "PostgreSQL already installed"
+        # Installed from the vendor apt repo → its key can rotate under us (#353).
+        if [ -f /etc/apt/sources.list.d/pgdg.list ]; then
+            refresh_apt_keyring https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+                /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc || return 1
+        fi
         return 0
     fi
 
@@ -86,14 +91,9 @@ install_pgadmin() {
     print_status "section" "PGADMIN4"
 
     print_status "info" "Adding pgAdmin repository..."
-    # Idempotent: only import the signing key if it isn't already present, and
-    # use --batch --yes so gpg never prompts "overwrite?" on re-runs (which left
-    # the install looking like it reinstalled every time).
-    if [ ! -f /usr/share/keyrings/packages-pgadmin-org.gpg ]; then
-        curl -fsS https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/packages-pgadmin-org.gpg
-    else
-        print_status "info" "pgAdmin signing key already present — skipping key import"
-    fi
+    # Compare-and-replace on every run, never "skip if present" (#353).
+    refresh_apt_keyring https://www.pgadmin.org/static/packages_pgadmin_org.pub \
+        /usr/share/keyrings/packages-pgadmin-org.gpg --dearmor || return 1
 
     sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/packages-pgadmin-org.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/$(lsb_release -cs) pgadmin4 main" > /etc/apt/sources.list.d/pgadmin4.list'
 

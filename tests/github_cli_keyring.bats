@@ -19,7 +19,7 @@ STUB
     printf '#!/bin/bash\necho "$*" >> "$SUDO_LOG"\n"$@"\n' > "$TMP/bin/sudo"
     chmod +x "$TMP/bin/curl" "$TMP/bin/sudo"
     export PATH="$TMP/bin:$PATH"
-    source "$REPO_ROOT/lib/common.sh"
+    source "$REPO_ROOT/distro_config/install_lib/_common.sh"
     source "$REPO_ROOT/distro_config/install_coding_lib/vcs.sh"
 }
 

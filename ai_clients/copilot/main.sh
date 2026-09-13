@@ -1,33 +1,33 @@
 #!/bin/bash
-# OpenAI Codex CLI setup orchestrator.
+# GitHub Copilot CLI setup orchestrator.
 # Run with no args for an interactive menu, or pass step names directly:
 #   ./main.sh all
-#   ./main.sh config agents_md
+#   ./main.sh agents_md
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/../lib/utils.sh"
-# CODEX_HOME is the CLI's own override env var (defaults to ~/.codex);
-# respecting it here keeps the deploy target in sync with what Codex reads.
-CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
-source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/../lib/shared_agents_md.sh"
+# COPILOT_HOME is the CLI's own override env var (defaults to ~/.copilot);
+# respecting it here keeps the deploy target in sync with what Copilot reads.
+COPILOT_DIR="${COPILOT_HOME:-$HOME/.copilot}"
 
 # ── Step registry ─────────────────────────────────────────────────────────────
 # Each entry: "key|label"
 
 STEPS=(
-    "config|Install config.toml"
-    "agents_md|Install shared AGENTS.md"
+    "agents_md|Install shared instructions (copilot-instructions.md)"
 )
 
 dispatch_step() {
     local key="$1"
     case "$key" in
-        config)     install_config ;;
-        agents_md)  install_shared_agents_md "$CODEX_DIR/AGENTS.md" ;;
+        # Copilot CLI does not read AGENTS.md at the user level — its global
+        # instructions file is copilot-instructions.md (verified 2026-09-13,
+        # GitHub Docs: "Adding custom instructions for GitHub Copilot CLI").
+        agents_md) install_shared_agents_md "$COPILOT_DIR/copilot-instructions.md" ;;
         *) print_status "error" "Unknown step: $key"; return 1 ;;
     esac
 }
@@ -37,7 +37,7 @@ dispatch_step() {
 show_menu() {
     echo ""
     echo -e "${MAGENTA}========================================${NC}"
-    echo -e "${MAGENTA} OPENAI CODEX CLI SETUP — Select steps${NC}"
+    echo -e "${MAGENTA} GITHUB COPILOT CLI SETUP — Select steps${NC}"
     echo -e "${MAGENTA}========================================${NC}"
     echo ""
     local i=1
@@ -88,9 +88,9 @@ interactive_menu() {
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 main() {
-    print_status "section" "OPENAI CODEX CLI CONFIGURATION SCRIPT"
+    print_status "section" "GITHUB COPILOT CLI CONFIGURATION SCRIPT"
     print_status "info" "Log: $LOG_FILE"
-    print_status "info" "Codex dir: $CODEX_DIR"
+    print_status "info" "Copilot dir: $COPILOT_DIR"
 
     if [ $# -eq 0 ]; then
         interactive_menu
@@ -105,7 +105,7 @@ main() {
     fi
 
     print_status "section" "DONE"
-    print_status "success" "OpenAI Codex CLI configuration applied to: $CODEX_DIR"
+    print_status "success" "GitHub Copilot CLI configuration applied to: $COPILOT_DIR"
 }
 
 main "$@"

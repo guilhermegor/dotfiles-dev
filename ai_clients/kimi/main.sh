@@ -1,33 +1,36 @@
 #!/bin/bash
-# OpenAI Codex CLI setup orchestrator.
+# Kimi Code CLI (Moonshot AI, @moonshot-ai/kimi-code) setup orchestrator.
 # Run with no args for an interactive menu, or pass step names directly:
 #   ./main.sh all
-#   ./main.sh config agents_md
+#   ./main.sh agents_md
+#
+# UNVERIFIED (dotfiles-dev#346): Kimi Code CLI is not installed on this
+# machine. KIMI_CODE_HOME and the AGENTS.md delivery path below come from
+# the official docs (moonshotai.github.io/kimi-code) rather than a real
+# install — confirm against a real `kimi` install before relying on this.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/../lib/utils.sh"
-# CODEX_HOME is the CLI's own override env var (defaults to ~/.codex);
-# respecting it here keeps the deploy target in sync with what Codex reads.
-CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
-source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/../lib/shared_agents_md.sh"
+# KIMI_CODE_HOME is the CLI's own override env var (defaults to
+# ~/.kimi-code); respecting it here keeps the deploy target in sync with
+# what Kimi Code reads.
+KIMI_DIR="${KIMI_CODE_HOME:-$HOME/.kimi-code}"
 
 # ── Step registry ─────────────────────────────────────────────────────────────
 # Each entry: "key|label"
 
 STEPS=(
-    "config|Install config.toml"
     "agents_md|Install shared AGENTS.md"
 )
 
 dispatch_step() {
     local key="$1"
     case "$key" in
-        config)     install_config ;;
-        agents_md)  install_shared_agents_md "$CODEX_DIR/AGENTS.md" ;;
+        agents_md) install_shared_agents_md "$KIMI_DIR/AGENTS.md" ;;
         *) print_status "error" "Unknown step: $key"; return 1 ;;
     esac
 }
@@ -37,7 +40,7 @@ dispatch_step() {
 show_menu() {
     echo ""
     echo -e "${MAGENTA}========================================${NC}"
-    echo -e "${MAGENTA} OPENAI CODEX CLI SETUP — Select steps${NC}"
+    echo -e "${MAGENTA} KIMI CODE CLI SETUP — Select steps${NC}"
     echo -e "${MAGENTA}========================================${NC}"
     echo ""
     local i=1
@@ -88,9 +91,9 @@ interactive_menu() {
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 main() {
-    print_status "section" "OPENAI CODEX CLI CONFIGURATION SCRIPT"
+    print_status "section" "KIMI CODE CLI CONFIGURATION SCRIPT"
     print_status "info" "Log: $LOG_FILE"
-    print_status "info" "Codex dir: $CODEX_DIR"
+    print_status "info" "Kimi dir: $KIMI_DIR"
 
     if [ $# -eq 0 ]; then
         interactive_menu
@@ -105,7 +108,7 @@ main() {
     fi
 
     print_status "section" "DONE"
-    print_status "success" "OpenAI Codex CLI configuration applied to: $CODEX_DIR"
+    print_status "success" "Kimi Code CLI configuration applied to: $KIMI_DIR"
 }
 
 main "$@"

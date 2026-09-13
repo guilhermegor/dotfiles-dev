@@ -13,21 +13,21 @@ source "$SCRIPT_DIR/../lib/utils.sh"
 # respecting it here keeps the deploy target in sync with what Codex reads.
 CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
 source "$SCRIPT_DIR/lib/config.sh"
-source "$SCRIPT_DIR/lib/agents_md.sh"
+source "$SCRIPT_DIR/../lib/shared_agents_md.sh"
 
 # ── Step registry ─────────────────────────────────────────────────────────────
 # Each entry: "key|label"
 
 STEPS=(
     "config|Install config.toml"
-    "agents_md|Install global AGENTS.md"
+    "agents_md|Install shared AGENTS.md"
 )
 
 dispatch_step() {
     local key="$1"
     case "$key" in
         config)     install_config ;;
-        agents_md)  install_agents_md ;;
+        agents_md)  install_shared_agents_md "$CODEX_DIR/AGENTS.md" ;;
         *) print_status "error" "Unknown step: $key"; return 1 ;;
     esac
 }

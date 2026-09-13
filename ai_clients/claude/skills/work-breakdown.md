@@ -216,6 +216,14 @@ Treating a `Q` as an `ASM` silently makes a product decision; treating an `ASM` 
 something nobody needs to answer. Both cost real work later (feeds the audit gate, #305 — out of
 scope here).
 
+## 5b. Capture — before handoff, not after
+
+Discovery (step 1) and prototyping (step 2) are where a *generalizable* finding surfaces — a
+reusable seam, a tooling gap, a guardrail worth a rule — and that visibility is gone once the batch
+moves into `s:dev-loop`'s issues and PRs. Before handing off, decide explicitly: did either step
+surface one? If yes, call `s:capturing-lessons` now — it already owns which store it belongs in and
+that store's format; do not re-derive either here. If no, say so in one line and proceed to step 6.
+
 ## 6. Handoff
 
 The batch — issues, milestone, labels, wiring-file notes, file-count split, test requirements, and
@@ -227,7 +235,8 @@ start dispatching subagents from inside this skill.
 
 ## Do Not
 
-- Do not reimplement `s:problem-framing`, `/issue`, the test skills, or `s:dev-loop` — call them.
+- Do not reimplement `s:problem-framing`, `/issue`, the test skills, `s:dev-loop`, or
+  `s:capturing-lessons` — call them.
 - Do not partition by directory. Only exact file paths prove non-collision (dotfiles-dev#194).
 - Do not treat wiring files as an ordinary collision — they serialize a whole batch if missed.
 - Do not stop at collision-free. A collision-free batch can still fail the reviewer's file-count

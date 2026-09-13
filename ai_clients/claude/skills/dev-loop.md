@@ -1,6 +1,6 @@
 ---
 name: s:dev-loop
-description: Use to run one iteration of the autonomous development loop — after a subagent finishes, on a scheduled round, or when the user asks "what's the state of the board?", "merge what can be merged", "dispatch more agents", "anything to release?". Runs six ordered steps (rescue, sweep, threads, re-run, release, dispatch) and ENDS IN ACTION, never in a report.
+description: Use to run one iteration of the autonomous development loop — after a subagent finishes, on a scheduled round, or when the user asks "what's the state of the board?", "merge what can be merged", "dispatch more agents", "anything to release?". Runs seven ordered steps (rescue, sweep, threads, re-run, release, dispatch, capture) and ENDS IN ACTION, never in a report.
 effort: high
 argument-hint: [none]
 allowed-tools: Bash Read Glob Grep Write Edit Agent
@@ -16,7 +16,7 @@ cansativo sempre ter que perguntar isso."* A sequence cannot be captured as N no
 ⚠️ **The order is load-bearing.** RESCUE is first not because it matters most, but because it is
 the step that gets skipped — and skipping it is the only one that destroys work.
 
-⚠️ **The loop ends in step 6, not step 2.** A sweep that terminates in a report hands the loop back
+⚠️ **The loop ends in step 7, not step 2.** A sweep that terminates in a report hands the loop back
 to the human at exactly the point it was meant to remove them from. If a step finds nothing, **say
 so in one line** — silence is indistinguishable from a step that never ran.
 
@@ -31,7 +31,7 @@ que rode?"* is the measurement that it didn't.
 1. **`CronList` first.** Invoking the skill twice in one session must not produce four jobs
    firing in duplicate against the same PRs — check what already exists before creating anything.
 2. **`CronCreate` whatever is missing:**
-   - the round (all six steps below) at `:23`;
+   - the round (all seven steps below) at `:23`;
    - a thread sweep at `:53`.
 3. **Say what you armed**, or that both already existed. A step that runs silently is
    indistinguishable from one that never ran.
@@ -505,11 +505,52 @@ Every brief carries:
   template guard reads the file before a same-call heredoc has written it;
 - a failing test is a **finding**, never an obstacle to remove.
 
+## 7. CAPTURE — lessons from this round, before it ends
+
+The other six steps fix threads, merge, cut releases, rescue dead work, and dispatch — each can
+surface a *generalizable* finding (a reusable seam, tooling gap, guardrail) that is only visible
+right now, at the moment the round closes. Decide explicitly, once, covering everything steps 1–6
+did **this round**: did a rescue, a thread fix, a merge, or a release just now reveal one? Call
+`s:capturing-lessons` — do not reimplement its store routing or file format here.
+
+⚠️ **Skip the question this step already asked via the hook — do not ask it twice.**
+`lesson_capture_checkpoint.sh` (a `PostToolUse` hook) fires its own advisory reminder immediately
+after any `gh pr create` / `gh issue create` this round already ran — step 3 (THREADS) or step 6
+(DISPATCH) opening a PR already triggered it, and it was already answered or declined inline. This
+step is for what that checkpoint could not see:
+- **no PR/issue was opened this round at all** (a rescue push, a release cut, a thread reply-and-
+  resolve with no new PR) — the checkpoint never fired, so this is the only capture surface;
+- **something capture-worthy happened AFTER the last PR/issue open this round** (step 5 cut a
+  release after step 3's PR was already open and answered) — only that later slice is new.
+
+If this round opened a PR/issue and nothing capture-worthy happened after it, say so in one line
+and move on — re-asking an already-answered checkpoint is noise, not thoroughness.
+
+**Attributing a lesson to this round — the stores are global and concurrently written, so a plain
+diff since round start over-attributes.** Other sessions write into the same
+`~/.claude/memory/lessons/`, `lessons-dotfiles/`, and `lessons-other/` stores at the same time —
+measured 2026-09-13, three different sessions wrote into the stores inside one 40-minute window.
+Detect a candidate by **modification time**, then attribute by **content**, never by recency alone:
+
+```bash
+since='2026-09-13T10:00:00'   # this round's start, not "just now"
+find ~/.claude/memory/lessons ~/.claude/memory/lessons-dotfiles ~/.claude/memory/lessons-other \
+  -maxdepth 1 -name '*.md' -newermt "$since" -print
+```
+
+For each candidate, confirm it actually names something this round touched (an issue/PR number
+opened this round, a file this round's threads/rescue fixed) before claiming it. A recently-touched
+file that does not match this round's work is still real signal — report it as unindexed shared
+debt, but say plainly it was **not** written this round; do not claim credit for another session's
+capture.
+
 ---
 
 ## Do Not
 
-- Do not stop at step 2 and report. The loop ends in dispatch.
+- Do not stop at step 2 and report. The loop ends in capture (step 7), not dispatch.
+- Do not let step 7 re-ask a question the round's own `gh pr create`/`gh issue create` checkpoint
+  already asked and got answered — see step 7's skip condition.
 - Do not re-implement a gate's logic in the sweep — call the gate. A sweep that reimplemented one
   inherited its bug **plus one of its own**.
 - Do not conclude a path is clean from rtk-proxied `git status` / `ls` / `find`.

@@ -76,7 +76,7 @@ _free_held_paths() {
 		[ -n "$b" ] || continue
 		[ "$b" = "$db" ] && continue
 		printf '%s\n' "$pr_heads" | grep -qxF "$b" && continue
-		diff="$(gh api "repos/$slug/compare/$db...$b" --jq '.files[]?.filename' 2>/dev/null)" || continue
+		diff="$(gh api "repos/$slug/compare/$db...$b" --jq '.files[]?.filename' 2>/dev/null)" || return 1
 		[ -n "$diff" ] && paths="$(printf '%s\n%s' "$paths" "$diff")"
 	done <<<"$branches"
 

@@ -402,7 +402,17 @@ its entire value is existing before the window closes, the same principle step 0
 to the 7-day cron expiry.
 
 Compute the free surface: the exact files the open PRs touch, versus the exact files each open
-issue would touch. Dispatch agents for what does not collide.
+issue would touch. Dispatch agents for what does not collide. **Call the gate; never re-derive it
+by hand** (dotfiles-dev#340):
+
+```bash
+source ai_clients/claude/hooks/lib/free_surface.sh
+gate_free_surface <owner> <repo> || echo "free surface UNKNOWN — do not dispatch on it"
+printf '%s\n' "$FREE_UNCLAIMED_ISSUES"            # open issues no PR (open OR merged) closes
+free_classify_files <paths the issue would touch>  # free | held:… | would-need-a-held-file:…
+```
+
+The candidate file list per issue is still yours to supply — that needs reading the issue.
 
 ⚠️ **Collision is exact-path, file by file — never a directory prefix.** Measured 2026-09-04:
 reading a "concentration by top-5-directory" summary instead of the exact path list reported 9 of

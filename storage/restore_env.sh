@@ -1,17 +1,77 @@
 #!/bin/bash
-# Restores git-ignored .env* files from backup to ~/github/<project>/ roots.
-# Reads CLAUDE_BACKUP_DIR from ~/.claude/.env.
+# Restores an encrypted env bundle (git-ignored .env* files plus, optionally,
+# ~/.config/rclone/rclone.conf) produced by storage/backup_env.sh.
+# Reads CLAUDE_BACKUP_DIR from ~/.claude/.env for the source.
+#
+# Every restored file is written mode 600 and NEVER overwrites an existing
+# file — an existing file may already hold a newer, working secret, so a
+# conflict is reported as skipped rather than clobbered. After restoring
+# rclone.conf, a cheap `rclone lsd <remote>: --max-depth 1` check verifies the
+# token still works; a failure points at `rclone config reconnect <remote>:`
+# rather than leaving a broken mount silently in place — OneDrive refresh
+# tokens expire after disuse, so this is expected, not an error
+# (dotfiles-dev#367).
 
 GITHUB_DIR="$HOME/github"
+RCLONE_CONF_DEST="$HOME/.config/rclone/rclone.conf"
 
 read_backup_dir() {
     grep '^CLAUDE_BACKUP_DIR=' "$HOME/.claude/.env" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]'
 }
 
-format_timestamp() {
-    # _20260411_080312 → 2026-04-11 08:03:12
-    local ts="${1#_}"
-    echo "${ts:0:4}-${ts:4:2}-${ts:6:2} ${ts:9:2}:${ts:11:2}:${ts:13:2}"
+# Lists encrypted bundles newest-first. Filenames are
+# env_bundle_YYYYMMDD_HHMMSS.tar.gpg, so lexical sort is chronological sort.
+list_bundles() {
+    local bundle_dir="$1"
+    find "$bundle_dir" -maxdepth 1 -name 'env_bundle_*.tar.gpg' -type f 2>/dev/null | sort -r
+}
+
+# Prompts once for the passphrase (hidden entry). Prints it on stdout for
+# command-substitution capture only — never as a CLI argument.
+prompt_passphrase_once() {
+    zenity --password --title="Restore Env — enter passphrase"
+}
+
+# Decrypts $bundle_path into $tar_path. The passphrase is fed over stdin
+# (--passphrase-fd 0), never as a CLI argument.
+decrypt_bundle() {
+    local bundle_path="$1" tar_path="$2" passphrase="$3"
+    printf '%s' "$passphrase" | gpg --batch --yes --pinentry-mode loopback \
+        --passphrase-fd 0 --decrypt --output "$tar_path" "$bundle_path" 2>/dev/null
+}
+
+# Restores one file to $dest with mode 600, never overwriting an existing
+# file. Echoes nothing; caller inspects the exit status:
+#   0 = restored, 1 = skipped (already exists), 2 = failed to copy
+restore_file() {
+    local src="$1" dest="$2"
+    if [[ -e "$dest" ]]; then
+        return 1
+    fi
+    mkdir -p "$(dirname "$dest")" || return 2
+    cp "$src" "$dest" 2>/dev/null || return 2
+    chmod 600 "$dest" || return 2
+    return 0
+}
+
+# Cheap post-restore read of the first configured remote. Prints a
+# human-readable note; returns 0 when verified (or nothing to verify), 1 when
+# the token looks dead so the caller can surface the reconnect hint.
+verify_rclone() {
+    local conf_path="$1"
+    local remote
+    remote=$(RCLONE_CONFIG="$conf_path" rclone listremotes 2>/dev/null | head -n1)
+    if [[ -z "$remote" ]]; then
+        echo "rclone.conf restored, but it has no configured remotes to verify."
+        return 0
+    fi
+    if RCLONE_CONFIG="$conf_path" rclone lsd "${remote}" --max-depth 1 &>/dev/null; then
+        echo "rclone.conf restored and verified against ${remote} (rclone lsd succeeded)."
+        return 0
+    fi
+    echo "rclone.conf restored, but ${remote} could not be reached — the token" \
+         "may have expired from disuse. Run: rclone config reconnect ${remote}"
+    return 1
 }
 
 main() {
@@ -24,140 +84,107 @@ main() {
         exit 1
     fi
 
-    local source="$backup_dir/env_files"
+    local bundle_dir="$backup_dir/env_bundle"
 
-    if [[ ! -d "$source" ]]; then
+    if [[ ! -d "$bundle_dir" ]]; then
         zenity --error --title="Restore Env" \
-            --text="Cannot access source directory:\n<tt>$source</tt>\n\nCheck that the drive is mounted."
+            --text="Cannot access source directory:\n<tt>$bundle_dir</tt>\n\nCheck that the drive is mounted."
         exit 1
     fi
 
-    declare -A latest_ts_per_key
-    declare -A latest_path_per_key
+    local -a bundles=()
+    while IFS= read -r bundle; do
+        [[ -z "$bundle" ]] && continue
+        bundles+=("$bundle")
+    done < <(list_bundles "$bundle_dir")
 
-    while IFS= read -r file_path; do
-        local filename
-        filename=$(basename "$file_path")
-        local timestamp
-        timestamp=$(echo "$filename" | grep -oE '_[0-9]{8}_[0-9]{6}$')
-        [[ -z "$timestamp" ]] && continue
-        local prefix="${filename%$timestamp}"
-        local proj_key="${prefix%__*}"
-        local env_name="${prefix##*__}"
-        local key="${proj_key}|${env_name}"
-
-        if [[ -z "${latest_ts_per_key[$key]+x}" ]] || \
-           [[ "$timestamp" > "${latest_ts_per_key[$key]}" ]]; then
-            latest_ts_per_key["$key"]="$timestamp"
-            latest_path_per_key["$key"]="$file_path"
-        fi
-    done < <(find "$source" -maxdepth 1 -type f 2>/dev/null | sort)
-
-    if [[ ${#latest_path_per_key[@]} -eq 0 ]]; then
+    if [[ ${#bundles[@]} -eq 0 ]]; then
         zenity --info --title="Restore Env" \
-            --text="No backup files found in:\n<tt>$source</tt>"
+            --text="No encrypted backups found in:\n<tt>$bundle_dir</tt>"
         exit 0
     fi
 
-    local -a checklist_args=()
-
-    for key in "${!latest_path_per_key[@]}"; do
-        local proj_key="${key%%|*}"
-        local env_name="${key#*|}"
-        local project_rel="${proj_key//__//}"
-        local ts_display
-        ts_display=$(format_timestamp "${latest_ts_per_key[$key]}")
-        local file_path="${latest_path_per_key[$key]}"
-        checklist_args+=(TRUE "$project_rel" ".$env_name" "$ts_display" "$file_path")
-    done
-
-    local selected
-    selected=$(
-        zenity --list \
-            --checklist \
-            --title="Restore Env — select backups" \
-            --text="Select env backups to restore (latest version per type shown):" \
-            --column="Restore?" \
-            --column="Project" \
-            --column="Env file" \
-            --column="Backed up on" \
-            --column="Backup path" \
-            --hide-column=5 \
-            --print-column=5 \
-            --separator=$'\n' \
-            "${checklist_args[@]}"
-    ) || exit 0
-
-    if [[ -z "$selected" ]]; then
-        zenity --info --title="Restore Env" --text="No files selected."
-        exit 0
+    local chosen_bundle="${bundles[0]}"
+    if [[ ${#bundles[@]} -gt 1 ]]; then
+        local -a radio_args=()
+        for bundle in "${bundles[@]}"; do
+            if [[ "$bundle" == "$chosen_bundle" ]]; then
+                radio_args+=(TRUE "$(basename "$bundle")" "$bundle")
+            else
+                radio_args+=(FALSE "$(basename "$bundle")" "$bundle")
+            fi
+        done
+        chosen_bundle=$(
+            zenity --list --radiolist \
+                --title="Restore Env — select a backup" \
+                --text="Multiple encrypted backups found. Pick one (latest pre-selected):" \
+                --column="Pick" --column="Backup" --column="Full path" \
+                --hide-column=3 --print-column=3 \
+                "${radio_args[@]}"
+        ) || exit 0
+        [[ -z "$chosen_bundle" ]] && exit 0
     fi
 
-    local sel_count
-    sel_count=$(grep -c . <<< "$selected")
-    zenity --question \
-        --title="Restore Env — confirm" \
-        --text="Restore <b>$sel_count</b> env file(s) to your project roots?\n\nThis will modify files under <tt>$GITHUB_DIR</tt>." \
-        --ok-label="Restore" --cancel-label="Cancel" || exit 0
+    local passphrase
+    passphrase=$(prompt_passphrase_once) || exit 0
+    if [[ -z "$passphrase" ]]; then
+        zenity --error --title="Restore Env" --text="Passphrase cannot be empty."
+        exit 1
+    fi
+
+    local staging_dir tar_path
+    staging_dir=$(mktemp -d)
+    tar_path=$(mktemp)
+    trap 'rm -rf "$staging_dir"; rm -f "$tar_path"; unset passphrase' EXIT
+
+    if ! decrypt_bundle "$chosen_bundle" "$tar_path" "$passphrase"; then
+        zenity --error --title="Restore Env" \
+            --text="Could not decrypt <tt>$(basename "$chosen_bundle")</tt> — wrong passphrase or a corrupted backup."
+        exit 1
+    fi
+
+    if ! tar -C "$staging_dir" -xf "$tar_path" 2>/dev/null; then
+        zenity --error --title="Restore Env" --text="Decrypted, but could not extract the archive."
+        exit 1
+    fi
 
     local -a restored=()
     local -a skipped=()
     local -a failed=()
+    local -a notes=()
 
-    while IFS= read -r file_path; do
-        [[ -z "$file_path" ]] && continue
-        local filename
-        filename=$(basename "$file_path")
-        local timestamp
-        timestamp=$(echo "$filename" | grep -oE '_[0-9]{8}_[0-9]{6}$')
-        local prefix="${filename%$timestamp}"
-        local proj_key="${prefix%__*}"
-        local env_name="${prefix##*__}"
-        local project_rel="${proj_key//__//}"
-        local dest_dir="$GITHUB_DIR/$project_rel"
-        local dest="$dest_dir/.$env_name"
+    if [[ -d "$staging_dir/env_files" ]]; then
+        while IFS= read -r entry; do
+            [[ -z "$entry" ]] && continue
+            local name proj_key env_name project_rel dest
+            name=$(basename "$entry")
+            proj_key="${name%__*}"
+            env_name="${name##*__}"
+            project_rel="${proj_key//__//}"
+            dest="$GITHUB_DIR/$project_rel/.$env_name"
 
-        if [[ ! -d "$dest_dir" ]]; then
-            failed+=(".$env_name ($project_rel): project dir not found at $dest_dir")
-            continue
-        fi
-
-        if [[ -f "$dest" ]]; then
-            local choice
-            choice=$(zenity --list \
-                --radiolist \
-                --title="Conflict: $project_rel/.$env_name" \
-                --text="<tt>.$env_name</tt> already exists in <tt>$project_rel</tt>.\nWhat would you like to do?" \
-                --column="Select" --column="Action" \
-                TRUE "Overwrite it" \
-                FALSE "Back it up first, then restore" \
-                FALSE "Skip this file" \
-            ) || { skipped+=(".$env_name ($project_rel): cancelled"); continue; }
-
-            case "$choice" in
-                "Back it up first, then restore")
-                    local bak
-                    bak="$dest.bak_$(date +%Y%m%d_%H%M%S)"
-                    local bak_err
-                    if ! bak_err=$(mv "$dest" "$bak" 2>&1); then
-                        failed+=(".$env_name ($project_rel): could not back up — $bak_err")
-                        continue
-                    fi
-                    ;;
-                "Skip this file")
-                    skipped+=(".$env_name ($project_rel): skipped by user")
-                    continue
-                    ;;
+            restore_file "$entry" "$dest"
+            case $? in
+                0) restored+=(".$env_name ($project_rel) → $dest") ;;
+                1) skipped+=(".$env_name ($project_rel): already exists at $dest") ;;
+                *) failed+=(".$env_name ($project_rel): could not restore to $dest") ;;
             esac
-        fi
+        done < <(find "$staging_dir/env_files" -maxdepth 1 -type f 2>/dev/null)
+    fi
 
-        local cp_err
-        if cp_err=$(cp "$file_path" "$dest" 2>&1); then
-            restored+=("$(basename "$file_path") → $dest")
-        else
-            failed+=(".$env_name ($project_rel): $cp_err")
-        fi
-    done <<< "$selected"
+    if [[ -f "$staging_dir/rclone/rclone.conf" ]]; then
+        restore_file "$staging_dir/rclone/rclone.conf" "$RCLONE_CONF_DEST"
+        case $? in
+            0)
+                restored+=("rclone.conf → $RCLONE_CONF_DEST")
+                local verify_note
+                verify_note=$(verify_rclone "$RCLONE_CONF_DEST")
+                notes+=("$verify_note")
+                ;;
+            1) skipped+=("rclone.conf: already exists at $RCLONE_CONF_DEST") ;;
+            *) failed+=("rclone.conf: could not restore to $RCLONE_CONF_DEST") ;;
+        esac
+    fi
 
     local summary=""
     if [[ ${#restored[@]} -gt 0 ]]; then
@@ -166,13 +193,18 @@ main() {
         summary+="\n\n"
     fi
     if [[ ${#skipped[@]} -gt 0 ]]; then
-        summary+="<b>Skipped:</b>"
+        summary+="<b>Skipped (already exists — not overwritten):</b>"
         for item in "${skipped[@]}"; do summary+="\n  $item"; done
         summary+="\n\n"
     fi
     if [[ ${#failed[@]} -gt 0 ]]; then
         summary+="<b>Failed:</b>"
         for item in "${failed[@]}"; do summary+="\n  $item"; done
+        summary+="\n\n"
+    fi
+    if [[ ${#notes[@]} -gt 0 ]]; then
+        summary+="<b>Notes:</b>"
+        for item in "${notes[@]}"; do summary+="\n  $item"; done
     fi
 
     notify-send --urgency=normal "Restore Env complete" \

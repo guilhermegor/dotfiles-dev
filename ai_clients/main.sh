@@ -20,6 +20,9 @@ source "$SCRIPT_DIR/lib/restore_env_prompt.sh"
 declare -A CLIENT_NAMES=(
     ["claude"]="Claude Code"
     ["codex"]="OpenAI Codex CLI"
+    ["qwen"]="Qwen Code"
+    ["copilot"]="GitHub Copilot CLI"
+    ["kimi"]="Kimi Code CLI"
 )
 
 # ── Discovery ──────────────────────────────────────────────────────────────────

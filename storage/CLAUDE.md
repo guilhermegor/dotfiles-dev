@@ -32,14 +32,20 @@ backup, and capacity analysis.
 ## Backup script (`backup_external_ssd.sh`)
 
 - Uses `zenity` GUI dialogs — works from the GNOME Super+B keybinding without a terminal.
-- Prompts for the source drive (from mounted drives) and the cloud destination path.
-- Destination path is saved to `~/.config/backup-external-ssd.conf` between runs.
+- Prompts for the source drive (from mounted drives), the cloud destination path, and
+  the zip compression level, in that order.
+- Destination path and compression level are saved to
+  `~/.config/backup-external-ssd.conf` (`LAST_DEST=`, `LAST_ZIP_LEVEL=`) between runs.
 - Destination structure: `<cloud_path>/<source_drive_name>/<yyyymmdd_hhmmss>.zip`
-- Archives the drive into a single compressed `.zip` (`zip -r -y -q -6`, excluding
+- Archives the drive into a single compressed `.zip` (`zip -r -y -q -N`, excluding
   `lost+found`) streamed directly from the source — no uncompressed mirror is staged,
   so each run leaves one compact file instead of a full duplicate of the drive.
-- Compression level is the `ZIP_LEVEL` constant (default `6`, zip's balanced default);
-  every level is lossless, higher only trades CPU time for a smaller archive.
+- Compression level is chosen on a `zenity --list --radiolist` of zip's own 0-9
+  levels (0 = store/fastest, 6 = balanced/default, 9 = maximum/slowest) — never a
+  slider or a percentage. `DEFAULT_ZIP_LEVEL=6` is the fallback used when the saved
+  value is missing or not a single digit 0-9; every level is lossless, higher only
+  trades CPU time for a smaller archive. Cancelling the list aborts the backup
+  cleanly, same as cancelling the destination prompt.
 - Requires `zip` (`sudo apt install zip`); the script aborts with a dialog if missing.
 
 ## Adding a new script

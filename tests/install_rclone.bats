@@ -29,6 +29,13 @@ setup() {
     source "$REPO_ROOT/distro_config/install_lib/sharing.sh"
 }
 
+# rclone is on PATH on a machine that already has it installed (/usr/bin/rclone), so a test
+# that needs "not installed" cannot rely on the stub directory being absent. Hide it
+# explicitly, delegating every other name to the real check.
+_hide_rclone() {
+    command_exists() { [ "$1" = rclone ] && return 1; command -v "$1" &>/dev/null; }
+}
+
 teardown() {
     rm -rf "$TMP"
 }
@@ -48,12 +55,14 @@ STUB
 # --- install failure returns non-zero (#343 shape) ---------------------------
 
 @test "install_rclone returns 1 when the package manager install fails" {
+    _hide_rclone
     INSTALL_CMD="false"
     run install_rclone
     [ "$status" -eq 1 ]
 }
 
 @test "install_rclone returns 1 when rclone is still not on PATH after a reported install" {
+    _hide_rclone
     INSTALL_CMD="true"
     run install_rclone
     [ "$status" -eq 1 ]
@@ -114,6 +123,7 @@ STUB
 }
 
 @test "install_rclone_mount_unit refuses when rclone is not installed" {
+    _hide_rclone
     run install_rclone_mount_unit "gdrive" "$HOME/GoogleDrive"
     [ "$status" -ne 0 ]
 }

@@ -33,6 +33,19 @@ load_last_dest() {
     grep '^LAST_DEST=' "$CONF_FILE" | cut -d= -f2-
 }
 
+# A saved destination whose PARENT no longer exists is stale, and pre-filling it is worse than
+# offering nothing: step 3 runs `mkdir -p`, so accepting the prompt silently RE-CREATES the dead
+# tree on the local disk and writes the archive there. It looks like a cloud backup and is a
+# local one — measured while migrating off Insync (dotfiles-dev#360), where the saved path lived
+# under ~/Insync/<account>/OneDrive/... and that whole tree is deleted by the migration.
+# The parent, not the leaf: the per-drive subdirectory is created by design on a first run.
+last_dest_is_stale() {
+    local dest="$1"
+    [ -n "$dest" ] || return 1
+    [ -d "$(dirname "$dest")" ] && return 1
+    return 0
+}
+
 save_last_dest() {
     mkdir -p "$(dirname "$CONF_FILE")"
     echo "LAST_DEST=$1" > "$CONF_FILE"
@@ -90,11 +103,17 @@ main() {
     local last_dest
     last_dest=$(load_last_dest)
 
+    local dest_prompt="Enter the cloud folder path on this PC\n(files will be saved under <b>$source_name/&lt;timestamp&gt;/</b>):"
+    if last_dest_is_stale "$last_dest"; then
+        dest_prompt="⚠️ The last destination no longer exists:\n<tt>$last_dest</tt>\n\nIt was not re-used — accepting it would create a new local folder and back up to this disk instead of the cloud.\n\n$dest_prompt"
+        last_dest=""
+    fi
+
     local dest_base
     dest_base=$(
         zenity --entry \
             --title="Backup — destination" \
-            --text="Enter the cloud folder path on this PC\n(files will be saved under <b>$source_name/&lt;timestamp&gt;/</b>):" \
+            --text="$dest_prompt" \
             --entry-text="${last_dest:-$HOME/}"
     ) || exit 0
 

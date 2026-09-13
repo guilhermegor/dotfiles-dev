@@ -14,6 +14,11 @@ install_docker() {
 
     if command_exists docker; then
         print_status "info" "Docker already installed"
+        # Installed from the vendor apt repo → its key can rotate under us (#353).
+        if [ -f /etc/apt/sources.list.d/docker.list ]; then
+            refresh_apt_keyring https://download.docker.com/linux/ubuntu/gpg \
+                /etc/apt/keyrings/docker.asc || return 1
+        fi
         return 0
     fi
 

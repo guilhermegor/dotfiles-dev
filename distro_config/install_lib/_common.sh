@@ -169,6 +169,40 @@ detect_package_manager_fallback() {
 }
 
 # Install a package, optionally with distro-specific names.
+# refresh_apt_keyring URL KEYRING [--dearmor]
+# Compare-and-replace a third-party apt signing key on every run. Vendors rotate keys; a keyring
+# imported "only if absent" (or behind an "already installed → return 0") stays stale, and apt
+# then fails with EXPKEYSIG while silently keeping old package lists — measured with the GitHub
+# CLI key 23F3D4EA75716059 in 2026-09 (#352, #353). No-op when the published key is unchanged;
+# returns 1 on a failed download instead of keeping the old key quietly.
+refresh_apt_keyring() {
+    local url="$1" keyring="$2" mode="${3:-}"
+    local out rc
+    out=$(mktemp)
+    if ! curl -fsSL "$url" -o "$out" 2>> "$LOG_FILE"; then
+        rm -f "$out"
+        print_status "error" "Could not download apt signing key: $url"
+        return 1
+    fi
+    if [ "$mode" = "--dearmor" ]; then
+        if ! gpg --batch --yes --dearmor -o "$out.gpg" "$out" 2>> "$LOG_FILE"; then
+            rm -f "$out" "$out.gpg"
+            print_status "error" "Could not dearmor apt signing key: $url"
+            return 1
+        fi
+        mv "$out.gpg" "$out"
+    fi
+    if cmp -s "$out" "$keyring"; then
+        rm -f "$out"
+        return 0
+    fi
+    run_or_echo sudo install -D -m 644 "$out" "$keyring"
+    rc=$?
+    rm -f "$out"
+    [ "$rc" -eq 0 ] && print_status "success" "apt signing key refreshed: $keyring"
+    return "$rc"
+}
+
 install_package() {
     local package_name="$1"
     local debian_name="${2:-$package_name}"

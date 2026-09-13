@@ -7,7 +7,7 @@ this machine, 2026-09-13:
 
 | what | size |
 |---|---|
-| `~/Insync/guirodrigues.gor@gmail.com/OneDrive/` (one **OneDrive** account) | **1.3 T** |
+| `~/Insync/<account>/OneDrive/` (one **OneDrive** account) | **1.3 T** |
 | `~/.config/Insync/` (metadata/db) | **17 G** |
 | root filesystem | 1.8 T total, **1.6 T used, 188 G free (90 %)** |
 
@@ -74,7 +74,7 @@ precondition fails.
 The tree is not only data; other things hold paths into it. Found on this machine:
 
 - **Super+B (Backup External SSDs)** — `~/.config/backup-external-ssd.conf` holds
-  `LAST_DEST=/home/guilhermegor/Insync/guirodrigues.gor@gmail.com/OneDrive/Workspace/!BACKUP/External Storage`.
+  `LAST_DEST=~/Insync/<account>/OneDrive/Workspace/!BACKUP/External Storage`.
   After step 4 that path is gone, and the backup script's `mkdir -p` would happily re-create it on
   the local disk and write the archive there — a backup that looks cloud-bound and is not.
   `storage/backup_external_ssd.sh` now refuses to pre-fill a destination whose parent no longer

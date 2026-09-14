@@ -1,6 +1,7 @@
 #!/bin/bash
 # PreToolUse (Bash matcher) hook: refuse `gh pr merge` while any review thread is unanswered or
-# unresolved. Queries GitHub LIVE, at the moment of merging.
+# unresolved, OR while a reviewer's check on the head commit is still mid-flight. Queries GitHub
+# LIVE, at the moment of merging.
 #
 # Why a hook and not a rule: the rule already existed, in prose, in three places, and was
 # violated anyway. blueprintx PR #180 merged with two review threads open and unanswered, and
@@ -22,6 +23,23 @@
 #   - the repo's CI gate: checks both halves, but only when something re-triggers it.
 #   - this guard: both halves, live, on the merge itself.
 #
+# A fourth question, added by dotfiles-dev#379: the three layers above all ask "is every thread
+# FINISHED?", and a PR with ZERO threads satisfies that vacuously — it cannot distinguish "the
+# reviewer looked and found nothing" from "the reviewer has not spoken yet". Measured on #376:
+# merged with CodeRabbit's check still PENDING and `reviewThreads.nodes == []`; three Major
+# findings landed minutes later. So this guard additionally blocks while a reviewer's check
+# (CheckRun/StatusContext, matched against `.review-bots.yaml`) sits in a non-terminal state on
+# the PR's head commit — `statusCheckRollup` is inherently head-scoped, which is what makes it
+# the right signal here (a *review object*, by contrast, is only created when the reviewer has a
+# finding — dotfiles-dev#378 finished with an empty thread list, an empty `reviews.nodes`, AND a
+# terminal SUCCESS check, and that is the ordinary shape of a clean PR, not a red flag).
+# Once the check reaches a terminal state, the existing thread logic above is the whole verdict
+# again — zero threads plus a terminal check means "reviewed, nothing found", not "unreviewed".
+# Same fail-open principle as everywhere else in this file: a repo with no roster, or a reviewer
+# with no check in the rollup yet, is silent on this axis — dotfiles-dev has exactly one
+# maintainer and a structurally empty Reviewers panel (#268), and a guard that demanded a
+# reviewer's presence would brick every merge here.
+#
 # Hook I/O contract: PreToolUse exit 2 BLOCKS the call and feeds stderr back to the model.
 # It fails OPEN on anything it cannot resolve (no gh, no jq, no network, no PR, a PR in another
 # repo) — a guard that blocks on its own blindness gets disabled, and then protects nothing.
@@ -31,7 +49,9 @@ set -u
 command -v jq >/dev/null 2>&1 || exit 0
 command -v gh >/dev/null 2>&1 || exit 0
 
-# Prefixing the command makes the guard stand aside, for the rare deliberate case:
+# Prefixing the command makes the guard stand aside, for the rare deliberate case. Covers BOTH
+# conditions below (unfinished threads and a still-running reviewer check) — one hatch, because
+# it is the same "I am deliberately merging before review settles" override either way:
 #   ALLOW_UNRESOLVED_THREADS=1 gh pr merge 123 --squash
 ESCAPE_HATCH='ALLOW_UNRESOLVED_THREADS=1'
 
@@ -52,6 +72,30 @@ query($owner:String!, $repo:String!, $number:Int!) {
           isResolved
           path
           comments(first:50) { totalCount nodes { author { login __typename } body } }
+        }
+      }
+      commits(last:1) {
+        nodes {
+          commit {
+            statusCheckRollup {
+              contexts(first:100) {
+                totalCount
+                nodes {
+                  __typename
+                  ... on CheckRun {
+                    name
+                    status
+                    checkSuite { app { slug } }
+                  }
+                  ... on StatusContext {
+                    context
+                    state
+                    creator { login }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -84,7 +128,7 @@ roster_logins() {
 }
 
 main() {
-	local payload tool command number repo owner name threads roster problems
+	local payload tool command number repo owner name threads roster problems running
 
 	payload="$(cat)"
 	tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
@@ -197,22 +241,58 @@ main() {
 		| join("\n")' 2>/dev/null)"
 	[ -n "$truncated" ] && problems="$(printf '%s\n%s' "$truncated" "$problems")"
 
-	[[ -z "$problems" ]] && exit 0
+	# A reviewer's check still mid-flight on THIS head commit (statusCheckRollup is inherently
+	# head-scoped) is the "reviewer has not spoken yet" case an empty thread list cannot express.
+	# Silent (no match) whenever there is no roster, or the roster's check has not appeared in the
+	# rollup at all — the fail-open floor, same reasoning as roster_logins()'s __NO_ROSTER__ path.
+	#
+	# ⚠️ `index()` binds `.` to ITS OWN INPUT (the $bots array), not the checked-in object — the
+	# same fault review_thread_gate.sh's header warns about. `. as $ctx` first, then `$ctx.…`
+	# inside the index() argument, is what keeps the lookup pointed at the check, not the array.
+	running="$(printf '%s' "$threads" | jq -r \
+		--arg roster "$roster" '
+		($roster | split("\n") | map(select(length > 0 and . != "__NO_ROSTER__")) | map(ascii_downcase)
+		 | map(select(. != "github-actions"))) as $bots
+		| if ($bots | length) == 0 then empty else
+		    (.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes // [])[]
+		    | . as $ctx
+		    | if $ctx.__typename == "CheckRun" then
+		        select($ctx.status != "COMPLETED")
+		        | select(($bots | index(($ctx.checkSuite.app.slug // "") | ascii_downcase)) != null)
+		        | "  \($ctx.name // "?"): reviewer check is \($ctx.status) — review still running"
+		      elif $ctx.__typename == "StatusContext" then
+		        select($ctx.state == "PENDING" or $ctx.state == "EXPECTED")
+		        | select(($bots | index(($ctx.creator.login // "") | ascii_downcase)) != null)
+		        | "  \($ctx.context // "?"): reviewer check is \($ctx.state) — review still running"
+		      else empty end
+		  end
+	' 2>/dev/null)"
+
+	[[ -z "$problems" && -z "$running" ]] && exit 0
 
 	{
-		echo "BLOCKED: PR #${number} has review threads that are not finished."
+		echo "BLOCKED: PR #${number}'s review is not finished."
 		echo
-		printf '%s\n' "$problems"
-		echo
-		echo "A finding takes BOTH halves, and neither implies the other:"
-		echo "  1. REPLY with what changed and why — a reviewer bot resolving its own thread"
-		echo "     records ITS satisfaction, never your reasoning, and the reasoning is what"
-		echo "     the next session reads."
-		echo "  2. RESOLVE the conversation once the reply is posted — otherwise nothing"
-		echo "     distinguishes a finished exchange from one still in progress."
-		echo
-		echo "Checked live, because CI evaluates threads on push: a review arriving after your"
-		echo "last push leaves that check green while showing a state that no longer exists."
+		if [ -n "$running" ]; then
+			echo "Review still running:"
+			printf '%s\n' "$running"
+			echo
+		fi
+		if [ -n "$problems" ]; then
+			echo "Review threads not finished:"
+			printf '%s\n' "$problems"
+			echo
+			echo "A finding takes BOTH halves, and neither implies the other:"
+			echo "  1. REPLY with what changed and why — a reviewer bot resolving its own thread"
+			echo "     records ITS satisfaction, never your reasoning, and the reasoning is what"
+			echo "     the next session reads."
+			echo "  2. RESOLVE the conversation once the reply is posted — otherwise nothing"
+			echo "     distinguishes a finished exchange from one still in progress."
+			echo
+		fi
+		echo "Checked live: CI evaluates threads on push, so a review arriving after your last"
+		echo "push leaves that check green while showing a state that no longer exists — and an"
+		echo "EMPTY thread list means nothing while the reviewer's own check is still running."
 		echo
 		echo "Deliberate exception: ${ESCAPE_HATCH} <your command>"
 	} >&2

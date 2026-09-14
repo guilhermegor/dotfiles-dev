@@ -66,6 +66,29 @@ run_hook() {
 	[[ "$output" == *"wt-insert"*"INTERRUPTED WORK, resume it"* ]]
 }
 
+# --- PR #389 review: an unwritable timestamp must not repeat the report every prompt ----------
+# The write happens BEFORE the gap check. With `|| true`, a failed write left the stale timestamp
+# readable, so every later prompt re-measured the same old gap and re-printed the report.
+
+@test "an unwritable timestamp file stays silent instead of repeating the report every prompt" {
+	[ "$(id -u)" -ne 0 ] || skip "root ignores file permissions, so the write cannot be made to fail"
+	WT="$TEST_TMP/wt-insert"
+	git -C "$REPO" worktree add -q -b feat-insert "$WT" master
+	printf 'new work\n' >"$WT/new_work.txt"
+	git -C "$WT" add new_work.txt
+
+	seed_state 1800
+	chmod 444 "$STATE_DIR/quota-gap/$SID"
+
+	run_hook
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+	# The stale timestamp is still the one on disk — the condition that made it repeat.
+	run_hook
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
+
 # --- gap exceeded + all clean (or only stale reverts) -> silent -------------------------------
 
 @test "gap exceeded with every worktree clean is silent" {

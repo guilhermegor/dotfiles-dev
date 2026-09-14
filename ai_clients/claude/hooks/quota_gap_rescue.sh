@@ -55,7 +55,17 @@ main() {
 	[ -r "$state_file" ] && last="$(cat "$state_file" 2>/dev/null)"
 	# Record THIS prompt as the last-seen turn before deciding anything below, so a gap is
 	# always measured from the immediately preceding prompt, never accumulated across prompts.
-	printf '%s\n' "$now" >"$state_file" 2>/dev/null || true
+	#
+	# ⚠️ `|| exit 0`, not `|| true` (PR #389 review). If the write fails while the OLD timestamp
+	# stays readable, every later prompt measures its gap from that stale value, exceeds the
+	# threshold, and repeats the report on EVERY message — the "cries wolf" failure this hook
+	# exists to avoid. Unable to record the turn means unable to measure a gap: stay silent.
+	#
+	# ⚠️ The `{ …; } 2>/dev/null` group is load-bearing, not style. Redirections apply left to
+	# right, so in `printf … >"$f" 2>/dev/null` bash fails to OPEN "$f" and prints "Permission
+	# denied" BEFORE the `2>/dev/null` takes effect — that form silences printf, not the failed
+	# open. Measured: it emitted the error on every prompt against a read-only state file.
+	{ printf '%s\n' "$now" >"$state_file"; } 2>/dev/null || exit 0
 
 	[[ "$last" =~ ^[0-9]+$ ]] || exit 0
 	gap=$((now - last))

@@ -15,7 +15,7 @@ followed by rich prose sections.
 **Tech Stack:** Claude Code agents + skills (markdown with YAML frontmatter),
 awesome-design-md token format, bash for install verification.
 
-**Spec:** `docs/superpowers/specs/2026-05-02-brand-design-agent-design.md`
+**Spec:** `.specs/features/brand-design-agent/design.md`
 
 ---
 

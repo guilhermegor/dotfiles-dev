@@ -43,11 +43,11 @@ business rule)?
     * fix edits the Claude/dotfiles toolchain (~/github/dotfiles-dev/ai_clients/claude/)
       → dotfiles-dev store ~/.claude/memory/lessons-dotfiles/
   Save one file per lesson + update that store's README index. Then regenerate
-  this repo's git-ignored mirror(s) under .specs/lessons/ — run
+  this repo's git-ignored mirror(s) under .specs/_lessons/ — run
   `make lessons_mirror` (inside dotfiles-dev) or the deployed generator
   (`bash ~/.claude/hooks/lib/generate_lesson_mirrors.sh`) elsewhere. The mirror
   is GENERATED, never hand-appended (dotfiles-dev#386) — do not hand-edit
-  .specs/lessons/*.md.
+  .specs/_lessons/*.md.
 - If NO: say so in one line and continue. Do not skip the decision silently.
 EOF
 )"

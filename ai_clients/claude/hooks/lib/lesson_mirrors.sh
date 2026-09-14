@@ -30,12 +30,17 @@ LESSON_STORES=(
 
 # A store's mirror path, relative to a repo's root — the ONE construction site
 # (dotfiles-dev#386) instead of the "$cwd/docs/$mirror_base.md" string that used
-# to be hand-typed in five separate files. Lives under .specs/ (not docs/): the
-# mirror is a derived, git-ignored working artifact, not shipped documentation
-# — see .specs/CLAUDE.md.
+# to be hand-typed in five separate files. Lives under .specs/_lessons/ (not
+# docs/): the mirror is a derived, git-ignored working artifact, not shipped
+# documentation — see .specs/CLAUDE.md. The leading underscore on `_lessons`
+# follows the existing "not a work unit" marker convention (`.specs/`'s top
+# level otherwise namespaces features/projects; a lessons mirror is neither),
+# and the name describes the CONTENT (lessons), not the mechanism (a mirror) —
+# this very change turns it from hand-written to generated, so a name built on
+# "mirror" would describe a property the change removes.
 mirror_rel_path() {
 	local mirror_base="$1"
-	printf '.specs/lessons/%s.md\n' "$mirror_base"
+	printf '.specs/_lessons/%s.md\n' "$mirror_base"
 }
 
 # Absolute mirror path for repo checkout $cwd.

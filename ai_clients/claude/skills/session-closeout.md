@@ -34,8 +34,9 @@ must). Work every line of all three.
   a PR (`s:gh-create-pr`) if the work is done.
 - **`[lessons] '<file>' is not in the <store> README index`** — a lesson file exists but is
   unindexed = a lost lesson. Add its one-line index entry to that store's `README.md`.
-- **`[lessons] '<file>' … not in docs/<mirror>.md`** — add the lesson to this repo's git-ignored
-  mirror (`docs/blueprintx-lessons.md` or `docs/dotfiles-dev-lessons.md`).
+- **`[lessons] '<file>' … not in .specs/_lessons/<mirror>.md`** — the mirror is GENERATED, never
+  hand-appended (dotfiles-dev#386): run `make lessons_mirror` (inside dotfiles-dev) or
+  `bash ~/.claude/hooks/lib/generate_lesson_mirrors.sh` (any other repo), then re-run the audit.
 - **`[lessons] '<file>' has no **Tier:** line`** — add a `- **Tier:**` line. Tier is an **open
   field**: pick the best fit (`python-common`, `language-common`, `language-specific (<lang>)`, or a
   layout/archetype like `mvc-*`, `ddd-*`, `library`) — and a **new/unknown tier is fine**, never
@@ -76,10 +77,10 @@ issues  → lessons: <I> open, <S> sourced by a lesson, <O> orphan
   write one so the next session can pick up.
 - **Lessons routing** — did any work yield a *generalizable* toolchain/scaffold improvement not yet
   captured? Load `s:capturing-lessons` and route it by **where the fix lands**: a scaffolding
-  template → BlueprintX store (`~/.claude/memory/lessons/` + `docs/blueprintx-lessons.md`); the
-  Claude/dotfiles toolchain → dotfiles-dev store (`~/.claude/memory/lessons-dotfiles/` +
-  `docs/dotfiles-dev-lessons.md`). Every lesson must exist in **all three** places: file, README
-  index, repo mirror.
+  template → BlueprintX store (`~/.claude/memory/lessons/`); the Claude/dotfiles toolchain →
+  dotfiles-dev store (`~/.claude/memory/lessons-dotfiles/`). Every lesson needs the file + the
+  README index by hand, then the repo mirror **generated** (`make lessons_mirror` or the
+  deployed `generate_lesson_mirrors.sh`) — never hand-appended to `.specs/_lessons/`.
 
 ## 5. Re-run and report
 

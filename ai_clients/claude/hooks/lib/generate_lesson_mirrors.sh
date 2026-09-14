@@ -1,5 +1,5 @@
 #!/bin/bash
-# Regenerates the current repo's git-ignored lesson mirrors under .specs/lessons/
+# Regenerates the current repo's git-ignored lesson mirrors under .specs/_lessons/
 # from the global lesson stores (dotfiles-dev#386).
 #
 # Why this exists: a mirror is a DERIVED, machine-checked index of a lesson store
@@ -17,6 +17,13 @@
 # lesson whose **Origin:** line names this repo (lesson_originates_in_repo(), also
 # shared) and write them, sorted by filename, to that store's mirror file. Skipped
 # entirely and left untouched if the store isn't on disk (nothing to generate from).
+#
+# Owner-approved (2026-09-14): this MAY create `.specs/` from scratch in a repo
+# that has none — most active repos don't (dotfiles-dev#386). It creates only the
+# `_lessons/` directory the mirror needs via `mkdir -p`, deliberately NOT a
+# `.specs/CLAUDE.md` contract file: that file documents the feature-spec layout
+# (spec.md/design.md/plan.md), which this repo has not adopted just because it
+# now has a mirror.
 set -uo pipefail
 
 # shellcheck source=lesson_mirrors.sh

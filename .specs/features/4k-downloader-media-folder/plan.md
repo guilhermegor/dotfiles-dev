@@ -248,7 +248,7 @@ Expected output includes:
 
 ```bash
 git add distro_config/CLAUDE.md \
-        docs/superpowers/specs/2026-04-21-4k-downloader-media-folder-design.md \
-        docs/superpowers/plans/2026-04-21-4k-downloader-media-folder.md
+        .specs/features/4k-downloader-media-folder/design.md \
+        .specs/features/4k-downloader-media-folder/plan.md
 git commit -m "docs: add Media folder spec, plan, and CLAUDE.md update"
 ```

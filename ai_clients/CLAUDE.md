@@ -123,6 +123,36 @@ The issue guard derives its requirements straight from each template file:
 A repo with several issue templates passes if the body satisfies **any
 one** of them — an issue follows one template, not all.
 
+## PR merge guard: review threads AND a reviewer's own check
+
+`hooks/pr_merge_threads_guard.sh` is a third `PreToolUse` hook, but it gates
+`gh pr merge` rather than a body, and it queries GitHub LIVE instead of
+reading the command's own text — the full three-layer argument (why a hook,
+why live, why last) lives in the file's own header, not duplicated here.
+
+It blocks the merge on **either** of two independent findings:
+
+1. A review thread that is unanswered or unresolved (the original guard).
+2. **(dotfiles-dev#379)** A roster reviewer's check — `CheckRun`/`StatusContext`
+   on the head commit's `statusCheckRollup`, matched against `.review-bots.yaml`
+   — still sitting in a non-terminal state. An **empty** `reviewThreads` list is
+   the same shape whether the reviewer looked and found nothing or has not
+   spoken yet; `statusCheckRollup` is head-scoped and answers which one it is.
+   Measured on #376: merged with CodeRabbit's check `PENDING` and zero threads,
+   three Major findings landed minutes later.
+
+   ⚠️ The signal is the CHECK's terminal state, never a submitted review
+   object — a review is only created when the reviewer has a finding, so "no
+   review yet" is the ORDINARY shape of a clean PR (#378: zero threads, zero
+   reviews, terminal `SUCCESS` check) and must never block on its own.
+
+   Fails open exactly where the other guards do: no roster file, or the
+   roster's check hasn't appeared in the rollup at all — the same repo has
+   one maintainer and a structurally empty Reviewers panel (#268).
+
+Both findings share the one escape hatch, since standing aside for either is
+the same deliberate call: `ALLOW_UNRESOLVED_THREADS=1 gh pr merge <n>`.
+
 ## The restore-`.env` prompt
 
 `ai_clients/lib/restore_env_prompt.sh` defines `prompt_restore_env()`, which

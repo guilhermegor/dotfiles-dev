@@ -110,7 +110,13 @@ The only reliable signal was inspecting the worktree and asking the forge for PR
    time, **or** the next successful call after the user switches accounts (an account switch does
    not wait for the stated reset; both triggers are needed). Stagger the resumes: firing every
    killed agent back in at once into a freshly-reset quota is how it was exhausted the first time —
-   measured twice, three agents each.
+   measured twice, three agents each. The wall-clock half of this trigger is now **observed**, not
+   just named here: `hooks/quota_gap_rescue.sh` (`UserPromptSubmit`, dotfiles-dev#383) re-runs the
+   same rescue walk (`hooks/lib/worktree_fanout.sh`, shared with `session_start_context.sh`) once
+   the gap since your last prompt passes a threshold, and reports interrupted worktrees without you
+   having to ask. It fires on the first prompt after a quota reset or account switch **whose gap
+   exceeds `QUOTA_GAP_THRESHOLD_SECONDS`** (default 20 min) — ⚠️ an account switch done within that
+   window does NOT trip it, so after a fast switch this step is still the one that catches the kill.
 
 🎯 **A dedicated `CronCreate` poll for "are they still alive?" was evaluated and skipped.** A tick
 that only asks that question spends session quota from the very budget that is under limit, which

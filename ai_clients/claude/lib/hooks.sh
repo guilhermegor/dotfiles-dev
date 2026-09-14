@@ -34,6 +34,8 @@ install_hooks() {
     mkdir -p "$hooks_dir"
 
     copy_hook_file "session_start_context.sh" "$hooks_dir"
+    copy_hook_file "lib/worktree_fanout.sh" "$hooks_dir"
+    copy_hook_file "quota_gap_rescue.sh" "$hooks_dir"
     copy_hook_file "pr_template_guard.sh" "$hooks_dir"
     copy_hook_file "issue_template_guard.sh" "$hooks_dir"
     copy_hook_file "lib/gh_body_guard_common.sh" "$hooks_dir"

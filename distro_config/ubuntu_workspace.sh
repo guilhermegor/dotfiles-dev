@@ -1025,6 +1025,7 @@ EOF
 
     local data_app_names=(
         'pgadmin4.desktop' 'pgadmin4_pgadmin4.desktop' 'org.pgadmin.pgAdmin4.desktop'
+        'postman_postman.desktop' 'postman.desktop' 'Postman.desktop'
     )
 
     for app in "${data_app_names[@]}"; do

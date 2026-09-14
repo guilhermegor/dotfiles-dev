@@ -39,17 +39,15 @@ business rule)?
 
 - If YES: capture it now, before moving on. Route by WHERE THE FIX LANDS:
     * fix edits a scaffolding template (~/github/blueprintx/templates/) →
-      BlueprintX store ~/.claude/memory/lessons/ + repo docs/blueprintx-lessons.md
+      BlueprintX store ~/.claude/memory/lessons/
     * fix edits the Claude/dotfiles toolchain (~/github/dotfiles-dev/ai_clients/claude/)
-      → dotfiles-dev store ~/.claude/memory/lessons-dotfiles/ + repo
-      docs/dotfiles-dev-lessons.md
-  Save one file per lesson + update that store's README index + the git-ignored
-  repo mirror. The audit's mirror check matches on the bare FILENAME appearing
-  anywhere in the mirror text (grep -F on the name, not a field or heading) —
-  so the filename must appear somewhere in the mirror entry. House convention
-  for making mirrors greppable and consistent (recommended, not mechanically
-  required):
-      - **Source:** `<filename>.md`
+      → dotfiles-dev store ~/.claude/memory/lessons-dotfiles/
+  Save one file per lesson + update that store's README index. Then regenerate
+  this repo's git-ignored mirror(s) under .specs/_lessons/ — run
+  `make lessons_mirror` (inside dotfiles-dev) or the deployed generator
+  (`bash ~/.claude/hooks/lib/generate_lesson_mirrors.sh`) elsewhere. The mirror
+  is GENERATED, never hand-appended (dotfiles-dev#386) — do not hand-edit
+  .specs/_lessons/*.md.
 - If NO: say so in one line and continue. Do not skip the decision silently.
 EOF
 )"

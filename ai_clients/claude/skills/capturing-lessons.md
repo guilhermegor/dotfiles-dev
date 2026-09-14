@@ -107,37 +107,16 @@ lessons to work that never touched them.
 
 1. Save it as **one file per lesson** (kebab-case) in the store, using that store's format.
 2. Add it to the store's `README.md` index.
-3. Mirror it in the originating repo as a **git-ignored**, docs-site-excluded note
-   (`docs/blueprintx-lessons.md` or `docs/dotfiles-dev-lessons.md`) — *unless* the origin repo
-   **is** the backport target repo, where the same-repo mirror is redundant (skip it), **or the
-   store is `lessons-other`**, which never gets a mirror: it has no backport target other than
-   the origin repo itself, so a mirror there would just restate the file already sitting beside
-   it — the same "no distinct target" logic, applied unconditionally instead of per-lesson.
-
-   **Every mirror entry MUST carry a `- **Source:** \`<filename>.md\`` field — a required
-   field alongside Tier/Area, Lesson, Why, and Origin, never a footnote.** The audit that
-   verifies mirrors (`session_capture_audit.sh`'s `check_mirrors`) joins purely by literal
-   substring — `grep -qF "<filename>.md" docs/<mirror>.md` — it never reads the heading,
-   Tier, Lesson, or Why. A complete, well-written prose section still counts as a gap if
-   that one exact string is absent. This recurred **4 of 4** times in one session
-   (2026-08-02, `mirror-entry-must-cite-its-source-filename`) even though the fix had
-   already been logged as a lesson: "write the lesson in the mirror" reads as "write full
-   prose", and the field that looks least like content is the one that gets dropped.
-   Mirror entry template (copy this shape, do not free-write the section):
-
-   ```markdown
-   ## <Title>
-
-   - **Source:** `<filename>.md`
-   - **Tier/Area:** <value>
-   - **Lesson:** <one sentence>
-   - **Why:** <one sentence>
-   - **Origin:** <repo that originated it>
-   ```
-
-   If the mirror file has a `## Source files` index near the top, append the basename
-   there too, in the same call — that index gets the same mandatory-field treatment, not
-   optional bookkeeping.
+3. **Regenerate this repo's mirror — do not hand-write it (dotfiles-dev#386).** The mirror
+   (`.specs/_lessons/blueprintx-lessons.md` or `.specs/_lessons/dotfiles-dev-lessons.md`) is a
+   git-ignored, **generated** index of the lessons whose `**Origin:**` line names this repo —
+   run `make lessons_mirror` (inside dotfiles-dev) or
+   `bash ~/.claude/hooks/lib/generate_lesson_mirrors.sh` (any other repo) after step 2. It is
+   a no-op, correctly, when the origin repo **is** the backport target repo (mirror
+   deliberately absent by convention) or when the store is `lessons-other` (no backport
+   target other than the origin repo itself, so a mirror there would just restate the file
+   already sitting beside it). Never hand-edit a file under `.specs/_lessons/` — it is
+   overwritten wholesale on the next regeneration and any hand edit is silently lost.
 4. Later, apply the captured lessons to the backport target so future work inherits them — for
    `lessons-other`, this step is a no-op: the origin repo already **is** the backport target, so
    fixing it once already applied the lesson.

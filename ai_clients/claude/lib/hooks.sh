@@ -52,6 +52,8 @@ install_hooks() {
     copy_hook_file "claude_artifact_source_guard.sh" "$hooks_dir"
     copy_hook_file "lesson_capture_checkpoint.sh" "$hooks_dir"
     copy_hook_file "release_due_nudge.sh" "$hooks_dir"
+    copy_hook_file "lib/lesson_mirrors.sh" "$hooks_dir"
+    copy_hook_file "lib/generate_lesson_mirrors.sh" "$hooks_dir"
     copy_hook_file "session_capture_audit.sh" "$hooks_dir"
     copy_hook_file "pr_merge_threads_guard.sh" "$hooks_dir"
     copy_hook_file "open_review_threads_nudge.sh" "$hooks_dir"

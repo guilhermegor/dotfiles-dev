@@ -168,6 +168,32 @@ skips its own prompt during a `run` invocation to avoid asking twice. This helpe
 is **not** a `claude/main.sh` STEPS-registry step — it is client-agnostic and
 must run before client discovery.
 
+## Lesson mirrors (`.specs/_lessons/`)
+
+A lesson store (`~/.claude/memory/lessons*`) is global — it lives outside every repo. A
+**mirror** is a per-repo, git-ignored copy of the subset of a store whose `**Origin:**`
+line names that repo, so a session working in the repo can `grep` its own history
+without leaving it. Two things this is not: it is not documentation (`docs/`, shipped,
+human-authored to be read) and it is not hand-written.
+
+**Who writes it:** the generator, never a person. `make lessons_mirror`
+(dotfiles-dev repo) or `bash ~/.claude/hooks/lib/generate_lesson_mirrors.sh` (any other
+repo, deployed by `install_hooks()`) reads `LESSON_STORES`
+(`ai_clients/claude/hooks/lib/lesson_mirrors.sh`), collects every lesson whose Origin
+names the current repo, and overwrites `.specs/_lessons/<store>-lessons.md` wholesale.
+Before dotfiles-dev#386 this was a third hand-write per lesson (file + store README +
+mirror) and it drifted — measured 2026-09-14, 19 of 43 `Origin: dotfiles-dev` lessons
+were missing from the hand-maintained copy. Regenerating removes the drift class
+instead of adding a check for it. **Never hand-edit a file under `.specs/_lessons/`** —
+the next regeneration overwrites it silently.
+
+`session_capture_audit.sh`'s `check_mirrors()` verifies the *result* (presence +
+not-stale) using the same `lesson_mirrors.sh` predicates the generator uses, so the
+two can never independently drift on what a mirror is supposed to contain. A store
+whose `target-repo` equals the current repo (same-repo mirror) or is the `-` sentinel
+(`lessons-other`) never gets a mirror anywhere — see `.specs/CLAUDE.md` for the
+directory's naming rationale (`_lessons/`, not `lessons/` or `mirrors/`).
+
 ## Agent-agnostic bridge (`ai_clients/shared/AGENTS.md`)
 
 | | |

@@ -216,7 +216,7 @@ STUB
 
 @test "check_mirrors accepts a mirror entry containing only the bare filename" {
 	OTHER_REPO="$TEST_TMP/filings-cvm"
-	mkdir -p "$OTHER_REPO/docs"
+	mkdir -p "$OTHER_REPO/.specs/_lessons"
 	git -C "$OTHER_REPO" init -q
 	git -C "$OTHER_REPO" remote add origin https://github.com/guilhermegor/filings-cvm.git
 
@@ -226,17 +226,17 @@ STUB
 
 	# Only the bare filename, mid-sentence — no "- **Source:**" field. This is exactly
 	# what the corrected checkpoint reminder now promises is sufficient.
-	printf 'Ported over: origin-lesson.md\n' >"$OTHER_REPO/docs/dotfiles-dev-lessons.md"
+	printf 'Ported over: origin-lesson.md\n' >"$OTHER_REPO/.specs/_lessons/dotfiles-dev-lessons.md"
 
 	run bash -c "cd '$OTHER_REPO' && PATH='$TEST_TMP/bin:$PATH' GH_ISSUES='' \
 		GH_ARGV_LOG='$TEST_TMP/gh_argv' bash '$HOOK' </dev/null"
 	[ "$status" -eq 0 ]
-	[[ "$output" != *"origin-lesson.md' originated here but is not in docs/dotfiles-dev-lessons.md"* ]]
+	[[ "$output" != *"origin-lesson.md' originated here but is not in .specs/_lessons/dotfiles-dev-lessons.md"* ]]
 }
 
 @test "check_mirrors still flags a mirror missing the filename entirely (non-vacuous control)" {
 	OTHER_REPO="$TEST_TMP/filings-cvm"
-	mkdir -p "$OTHER_REPO/docs"
+	mkdir -p "$OTHER_REPO/.specs/_lessons"
 	git -C "$OTHER_REPO" init -q
 	git -C "$OTHER_REPO" remote add origin https://github.com/guilhermegor/filings-cvm.git
 
@@ -244,12 +244,12 @@ STUB
 		>"$STORE/origin-lesson.md"
 	printf -- '- origin-lesson.md\n' >>"$STORE/README.md"
 
-	printf 'nothing relevant here\n' >"$OTHER_REPO/docs/dotfiles-dev-lessons.md"
+	printf 'nothing relevant here\n' >"$OTHER_REPO/.specs/_lessons/dotfiles-dev-lessons.md"
 
 	run bash -c "cd '$OTHER_REPO' && PATH='$TEST_TMP/bin:$PATH' GH_ISSUES='' \
 		GH_ARGV_LOG='$TEST_TMP/gh_argv' bash '$HOOK' </dev/null"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"origin-lesson.md' originated here but is not in docs/dotfiles-dev-lessons.md"* ]]
+	[[ "$output" == *"origin-lesson.md' originated here but is not in .specs/_lessons/dotfiles-dev-lessons.md"* ]]
 }
 
 @test "a store absent from disk is reported as skipped, never silently omitted" {
@@ -271,7 +271,7 @@ STUB
 
 @test "lessons-other never expects a repo mirror even when Origin matches the current repo" {
 	OTHER_STORE="$CLAUDE_CONFIG_DIR/memory/lessons-other"
-	mkdir -p "$OTHER_STORE" "$REPO/docs"
+	mkdir -p "$OTHER_STORE" "$REPO/.specs/_lessons"
 	printf '# index\n- standalone-fix.md\n' >"$OTHER_STORE/README.md"
 	printf '# standalone-fix\n\n- **Status:** delivered\n- **Origin:** dotfiles-dev\n' \
 		>"$OTHER_STORE/standalone-fix.md"
@@ -291,40 +291,40 @@ STUB
 
 @test "check_mirrors flags a lesson that changed after its mirror was last touched" {
 	OTHER_REPO="$TEST_TMP/filings-cvm"
-	mkdir -p "$OTHER_REPO/docs"
+	mkdir -p "$OTHER_REPO/.specs/_lessons"
 	git -C "$OTHER_REPO" init -q
 	git -C "$OTHER_REPO" remote add origin https://github.com/guilhermegor/filings-cvm.git
 
 	printf '# origin-lesson\n\n- **Tier:** language-common\n- **Status:** delivered\n- **Origin:** filings-cvm\n' \
 		>"$STORE/origin-lesson.md"
 	printf -- '- origin-lesson.md\n' >>"$STORE/README.md"
-	printf 'Ported over: origin-lesson.md\n' >"$OTHER_REPO/docs/dotfiles-dev-lessons.md"
+	printf 'Ported over: origin-lesson.md\n' >"$OTHER_REPO/.specs/_lessons/dotfiles-dev-lessons.md"
 
 	# Mirror written first, then the lesson appended to afterwards — the append never
 	# propagated, and filename presence alone can't see that.
-	touch -d '2026-09-01T00:00:00' "$OTHER_REPO/docs/dotfiles-dev-lessons.md"
+	touch -d '2026-09-01T00:00:00' "$OTHER_REPO/.specs/_lessons/dotfiles-dev-lessons.md"
 	touch -d '2026-09-02T00:00:00' "$STORE/origin-lesson.md"
 
 	run bash -c "cd '$OTHER_REPO' && PATH='$TEST_TMP/bin:$PATH' GH_ISSUES='' \
 		GH_ARGV_LOG='$TEST_TMP/gh_argv' bash '$HOOK' </dev/null"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"origin-lesson.md' changed after docs/dotfiles-dev-lessons.md"* ]]
+	[[ "$output" == *"origin-lesson.md' changed after .specs/_lessons/dotfiles-dev-lessons.md"* ]]
 }
 
 @test "check_mirrors does not flag a lesson touched before its mirror (negative control)" {
 	OTHER_REPO="$TEST_TMP/filings-cvm"
-	mkdir -p "$OTHER_REPO/docs"
+	mkdir -p "$OTHER_REPO/.specs/_lessons"
 	git -C "$OTHER_REPO" init -q
 	git -C "$OTHER_REPO" remote add origin https://github.com/guilhermegor/filings-cvm.git
 
 	printf '# origin-lesson\n\n- **Tier:** language-common\n- **Status:** delivered\n- **Origin:** filings-cvm\n' \
 		>"$STORE/origin-lesson.md"
 	printf -- '- origin-lesson.md\n' >>"$STORE/README.md"
-	printf 'Ported over: origin-lesson.md\n' >"$OTHER_REPO/docs/dotfiles-dev-lessons.md"
+	printf 'Ported over: origin-lesson.md\n' >"$OTHER_REPO/.specs/_lessons/dotfiles-dev-lessons.md"
 
 	# Lesson written first, mirror updated afterwards — fully propagated, no staleness.
 	touch -d '2026-09-01T00:00:00' "$STORE/origin-lesson.md"
-	touch -d '2026-09-02T00:00:00' "$OTHER_REPO/docs/dotfiles-dev-lessons.md"
+	touch -d '2026-09-02T00:00:00' "$OTHER_REPO/.specs/_lessons/dotfiles-dev-lessons.md"
 
 	run bash -c "cd '$OTHER_REPO' && PATH='$TEST_TMP/bin:$PATH' GH_ISSUES='' \
 		GH_ARGV_LOG='$TEST_TMP/gh_argv' bash '$HOOK' </dev/null"

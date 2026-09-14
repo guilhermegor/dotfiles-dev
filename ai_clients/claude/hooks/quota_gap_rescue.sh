@@ -62,7 +62,12 @@ main() {
 	[ "$gap" -gt "$QUOTA_GAP_THRESHOLD_SECONDS" ] || exit 0
 
 	report="$(fanout_worktrees "$cwd" 0 "" 2>/dev/null)" || exit 0
-	[ -n "$report" ] || exit 0
+	# fanout_worktrees() prints an informational line for EVERY dirty worktree, stale reverts
+	# included — right for SessionStart, wrong here. Gate on its own "RESUME ... interrupted
+	# work" summary line instead, which it only emits when interrupted_names is non-empty: that
+	# reuses the classifier's verdict directly rather than re-deriving "dirty means lost work"
+	# from the raw per-worktree lines.
+	printf '%s\n' "$report" | grep -q 'RESUME .* worktree(s) holding interrupted work' || exit 0
 
 	printf '[quota-gap-rescue] %s minute gap since your last prompt — re-checked worktrees:\n' "$((gap / 60))"
 	printf '%s\n' "$report"

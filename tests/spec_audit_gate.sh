@@ -20,7 +20,14 @@
 # `tasks.md` appear only at Large scope, `plan.md` only when `s:writing-plans`
 # ran. Checking a conditional file would report SECTION_MISSING for every small
 # feature that correctly omitted it -- so the always-present one is the only
-# sound anchor.
+# sound anchor for anything s:work-breakdown produced.
+#
+# EXCEPTION: a feature with design.md (s:brainstorming) and/or plan.md
+# (s:writing-plans) but no spec.md is the older, still-valid two-skill
+# workflow that pre-dates s:work-breakdown -- it never produces a spec.md at
+# all, by design. `check_feature()` treats that shape as aligned rather than
+# SECTION_MISSING (dotfiles-dev#375: every feature migrated from
+# docs/superpowers/ is exactly this shape).
 #
 # The id syntax below is this gate's OWN minimal convention: .specs/CLAUDE.md
 # defines the file layout but no marker grammar. It is scoped to exactly the five
@@ -207,7 +214,17 @@ check_feature() {
     check_tracker_stale "$feature_dir"
 
     if [[ ! -f "$spec" ]]; then
-        FINDINGS+=("$spec:1: SECTION_MISSING spec.md not found for feature dir '$feature_dir'")
+        # ponytail: spec.md is s:work-breakdown's output, but .specs/CLAUDE.md also
+        # documents an older, still-valid shape -- design.md (s:brainstorming) +
+        # plan.md (s:writing-plans) with no spec.md ever produced. Discovered
+        # 2026-09-14 (dotfiles-dev#375) migrating docs/superpowers/ into real
+        # .specs/features/ dirs: every one of those pre-dates work-breakdown and
+        # is exactly this shape, so a blanket "spec.md missing" finding would fire
+        # on legitimate features forever. Only flag when the dir has neither
+        # plan.md nor design.md either -- an empty or bogus feature dir.
+        if [[ ! -f "$feature_dir/plan.md" && ! -f "$feature_dir/design.md" ]]; then
+            FINDINGS+=("$spec:1: SECTION_MISSING spec.md not found for feature dir '$feature_dir'")
+        fi
         return
     fi
 

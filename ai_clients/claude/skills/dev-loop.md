@@ -154,6 +154,28 @@ gate fixed on `main` does not apply to a PR that predates the fix. Measured on a
 gate said clean while CI said fail: its branch had **0** occurrences of the new function, `main`
 had **2**. Being behind decides *which version of the rule the PR is judged by* — update the branch.
 
+### Roadmap unblock (dotfiles-dev#369)
+
+A roadmap board's `Blocked` items do not follow the native issue-dependency relationship on their
+own: GitHub resolves `repos/<o>/<r>/issues/<n>/dependencies/blocked_by` the moment the blocking
+issue closes, but the board's own Status, the `state:blocked` label, and any "Blocked by" text
+field all sit still until something re-reads them. Call the gate for every project this operator
+tracks — never re-derive the unblock logic by hand:
+
+```bash
+source ai_clients/claude/hooks/lib/roadmap_unblock.sh
+reconcile_roadmap_unblock <owner> <project-number> || echo "roadmap board UNREADABLE — nothing touched"
+printf '%s\n' "$RECONCILE_REPORT"
+```
+
+Report **one line per item that changed or needs a look** — `$RECONCILE_REPORT` already carries
+exactly that shape (unblocked, still blocked, decision blocker, blocked by nothing, UNKNOWN). If it
+is empty, say "no roadmap items changed" and move on.
+
+⚠️ **A `decision:` blocker is never auto-cleared** — only a person removes one. ⚠️ **Fails closed
+on read errors**: an item whose native-blocker read fails is reported UNKNOWN and left untouched,
+never assumed clear.
+
 ## 3. THREADS — read, verify, fix, reply, resolve
 
 ⚠️ **Ask the gate; never eyeball the PR list.** A thread arrives *after* the moment work feels

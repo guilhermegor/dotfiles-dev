@@ -34,22 +34,16 @@
 # add one if a lost/interleaved README line is ever actually observed.
 set -uo pipefail
 
-CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+# shellcheck source=lib/lesson_mirrors.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/lesson_mirrors.sh"
 
-# All generalizable-lessons stores, each as "dir|mirror-basename|kind|target-repo".
-# kind=blueprintx also gets the Tier-line presence check (tier is an OPEN field:
-# an unknown tier value is a no-op, never a rejection — only a MISSING line flags).
-# target-repo is the store's backport target: a lesson that ORIGINATED in that repo
-# needs no mirror there (the mirror would be redundant), so the mirror check skips it.
-# target-repo "-" (lessons-other, dotfiles-dev#356) is a sentinel, not a repo name: that
-# store has NO distinct backport target — a fix there lands in the origin repo itself, so
-# check_mirrors() below treats "-" as "never expect a mirror for this store," in every repo,
-# not just when repo==target-repo.
-LESSON_STORES=(
-	"$CLAUDE_DIR/memory/lessons|blueprintx-lessons|blueprintx|blueprintx"
-	"$CLAUDE_DIR/memory/lessons-dotfiles|dotfiles-dev-lessons|dotfiles|dotfiles-dev"
-	"$CLAUDE_DIR/memory/lessons-other|lessons-other|other|-"
-)
+# LESSON_STORES, mirror_path()/mirror_rel_path(), mirror_expected_for_repo(), and
+# lesson_originates_in_repo() all come from lib/lesson_mirrors.sh — shared with
+# generate_lesson_mirrors.sh (dotfiles-dev#386) so the checker and the generator
+# can never independently drift on what a mirror is supposed to contain.
+# kind=blueprintx also gets the Tier-line presence check below (tier is an OPEN
+# field: an unknown tier value is a no-op, never a rejection — only a MISSING
+# line flags).
 
 resolve_cwd() {
 	# SessionEnd feeds JSON on stdin with a `cwd`; prefer it, then env, then PWD.
@@ -139,38 +133,39 @@ check_mirrors() {
 	# Triple-check part 2: a lesson whose Origin names THIS repo must also live in
 	# this repo's git-ignored mirror. We can only verify the current repo's mirror
 	# (the mirror is per-origin-repo); other repos' mirrors are out of reach here.
-	local cwd="$1" repo entry store mirror_base kind target_repo mirror file name
+	#
+	# The mirror is a GENERATED artifact (dotfiles-dev#386, `make lessons_mirror` /
+	# generate_lesson_mirrors.sh), not hand-typed — a gap here means "regenerate it",
+	# never "go hand-append an entry".
+	local cwd="$1" repo entry store mirror_base kind target_repo mirror rel file name
 	repo="$(basename "$cwd")"
 	for entry in "${LESSON_STORES[@]}"; do
 		IFS='|' read -r store mirror_base kind target_repo <<<"$entry"
 		[ -d "$store" ] || continue
-		# When this repo IS the store's backport target, the same-repo mirror is
-		# redundant by convention and deliberately absent — never flag it. target-repo
-		# "-" (lessons-other) means the store has no distinct backport target at all —
-		# never flag it, in any repo, not just when repo happens to equal "-".
-		[ "$repo" = "$target_repo" ] && continue
-		[ "$target_repo" = "-" ] && continue
-		mirror="$cwd/docs/$mirror_base.md"
+		# When this repo IS the store's backport target (or the store is the "-"
+		# sentinel, lessons-other), the mirror is redundant by convention and
+		# deliberately absent — never flag it.
+		mirror_expected_for_repo "$target_repo" "$repo" || continue
+		rel="$(mirror_rel_path "$mirror_base")"
+		mirror="$cwd/$rel"
 		for file in "$store"/*.md; do
 			[ -e "$file" ] || continue
 			name="$(basename "$file")"
 			[ "$name" = "README.md" ] && continue
-			# Only lessons that originated in THIS repo are expected in its mirror
-			# (bullet optional: the stores use both "- **Origin:**" and bare form).
-			grep -qiE "^[[:space:]]*([-*][[:space:]]+)?\*\*Origin:\*\*.*\b${repo}\b" "$file" || continue
+			# Only lessons that originated in THIS repo are expected in its mirror.
+			lesson_originates_in_repo "$file" "$repo" || continue
 			if [ ! -f "$mirror" ]; then
-				add_gap "[lessons] '$name' originated here but docs/$mirror_base.md mirror is missing"
+				add_gap "[lessons] '$name' originated here but $rel mirror is missing — run 'make lessons_mirror' (or the deployed generator outside dotfiles-dev)"
 			elif ! grep -qF "$name" "$mirror"; then
-				add_gap "[lessons] '$name' originated here but is not in docs/$mirror_base.md"
+				add_gap "[lessons] '$name' originated here but is not in $rel — regenerate it, do not hand-append"
 			elif [ "$file" -nt "$mirror" ]; then
 				# Filename-only matching (dotfiles-dev#356): the name was in the mirror
-				# BEFORE an append, so the presence check above stays green forever even
-				# when the append itself never propagated. Measured: a follow-up append to
-				# a-vendor-installer-can-exec-a-tui-and-own-your-chain.md reached its
-				# mirror only by hand. mtime-newer is a heuristic, not proof (the mirror
-				# may just have been written first in the same edit) — worded as
-				# "verify", same register as the branch/upstream gaps above.
-				add_gap "[lessons] '$name' changed after docs/$mirror_base.md — verify the append still matches (mtime-newer, not filename-only)"
+				# BEFORE a later edit to the lesson file, so the presence check above
+				# stays green forever even when that edit never propagated. mtime-newer
+				# is a heuristic, not proof (the mirror may just have been generated
+				# first in the same edit) — worded as "verify", same register as the
+				# branch/upstream gaps above.
+				add_gap "[lessons] '$name' changed after $rel — regenerate the mirror (mtime-newer, not filename-only)"
 			fi
 		done
 	done

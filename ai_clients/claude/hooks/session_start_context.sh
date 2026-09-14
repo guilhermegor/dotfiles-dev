@@ -16,6 +16,8 @@ set -uo pipefail
 
 # shellcheck source=lib/deploy_drift.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/deploy_drift.sh"
+# shellcheck source=lib/lesson_mirrors.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/lesson_mirrors.sh"
 
 emit_cross_project_context() {
 	local claude_dir lessons_store proving_mem cwd
@@ -52,19 +54,21 @@ emit_cross_project_context() {
 	fi
 
 	# BlueprintX template repo OR a scaffolded project → point at proving-ground memory.
+	local blueprintx_mirror
+	blueprintx_mirror="$(mirror_path "$cwd" "blueprintx-lessons")"
 	local is_blueprintx=0
 	shopt -s nullglob
 	local skeleton_metas=("$cwd"/templates/*/skeleton.meta)
 	shopt -u nullglob
-	if [ -f "$cwd/docs/blueprintx-lessons.md" ] || [ "${#skeleton_metas[@]}" -gt 0 ] || [ -f "$cwd/bin/blueprintx.sh" ]; then
+	if [ -f "$blueprintx_mirror" ] || [ "${#skeleton_metas[@]}" -gt 0 ] || [ -f "$cwd/bin/blueprintx.sh" ]; then
 		is_blueprintx=1
 	fi
 
 	if [ "$is_blueprintx" -eq 1 ]; then
 		printf '%s\n' "[cross-project-context] This is a BlueprintX repo or a BlueprintX-scaffolded project:"
-		[ -f "$cwd/docs/blueprintx-lessons.md" ] && printf '%s\n' "  - This repo's git-ignored lessons mirror: $cwd/docs/blueprintx-lessons.md"
+		[ -f "$blueprintx_mirror" ] && printf '%s\n' "  - This repo's git-ignored, GENERATED lessons mirror: $blueprintx_mirror"
 		[ -d "$proving_mem" ] && printf '%s\n' "  - Proving-ground project memory (NOT auto-loaded here): $proving_mem"
-		printf '%s\n' "  - Do NOT edit/branch/PR ~/github/blueprintx templates unless the user explicitly asks in the current request; capture generalizable findings in docs/blueprintx-lessons.md + the global store."
+		printf '%s\n' "  - Do NOT edit/branch/PR ~/github/blueprintx templates unless the user explicitly asks in the current request; capture generalizable findings in the BlueprintX store, then run 'make lessons_mirror' (or the deployed generator) to refresh $blueprintx_mirror."
 	fi
 }
 

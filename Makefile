@@ -280,11 +280,14 @@ editors_setup: vscode_setup ai_clients  ## Setup all code editors + AI clients
 
 ##@ Utilities
 
-.PHONY: banner check_status list_scripts clean patch_claudestatus git_hooks test
+.PHONY: banner check_status list_scripts clean patch_claudestatus git_hooks test lessons_mirror
 
 test:  ## Run the bats unit test suite (tests/) — local parity with CI
 	@command -v bats >/dev/null 2>&1 || { echo "bats not found — run 'make install_coding' (bats step) or 'brew install bats-core'"; exit 1; }
 	@bats tests/
+
+lessons_mirror:  ## Regenerate this repo's git-ignored lesson mirrors (.specs/lessons/) from the global stores
+	@bash ai_clients/claude/hooks/lib/generate_lesson_mirrors.sh "$(CURDIR)"
 
 git_hooks:  ## Enable this repo's local git hooks (gitlint commit-msg lint)
 	@command -v gitlint >/dev/null 2>&1 || { echo "Installing gitlint..."; pipx install gitlint-core 2>/dev/null || python3 -m pip install --user gitlint-core; }

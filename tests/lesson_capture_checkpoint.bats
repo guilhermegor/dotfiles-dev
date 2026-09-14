@@ -6,14 +6,13 @@
 # stdin->stdout JSON filter. `payload <cmd>` builds the PostToolUse payload;
 # `run_hook <cmd>` pipes it through the hook so $output is its stdout.
 #
-# Regression pin for dotfiles-dev#98: the mirror audit (`check_mirrors` in
-# session_capture_audit.sh) joins purely by the literal substring
-# `<filename>.md` inside the mirror doc — it never reads heading/Tier/Lesson/
-# Why prose. That gap recurred 4/4 sessions because "write the lesson in the
-# mirror" was followed as full prose, and the `- **Source:** \`<file>.md\``
-# field — the part that doesn't look like content — got dropped. The
-# checkpoint reminder must therefore quote that exact required field at the
-# PR/issue completion boundary, not just describe it.
+# dotfiles-dev#386: the mirror moved from a hand-appended `docs/*-lessons.md`
+# entry (which needed an exact `- **Source:**` field for check_mirrors()'s
+# literal-substring join) to a GENERATED `.specs/lessons/*-lessons.md` file
+# (`make lessons_mirror` / generate_lesson_mirrors.sh). The reminder's job is
+# now "capture the lesson, then regenerate" — it no longer needs to coach the
+# exact field shape, because the generator produces it deterministically.
+# This supersedes the pre-#386 pins on the literal `- **Source:**` quote.
 #
 # Run locally:  bats tests/            (install with: sudo apt-get install -y bats)
 
@@ -29,18 +28,19 @@ run_hook() {
     payload "$1" | "$HOOK"
 }
 
-@test "gh pr create reminder quotes the mandatory Source: field verbatim" {
+@test "gh pr create reminder points at regenerating the mirror, not hand-appending" {
     run run_hook "gh pr create --title x --body y"
     [ "$status" -eq 0 ]
     ctx="$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')"
-    [[ "$ctx" == *'- **Source:** `<filename>.md`'* ]]
+    [[ "$ctx" == *"make lessons_mirror"* ]]
+    [[ "$ctx" == *"GENERATED, never hand-appended"* ]]
 }
 
-@test "rtk gh issue create also fires and quotes the field" {
+@test "rtk gh issue create also fires and points at the generator" {
     run run_hook "rtk gh issue create --title x"
     [ "$status" -eq 0 ]
     ctx="$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')"
-    [[ "$ctx" == *'- **Source:** `<filename>.md`'* ]]
+    [[ "$ctx" == *"generate_lesson_mirrors.sh"* ]]
 }
 
 @test "unrelated command does not fire the checkpoint" {
@@ -49,14 +49,14 @@ run_hook() {
     [ -z "$output" ]
 }
 
-# dotfiles-dev#315: the reminder previously claimed, in bold, that the audit "joins by
-# this literal string, never by heading/prose" — false; session_capture_audit.sh's
-# check_mirrors() does `grep -qF "$name" "$mirror"`, a bare-filename substring match.
-# Pin the corrected claim so the two files cannot silently re-diverge.
-@test "reminder no longer overclaims the audit joins on the literal Source: field" {
+# dotfiles-dev#386: the reminder must no longer point at the retired docs/ path — that
+# location was forbidden by .specs/CLAUDE.md's own "What does NOT belong here" section
+# even before the mirror was generated, and now the mirror lives under .specs/lessons/.
+@test "reminder no longer names the retired docs/*-lessons.md path" {
     run run_hook "gh pr create --title x --body y"
     [ "$status" -eq 0 ]
     ctx="$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')"
-    [[ "$ctx" != *"audit joins by this literal string"* ]]
-    [[ "$ctx" == *"bare FILENAME"* ]]
+    [[ "$ctx" != *"docs/blueprintx-lessons.md"* ]]
+    [[ "$ctx" != *"docs/dotfiles-dev-lessons.md"* ]]
+    [[ "$ctx" == *".specs/lessons/"* ]]
 }

@@ -236,6 +236,34 @@ None.
     [[ "$output" == *"spec.md not found"* ]]
 }
 
+# --- legacy two-skill shape (design.md/plan.md, no spec.md) (dotfiles-dev#375) ---------------
+
+@test "SECTION_MISSING: does not fire for a design.md-only legacy feature" {
+    printf '%s' "# Gadget design" > "$FEATURE_DIR/design.md"
+    # No spec.md, no tests dir content needed.
+
+    run_gate
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"SECTION_MISSING"* ]]
+}
+
+@test "SECTION_MISSING: does not fire for a plan.md-only legacy feature" {
+    printf '%s' "# Gadget plan" > "$FEATURE_DIR/plan.md"
+
+    run_gate
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"SECTION_MISSING"* ]]
+}
+
+@test "SECTION_MISSING: still fires when the dir has neither spec.md, design.md, nor plan.md" {
+    write_test_file "$WELL_FORMED_TESTS"
+
+    run_gate
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"SECTION_MISSING"* ]]
+    [[ "$output" == *"spec.md not found"* ]]
+}
+
 # --- TRACKER_STALE (dotfiles-dev#313) --------------------------------------------------------
 #
 # progress.md is OPTIONAL, so the silent cases matter as much as the firing one: a feature

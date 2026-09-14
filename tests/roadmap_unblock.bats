@@ -61,6 +61,27 @@ write_blockers() {
     fi
 }
 
+# write_blocker_pages ISSUE_NUMBER PAGE_JSON...
+# Registers a MULTI-PAGE dependencies/blocked_by fixture: one JSON array per line, which is exactly
+# what `gh api --paginate` emits (concatenated arrays, not a merged one). Each PAGE_JSON is a
+# newline-separated group of `blocker` objects.
+write_blocker_pages() {
+    local number="$1"; shift
+    local page
+    : > "$TEST_TMP/blockers-$number.json"
+    for page in "$@"; do
+        printf '%s\n' "$page" | jq -sc '.' >> "$TEST_TMP/blockers-$number.json"
+    done
+}
+
+# write_existing_comments ISSUE_NUMBER BODY...
+# Registers what `gh issue view --json comments` returns for one issue. Absent = no comments.
+write_existing_comments() {
+    local number="$1"; shift
+    printf '%s\n' "$@" | jq -R . | jq -sc '{comments: [.[] | {body: .}]}' \
+        > "$TEST_TMP/comments-$number.json"
+}
+
 write_fake_gh() {
     cat > "$FAKE_BIN/gh" <<EOF
 #!/bin/bash
@@ -84,6 +105,11 @@ case "\$1 \$2" in
         [ -f "$TEST_TMP/fail-issue-edit" ] && exit 1
         echo ok
         ;;
+    "issue view")
+        f="$TEST_TMP/comments-\$3.json"
+        [ -f "\$f" ] || exit 0
+        jq -r '.comments[].body' "\$f"
+        ;;
     "project item-edit")
         [ -f "$TEST_TMP/fail-item-edit" ] && exit 1
         echo ok
@@ -98,6 +124,15 @@ case "\$1 \$2" in
 esac
 EOF
     chmod +x "$FAKE_BIN/gh"
+}
+
+# refute_gh PATTERN
+# Asserts PATTERN never appears in the gh invocation log. NOT `! grep -q …`: bash exempts a
+# `!`-inverted command from `set -e`, so such a line silently passes unless it happens to be the
+# test's very last statement — six assertions here could never have failed (PR #376 review).
+refute_gh() {
+    run grep -q -- "$1" "$GH_LOG"
+    [ "$status" -ne 0 ]
 }
 
 run_reconcile() {
@@ -132,9 +167,9 @@ run_reconcile() {
     [[ "$output" == *"STATUS=ok"* ]]
     [[ "$output" == *"still blocked owner/repo#4"* ]]
     [[ "$output" == *"owner/repo#5"* ]]
-    ! grep -q 'issue edit' "$GH_LOG"
-    ! grep -q 'item-edit' "$GH_LOG"
-    ! grep -q 'issue comment' "$GH_LOG"
+    refute_gh 'issue edit'
+    refute_gh 'item-edit'
+    refute_gh 'issue comment'
 }
 
 # --- a cross-repo blocker, all closed: still unblocks -------------------------------------------
@@ -158,9 +193,9 @@ run_reconcile() {
     [[ "$output" == *"STATUS=ok"* ]]
     [[ "$output" == *"decision blocker owner/repo#7"* ]]
     [[ "$output" == *"decision: find and read the terms of use"* ]]
-    ! grep -q 'issue edit' "$GH_LOG"
-    ! grep -q 'item-edit' "$GH_LOG"
-    ! grep -q 'issue comment' "$GH_LOG"
+    refute_gh 'issue edit'
+    refute_gh 'item-edit'
+    refute_gh 'issue comment'
 }
 
 @test "decision: blocker present only in the body line: still left untouched" {
@@ -169,7 +204,7 @@ run_reconcile() {
     write_fake_gh
     run_reconcile
     [[ "$output" == *"decision blocker owner/repo#7"* ]]
-    ! grep -q 'issue edit' "$GH_LOG"
+    refute_gh 'issue edit'
 }
 
 # --- blocked by nothing: reported, untouched ------------------------------------------------------
@@ -181,8 +216,8 @@ run_reconcile() {
     run_reconcile
     [[ "$output" == *"STATUS=ok"* ]]
     [[ "$output" == *"blocked by nothing owner/repo#13"* ]]
-    ! grep -q 'issue edit' "$GH_LOG"
-    ! grep -q 'item-edit' "$GH_LOG"
+    refute_gh 'issue edit'
+    refute_gh 'item-edit'
 }
 
 # --- API failure: UNKNOWN, untouched --------------------------------------------------------------
@@ -194,9 +229,9 @@ run_reconcile() {
     run_reconcile
     [[ "$output" == *"STATUS=ok"* ]]
     [[ "$output" == *"UNKNOWN owner/repo#16"* ]]
-    ! grep -q 'issue edit' "$GH_LOG"
-    ! grep -q 'item-edit' "$GH_LOG"
-    ! grep -q 'issue comment' "$GH_LOG"
+    refute_gh 'issue edit'
+    refute_gh 'item-edit'
+    refute_gh 'issue comment'
 }
 
 @test "the board itself unreadable: global UNKNOWN, non-zero return, nothing touched" {
@@ -207,7 +242,7 @@ run_reconcile() {
     [[ "$output" == *"rc=1"* ]]
     [[ "$output" == *"STATUS=unknown"* ]]
     [[ "$output" == *"UNKNOWN"* ]]
-    ! grep -q 'issue edit' "$GH_LOG"
+    refute_gh 'issue edit'
 }
 
 # --- idempotent: re-running after an unblock changes nothing -------------------------------------
@@ -227,9 +262,9 @@ run_reconcile() {
     run_reconcile
     [[ "$output" == *"STATUS=ok"* ]]
     [[ "$output" != *"owner/repo#3"* ]]
-    ! grep -q 'issue edit' "$GH_LOG"
-    ! grep -q 'item-edit' "$GH_LOG"
-    ! grep -q 'issue comment' "$GH_LOG"
+    refute_gh 'issue edit'
+    refute_gh 'item-edit'
+    refute_gh 'issue comment'
 }
 
 # --- a partial write failure is surfaced, never silently swallowed -------------------------------
@@ -242,4 +277,89 @@ run_reconcile() {
     run_reconcile
     [[ "$output" == *"FAILED to unblock owner/repo#3"* ]]
     [[ "$output" != *"unblocked owner/repo#3"* ]]
+}
+
+# --- PR #376 review: a blocker on a later page must still count ----------------------------------
+
+@test "an open blocker on the second page keeps the item blocked" {
+    write_items "$(item "owner/repo" 3 "Blocked" "" "**Blocked by:** owner/repo#2")"
+    write_blocker_pages 3 "$(blocker 2 closed "owner/repo")" "$(blocker 5 open "owner/repo")"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"still blocked owner/repo#3"* ]]
+    [[ "$output" == *"owner/repo#5"* ]]
+    refute_gh 'item-edit'
+}
+
+@test "closed blockers spread over two pages still unblock" {
+    write_items "$(item "owner/repo" 3 "Blocked" "" "**Blocked by:** owner/repo#2")"
+    write_blocker_pages 3 "$(blocker 2 closed "owner/repo")" "$(blocker 5 closed "owner/repo")"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"unblocked owner/repo#3"* ]]
+    [[ "$output" == *"owner/repo#5"* ]]
+}
+
+@test "the blocked_by read is paginated, not left at the default page size" {
+    write_items "$(item "owner/repo" 3 "Blocked" "" "**Blocked by:** owner/repo#2")"
+    write_blockers 3 "$(blocker 2 closed "owner/repo")"
+    write_fake_gh
+    run_reconcile
+    grep -q 'api repos/owner/repo/issues/3/dependencies/blocked_by?per_page=100 --paginate' "$GH_LOG"
+}
+
+# --- PR #376 review: Status is the completion marker, so it is written last ----------------------
+
+@test "Status is the last write, after the field clear and the audit comment" {
+    write_items "$(item "owner/repo" 3 "Blocked" "" "**Blocked by:** owner/repo#2")"
+    write_blockers 3 "$(blocker 2 closed "owner/repo")"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"unblocked owner/repo#3"* ]]
+    # Line numbers in the invocation log, so "after" is asserted rather than assumed.
+    local status_line clear_line comment_line
+    status_line="$(grep -n -- '--field Status --value Ready' "$GH_LOG" | cut -d: -f1)"
+    clear_line="$(grep -n -- '--field Blocked by --clear' "$GH_LOG" | cut -d: -f1)"
+    comment_line="$(grep -n '^issue comment 3 ' "$GH_LOG" | cut -d: -f1)"
+    ((clear_line < status_line))
+    ((comment_line < status_line))
+}
+
+@test "a failed field clear leaves Status Blocked so the next round retries" {
+    write_items "$(item "owner/repo" 3 "Blocked" "" "**Blocked by:** owner/repo#2")"
+    write_blockers 3 "$(blocker 2 closed "owner/repo")"
+    write_fake_gh
+    touch "$TEST_TMP/fail-item-edit"
+    run_reconcile
+    [[ "$output" == *"FAILED to unblock owner/repo#3"* ]]
+    refute_gh '--field Status --value Ready'
+}
+
+@test "the audit comment is not posted twice when it is already on the issue" {
+    write_items "$(item "owner/repo" 3 "Blocked" "" "**Blocked by:** owner/repo#2")"
+    write_blockers 3 "$(blocker 2 closed "owner/repo")"
+    write_existing_comments 3 "Unblocked: owner/repo#2. Status set to Ready."
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"unblocked owner/repo#3"* ]]
+    refute_gh '^issue comment 3 '
+    grep -q -- '--field Status --value Ready' "$GH_LOG"
+}
+
+# --- PR #376 review: a wrong-shaped board response is UNKNOWN, never a silent no-op --------------
+
+@test "a board response with no items array is UNKNOWN, not an empty ok round" {
+    echo '{}' > "$TEST_TMP/items.json"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"STATUS=unknown"* ]]
+    [[ "$output" == *"could not parse project owner/17"* ]]
+}
+
+@test "a board response with a null items field is UNKNOWN" {
+    echo '{"items": null}' > "$TEST_TMP/items.json"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"STATUS=unknown"* ]]
+    [[ "$output" == *"could not parse project owner/17"* ]]
 }

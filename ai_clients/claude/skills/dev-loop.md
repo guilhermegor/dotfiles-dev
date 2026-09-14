@@ -28,19 +28,22 @@ Invoking this skill should be enough to make the loop run; remembering to arm th
 is the gap this step closes. The owner asking *"eu precisaria ter pedido ou já tem algo agendado
 que rode?"* is the measurement that it didn't.
 
-1. **`CronList` first.** Invoking the skill twice in one session must not produce four jobs
+1. **`CronList` first.** Invoking the skill twice in one session must not produce six jobs
    firing in duplicate against the same PRs — check what already exists before creating anything.
 2. **`CronCreate` whatever is missing:**
    - the round (all seven steps below) at `:23`;
-   - a thread sweep at `:53`.
-3. **Say what you armed**, or that both already existed. A step that runs silently is
+   - a thread sweep at `:53`;
+   - a reviewer-slot tick at `8,28,48 * * * *` running **step 4b only** — see step 4b for why
+     this cadence is separate from the round.
+3. **Say what you armed**, or that all three already existed. A step that runs silently is
    indistinguishable from one that never ran.
 
-### What triggers the round — and its limits
+### What triggers the round and the tick — and their limits
 
 - **The session, and only the session.** These are `CronCreate` jobs, not a host timer — they
   die when the session ends. That is the requirement (*"enquanto dev-loop estiver ativo na
-  sessão"*), not a defect to patch over with something more durable.
+  sessão"*), not a defect to patch over with something more durable — see step 4b for why polling
+  is the only available mechanism here in the first place.
 - **Recurring jobs expire after 7 days.** A session that outlives that window needs to re-arm;
   step 1 above already catches this, because `CronList` will show the gap.
 - **Not GitHub Actions `schedule:`.** Disqualified by measurement, not preference — see step 4b:
@@ -234,9 +237,30 @@ Measured: a reviewer slot idle **4h24** with **30 PRs** waiting, the oldest unre
 days**. The hourly loop passed through that window four times and reported "no change" — correct on
 its own terms, and blind.
 
-⚠️ **Do not delegate this to a scheduled workflow.** A `schedule:` cron declared `*/10` was measured
-running **6 times in 21 hours** — GitHub throttles scheduled workflows on low-activity repos,
-hardest where the mechanism is most needed. `schedule:` is the one trigger GitHub is free to skip.
+### This step runs on its own cadence, separate from the round
+
+Capping the ask at once per hourly round paces it by the loop's own cadence, not by the reviewer's
+reset window — any hour whose `:23` round happens to land on a rate-limited moment loses that hour
+entirely. Measured on blueprintx, 2026-09-13: 13 PRs opened, 8 merged, but only **5** reviews
+submitted all day (four of them on one PR), with roughly **10 hours** holding neither a review nor
+a rate-limit notice — free slots nobody spent, because the only thing polling for them was an
+hourly round.
+
+**Fix: a dedicated reviewer-slot tick, `CronCreate`d at `8,28,48 * * * *` (step 0), runs step 4b
+ALONE** — classify the slot, pick one candidate, ask once, stop. Three chances an hour instead of
+one to catch a window that reopens at an arbitrary minute. The full round at `:23` still runs step
+4b too, as part of its seven-step pass; the two cadences share one rule (item 4 below), so which one
+happens to fire does not matter.
+
+⚠️ **Not a hook.** There is no event for "the reviewer's window reopened" — nothing in the local
+toolchain observes it, so polling is the only available mechanism, and `CronCreate` is its
+deterministic form. The honest cost is that it dies with the session; that is already step 0's
+stated requirement for every cron this skill arms, not a new gap this tick introduces.
+
+⚠️ **Do not delegate this to a scheduled workflow either.** A `schedule:` cron declared `*/10` was
+measured running **6 times in 21 hours** — GitHub throttles scheduled workflows on low-activity
+repos, hardest where the mechanism is most needed. `schedule:` is the one trigger GitHub is free to
+skip; a session-owned `CronCreate` poll is not.
 
 1. **Classify the slot, three states plus an escape hatch — never a binary busy/free.** Read the
    newest roster notice, querying `is:pr` **without** `is:open`: a PR that merged since its last
@@ -272,6 +296,10 @@ hardest where the mechanism is most needed. `schedule:` is the one trigger GitHu
      the sole red). ⚠️ A `DIRTY` PR is not a candidate: a review cannot resolve a merge conflict,
      so the ask is spent for nothing. Measured — of the five PRs holding the contended wiring
      files, **three were `DIRTY`**; asking for any of them would have burned the window.
+   - ⚠️ **Skip any PR whose head was pushed in the last ~10 minutes.** A push already triggers a
+     re-review (the item-1 note above), so an ask on top of it spends the window on a review that
+     was already coming — `gh pr view <n> --json commits --jq '.commits[-1].committedDate'` against
+     the current time is enough; when in doubt, treat it as recently pushed and skip.
    - **Rank by MEASURED contention, not by commit type.** Build the contended-file set and count
      how many *blocked issues* each PR's files hold hostage:
 
@@ -324,8 +352,13 @@ hardest where the mechanism is most needed. `schedule:` is the one trigger GitHu
    slot it was meant to fix. The 24h threshold is a default, not a measurement; move it when
    there is one.
 
-4. **At most one ask per round — comment or push, whichever came first.** A burst genuinely trips
-   the account limit — 12 rate-limit notices in 11 minutes, measured.
+4. **At most one ask per invocation of this step — comment or push, whichever came first.** This
+   replaces the old "one ask per round" cap, and the two are not the same rule: step 4b now fires
+   from two cadences (the dedicated tick above, and the full round's own pass through step 4b), and
+   the cap applies per firing, not pooled across the hour — a tick asking at `:08` and the round
+   asking again at `:23` are two separate, legitimate invocations, not a doubled budget. What the
+   cap actually defends against is a **burst** — 12 rate-limit notices in 11 minutes, measured — not
+   a second ask ~20 minutes later, which is exactly what the dedicated tick exists to spend.
 
    🔴 **Then stop reading the ack.** CodeRabbit edits the acknowledgement **in place**: measured on
    blueprintx#330, 2026-09-01, the same comment id read `"Full review triggered"` at +10s and
@@ -347,6 +380,14 @@ Say **which branch fired** — human requested, re-requested, no assignable revi
 in one line. The four outcomes look identical from outside the loop, and "no assignable reviewer"
 in particular is a standing configuration gap that stays invisible if the step only reports when
 it acted.
+
+🔴 **Report the count of open PRs with zero submitted reviews, every invocation — not only when
+this step acted.** "No refusal was posted" and "a review happened" are different facts, and a loop
+that only reacts to notices cannot see the gap between them: the measured cost of that blind spot
+was ~10 hours in one day holding neither a review nor a rate-limit notice — a free slot nobody
+spent, and nothing in the old reporting would have shown it. Making this count part of the round's
+own output turns that gap into something visible instead of something that needs a hand-written
+query to find.
 
 ## 5. RELEASE — evaluate and cut
 
@@ -578,8 +619,9 @@ capture.
 - Do not conclude a path is clean from rtk-proxied `git status` / `ls` / `find`.
 - Do not force-merge past a red required check, or remove one to unblock a PR.
 - Do not ask permission to run this, and do not ask before cutting a release — see step 5.
-- Do not arm a host-level timer (systemd, a durable cron) for the round. `CronCreate` jobs dying
-  with the session is the requirement from step 0, not a gap to fill with something durable.
+- Do not arm a host-level timer (systemd, a durable cron) for the round or the reviewer-slot tick.
+  `CronCreate` jobs dying with the session is the requirement from step 0, not a gap to fill with
+  something durable.
 
 ⚠️ **The one standing ask, and it is scoped narrowly on purpose:** an outward-facing action that is
 **hard to reverse and not this loop's own work** — changing branch protection or required checks,

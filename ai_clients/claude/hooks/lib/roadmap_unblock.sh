@@ -61,33 +61,55 @@ _ru_body_blocked_line() {
 # _ru_native_blockers REPO NUMBER
 # Prints "state<TAB>owner/repo#number" one per line for every native blocker, or nothing if there
 # are none. Returns 1 on any read/parse failure — the caller's fail-closed signal.
+#
+# ⚠️ `--paginate` is load-bearing, not tidiness: the endpoint returns 30 per page by default, and
+# a single open blocker sitting on page 2 would be invisible while page 1 read all-closed — the
+# caller would then unblock the item, the one direction with no undo (PR #376 review).
 _ru_native_blockers() {
 	local repo="$1" number="$2" json
-	json="$(gh api "repos/$repo/issues/$number/dependencies/blocked_by" 2>/dev/null)" || return 1
-	printf '%s' "$json" | jq -e 'type == "array"' >/dev/null 2>&1 || return 1
-	printf '%s' "$json" | jq -r '.[] | "\(.state)\t\(.repository.full_name)#\(.number)"' 2>/dev/null
+	# The flag goes AFTER the endpoint so a fake `gh` matching on $2 still sees the path.
+	json="$(gh api "repos/$repo/issues/$number/dependencies/blocked_by?per_page=100" \
+		--paginate 2>/dev/null)" || return 1
+	# -s: --paginate emits one array per page, so slurp before validating or reading.
+	printf '%s' "$json" | jq -se 'length > 0 and all(type == "array")' >/dev/null 2>&1 || return 1
+	printf '%s' "$json" | jq -sr '.[][] | "\(.state)\t\(.repository.full_name)#\(.number)"' 2>/dev/null
+}
+
+# _ru_has_comment REPO NUMBER TEXT
+# True when TEXT is already the body of a comment on the issue. A read failure counts as "absent":
+# a duplicate audit comment is visible and harmless, a suppressed one is silent.
+_ru_has_comment() {
+	gh issue view "$2" --repo "$1" --json comments --jq '.comments[].body' 2>/dev/null \
+		| grep -qxF "$3"
 }
 
 # _ru_unblock OWNER PROJECT REPO NUMBER URL DETAIL
-# The one mutation path, in order: labels, board Status, board "Blocked by", audit comment. The
-# comment is the audit trail (dotfiles-dev#369): a status that changes silently is
+# The one mutation path, in order: labels, board "Blocked by", audit comment, board Status LAST.
+# The comment is the audit trail (dotfiles-dev#369): a status that changes silently is
 # indistinguishable from one someone fat-fingered.
 #
-# ponytail: a failure partway through is not rolled back — the caller reports it as FAILED so a
-# human can finish or retry by hand. Rollback is unneeded because the very next round is
-# self-healing: this function is only ever reached for a Status=Blocked item, so any step that DID
-# land (e.g. the label swap) simply removes the item from next round's candidate set instead of
-# masking anything.
+# ⚠️ Status is the completion marker, so it writes last (PR #376 review). Writing it first is what
+# makes a partial failure permanent: this function is only ever reached for a Status=Blocked item,
+# so Status=Ready removes the item from every later round's candidate set — a failed "Blocked by"
+# clear or a missing audit comment would then never be retried by anyone, and the stale field
+# survives indefinitely. With Status last, any earlier failure leaves the item Blocked and the next
+# round redoes the whole sequence, which is safe because every earlier write is retry-safe: the
+# label swap is a no-op once applied, `--clear` on an empty field is a no-op, and the comment is
+# skipped when its exact text is already on the issue.
+#
+# ponytail: still no rollback — the caller reports FAILED and the next round re-runs it.
 _ru_unblock() {
 	local owner="$1" project="$2" repo="$3" number="$4" url="$5" detail="$6"
+	local note="Unblocked: $detail. Status set to Ready."
 	gh issue edit "$number" --repo "$repo" \
 		--add-label "state:ready" --remove-label "state:blocked" >/dev/null 2>&1 || return 1
 	gh project item-edit "$project" --owner "$owner" --url "$url" \
-		--field "Status" --value "Ready" >/dev/null 2>&1 || return 1
-	gh project item-edit "$project" --owner "$owner" --url "$url" \
 		--field "Blocked by" --clear >/dev/null 2>&1 || return 1
-	gh issue comment "$number" --repo "$repo" \
-		--body "Unblocked: $detail. Status set to Ready." >/dev/null 2>&1 || return 1
+	if ! _ru_has_comment "$repo" "$number" "$note"; then
+		gh issue comment "$number" --repo "$repo" --body "$note" >/dev/null 2>&1 || return 1
+	fi
+	gh project item-edit "$project" --owner "$owner" --url "$url" \
+		--field "Status" --value "Ready" >/dev/null 2>&1 || return 1
 }
 
 # _ru_process_item OWNER PROJECT ITEM_JSON
@@ -152,8 +174,14 @@ reconcile_roadmap_unblock() {
 	local items_json blocked
 	items_json="$(gh project item-list "$project" --owner "$owner" --format json --limit 500 2>/dev/null)" \
 		|| { RECONCILE_REPORT="UNKNOWN: could not read project $owner/$project"; return 1; }
+	# Shape-check before filtering: `.items[]?` exits 0 on `{}` and on `{"items": null}`, so
+	# without this an unusable response would report ok having silently processed nothing —
+	# indistinguishable from a board with no blocked items (PR #376 review).
+	printf '%s' "$items_json" | jq -e 'type == "object" and (.items | type == "array")' \
+		>/dev/null 2>&1 \
+		|| { RECONCILE_REPORT="UNKNOWN: could not parse project $owner/$project"; return 1; }
 	blocked="$(printf '%s' "$items_json" \
-		| jq -c '.items[]? | select(.status == "Blocked" and .content.type == "Issue")' 2>/dev/null)" \
+		| jq -c '.items[] | select(.status == "Blocked" and .content.type == "Issue")' 2>/dev/null)" \
 		|| { RECONCILE_REPORT="UNKNOWN: could not parse project $owner/$project"; return 1; }
 
 	local item line report=""

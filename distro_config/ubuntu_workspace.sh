@@ -4,7 +4,7 @@
 #
 # GNOME workspace, dock, theme, keybindings, and app-folder organisation.
 #
-# App-folder organisation (`organize_app_folders` below) draws from TWO sources:
+# App-folder organisation (`organize_app_folders` below) draws from THREE sources:
 #   1. Static `<folder>_app_names` arrays inside this script — covers pre-installed
 #      system apps (gnome-control-center, mission-center, etc.) that no installer
 #      script manages.
@@ -12,6 +12,26 @@
 #      app declared with a `gnome_folder` field automatically gets placed.
 #      This eliminates the previous drift where install_<foo>() and the folder
 #      arrays had to be kept in sync by hand.
+#   3. Filename globs inside each folder block (`*viewer*`, `org.gnome.*`, …) —
+#      convenience catch-alls for apps neither of the above names explicitly.
+#
+# These three sources can disagree about where an app belongs — none of them
+# can see what the other two are about to add — and an app can end up in two
+# folders at once (#391). The tie-break: Utilities (`Utilitarios`) is the
+# fallback folder and loses to any other folder that also claims an id; a
+# folder's glob or hardcoded list must explicitly exclude an id another
+# folder already owns rather than relying on `sort -u` (that only dedupes
+# entries *within* one folder's array, never across folders).
+#
+# Source 1 and source 2 legitimately overlap for the SAME folder: an app
+# with an installer function is both hand-listed (for machines that predate
+# its INSTALL_REGISTRY entry) and registry-declared. That overlap is
+# harmless (each folder's array is `sort -u`'d) and is not cleaned up here —
+# the registry's `gnome_folder` is the authoritative source for anything
+# with an install function; the hand-written arrays exist only for apps NO
+# install function manages. `tests/gnome_folder_registry_invariant.bats`
+# guards the case that matters (an id claimed by two DIFFERENT folders),
+# not this same-folder redundancy.
 
 # ----------------------------------------------------------------------------
 # Source shared utilities (print_status, color vars, command_exists, …) from
@@ -587,8 +607,17 @@ organize_app_folders() {
         if [ -f "$desktop_file" ]; then
             local basename
             basename=$(basename "$desktop_file")
+            # kdeconnect excluded: *settings* would otherwise catch
+            # org.kde.kdeconnect-settings.desktop, which Sharing's own
+            # *kdeconnect* glob already claims — Sharing wins (#391).
+            # firewall excluded: *config* would otherwise catch
+            # firewall-config.desktop, which Security already claims.
+            # system-log excluded: *system* would otherwise catch
+            # gnome-system-log.desktop, which Utilities already claims.
             if [[ ! "$basename" =~ "game" ]] && [[ ! "$basename" =~ "sound" ]] && \
-               [[ ! "$basename" =~ "color" ]] && [[ ! " ${sistema_apps[*]} " == *" '$basename' "* ]]; then
+               [[ ! "$basename" =~ "color" ]] && [[ ! "$basename" =~ "kdeconnect" ]] && \
+               [[ ! "$basename" =~ "firewall" ]] && [[ ! "$basename" =~ "system-log" ]] && \
+               [[ ! " ${sistema_apps[*]} " == *" '$basename' "* ]]; then
                 sistema_apps+=("'$basename'")
             fi
         fi
@@ -678,9 +707,15 @@ organize_app_folders() {
         'com.github.ADBeveridge.Raider.desktop' 'raider.desktop'
         'org.gnome.Evince.desktop' 'evince.desktop'
         'org.gnome.eog.desktop' 'eog.desktop' 'org.gnome.ImageViewer.desktop'
-        'org.gnome.seahorse.Application.desktop' 'seahorse.desktop'
-        'org.gnome.Software.desktop' 'gnome-software.desktop' 'software-center.desktop'
-        'snap-store_ubuntu-software.desktop' 'snap-store_snap-store.desktop' 'snap-store.desktop'
+        # 'seahorse.desktop' deliberately absent: Security already claims it
+        # (#391) and is the folder that fits.
+        'org.gnome.seahorse.Application.desktop'
+        # 'org.gnome.Software.desktop' / 'software-center.desktop' deliberately
+        # absent: System already claims both (#391).
+        'gnome-software.desktop'
+        # 'snap-store_ubuntu-software.desktop' deliberately absent: System
+        # already claims it (#391).
+        'snap-store_snap-store.desktop' 'snap-store.desktop'
         'io.snapcraft.Store.desktop' 'snapcraft-store.desktop'
         'org.gnome.Extensions.desktop' 'gnome-extensions.desktop' 'gnome-shell-extension-prefs.desktop'
         'com.mattjakeman.ExtensionManager.desktop' 'extension-manager.desktop' 'gnome-extension-manager.desktop'
@@ -717,9 +752,18 @@ organize_app_folders() {
         fi
     done
     
+    # No `org.gnome.*.desktop` glob here (#391): every org.gnome app Utilities
+    # actually wants (Nautilus, Calculator, eog, Evince, Extensions, Shotwell,
+    # clocks, Logs, Characters, font-viewer, gedit/TextEditor, FileRoller,
+    # Screenshot, Weather, Maps, Evolution, Geary, MultiWriter, SimpleScan,
+    # baobab, DiskUtility, FileShredder, seahorse.Application) is already in
+    # utility_app_names above. A blanket org.gnome.* glob catches every OTHER
+    # org.gnome app too — Settings/Software/SystemMonitor/PowerStats (System),
+    # Boxes/Vinagre (Infra), Cheese/Music/Rhythmbox3/SoundRecorder/Totem
+    # (Media), Connections/NetworkDisplays/Yelp/Firmware (System), DejaDup
+    # (Security) — silently duplicating whichever folder already claims it.
     shopt -s nullglob
-    for desktop_file in /usr/share/applications/org.gnome.*.desktop \
-                        /usr/share/applications/*viewer*.desktop \
+    for desktop_file in /usr/share/applications/*viewer*.desktop \
                         /usr/share/applications/*calculator*.desktop \
                         /usr/share/applications/*files*.desktop \
                         /usr/share/applications/*nautilus*.desktop \
@@ -735,7 +779,6 @@ organize_app_folders() {
                         /var/lib/flatpak/exports/share/applications/*Raider*.desktop \
                         /var/lib/flatpak/exports/share/applications/*shredder*.desktop \
                         /var/lib/flatpak/exports/share/applications/*flameshot*.desktop \
-                        "$HOME/.local/share/applications"/org.gnome.*.desktop \
                         "$HOME/.local/share/applications"/*evolution*.desktop \
                         "$HOME/.local/share/applications"/*scan*.desktop \
                         "$HOME/.local/share/applications"/*geomview*.desktop \
@@ -744,9 +787,18 @@ organize_app_folders() {
         if [ -f "$desktop_file" ]; then
             local basename
             basename=$(basename "$desktop_file")
+            # Exclusions below narrow the `*viewer*`, `*software*` and
+            # `snap-store*` globs above so they stop re-adding ids System or
+            # Ereader already own (#391): the id itself can't be dropped from
+            # THIS array (it was never here — it's glob-caught), only the glob
+            # narrowed. remote-viewer/calibre-*viewer* → Infra/Ereader;
+            # snap-store_ubuntu-software/software-center → System.
             if [[ ! "$basename" =~ "settings" ]] && [[ ! "$basename" =~ "control-center" ]] && \
                [[ ! "$basename" =~ "software-properties" ]] && [[ ! "$basename" =~ "update" ]] && \
-               [[ ! "$basename" =~ "firmware" ]] && [[ ! " ${utilitarios_apps[*]} " == *" '$basename' "* ]]; then
+               [[ ! "$basename" =~ "firmware" ]] && \
+               [[ ! "$basename" =~ "remote-viewer" ]] && [[ ! "$basename" =~ "calibre" ]] && \
+               [[ ! "$basename" =~ "ubuntu-software" ]] && [[ "$basename" != "software-center.desktop" ]] && \
+               [[ ! " ${utilitarios_apps[*]} " == *" '$basename' "* ]]; then
                 utilitarios_apps+=("'$basename'")
             fi
         fi
@@ -1095,10 +1147,14 @@ EOF
     print_status "info" "Creating Office folder..."
     local office_apps=()
 
+    # 'com.github.PintaProject.Pinta.desktop' deliberately absent: Design
+    # already claims it via install_pinta's INSTALL_REGISTRY entry (#391).
+    # 'pinta.desktop' (the apt-package id) stays — it's a different install
+    # path with no registry counterpart, so it isn't a cross-folder duplicate.
     for app in 'libreoffice-calc.desktop' 'libreoffice-draw.desktop' 'libreoffice-impress.desktop' \
             'libreoffice-math.desktop' 'libreoffice-writer.desktop' 'libreoffice-base.desktop' \
             'libreoffice-startcenter.desktop' 'libreoffice-xsltfilter.desktop' \
-            'pinta.desktop' 'com.github.PintaProject.Pinta.desktop'; do
+            'pinta.desktop'; do
         if result=$(find_app_desktop_file "$app"); then
             office_apps+=("'$result'")
         fi

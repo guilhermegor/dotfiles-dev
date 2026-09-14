@@ -22,6 +22,19 @@ setup() {
     export HOME
     export DRY_RUN=1
 
+    # Stub the READ paths organize_app_folders hits unconditionally (`gsettings
+    # get`, `dconf list`) so the uniqueness test below never depends on, or
+    # touches, this machine's real dconf state. DRY_RUN=1 above already routes
+    # every mutating `gsettings set` through run_or_echo (printed, never run) —
+    # this covers the reads that aren't gated by DRY_RUN.
+    gsettings() {
+        [ "$1" = "get" ] && { echo "''"; return 0; }
+        return 0
+    }
+    export -f gsettings
+    dconf() { return 0; }
+    export -f dconf
+
     # shellcheck source=../distro_config/ubuntu_workspace.sh
     source "$REPO_ROOT/distro_config/ubuntu_workspace.sh"
 }
@@ -94,4 +107,65 @@ teardown() {
     fn_body="$(declare -f organize_app_folders)"
     [[ "$fn_body" == *'MISSING_DESKTOP_IDS+=('* ]]
     [[ "$fn_body" == *'Registry apps not placed'* ]]
+}
+
+# Issue #391: an app landed in two GNOME folders at once, and three
+# independent mechanisms can each cause it — hardcoded <folder>_app_names id
+# lists, INSTALL_REGISTRY's gnome_folder field, and filename globs — with no
+# mechanism able to see what the other two already placed. A check that only
+# compared the hardcoded lists would have missed the reported case (rustdesk:
+# hardcoded in Infra's list, registry-declared for Sharing), so this test
+# runs organize_app_folders() for real and inspects what it actually computed
+# for every folder — the real per-folder arrays (hardcoded lists + registry
+# merge + globs, post `sort -u`) — instead of a second hand-written model of
+# the placement rules.
+@test "no desktop id is placed into more than one gnome app folder" {
+    mkdir -p "$HOME/.local/share/applications"
+
+    # Touch every id ANY mechanism could place under $HOME, so
+    # find_app_desktop_file()'s $HOME-first lookup resolves ALL of them
+    # deterministically — independent of what is actually installed on the
+    # machine running this suite.
+    local id
+    while IFS= read -r id; do
+        [ -n "$id" ] && : > "$HOME/.local/share/applications/$id"
+    done < <(declare -f organize_app_folders | grep -oE "'[A-Za-z0-9_.-]+\.desktop'" | tr -d "'" | sort -u)
+
+    local entry fn _label _folder desktop
+    for entry in "${INSTALL_REGISTRY[@]}"; do
+        IFS=':' read -r fn _label _folder desktop <<< "$entry"
+        [ -n "$desktop" ] && : > "$HOME/.local/share/applications/$desktop"
+    done
+
+    run organize_app_folders
+    [ "$status" -eq 0 ]
+
+    # Each "[dry-run] gsettings set ...folders/<Folder>/ apps ['a.desktop',...]"
+    # line is one folder's FINAL computed membership. Flatten every line to
+    # "app<TAB>folder" pairs, then any app with 2+ distinct folders is a
+    # cross-folder duplicate.
+    local pairs
+    pairs=$(printf '%s\n' "$output" \
+        | grep -oE "folders/[A-Za-z]+/ apps \[[^]]*\]" \
+        | sed -E "s#folders/([A-Za-z]+)/ apps \[(.*)\]#\1"$'\t'"\2#" \
+        | while IFS=$'\t' read -r folder apps_csv; do
+              IFS=',' read -ra app_arr <<< "$apps_csv"
+              local a
+              for a in "${app_arr[@]}"; do
+                  a="${a//\'/}"
+                  printf '%s\t%s\n' "$a" "$folder"
+              done
+          done)
+
+    local dupes
+    dupes=$(printf '%s\n' "$pairs" | sort -u | cut -f1 | sort | uniq -d)
+
+    if [ -n "$dupes" ]; then
+        echo "desktop ids placed into 2+ folders:"
+        local d
+        while IFS= read -r d; do
+            awk -F'\t' -v id="$d" '$1==id' <<< "$pairs"
+        done <<< "$dupes"
+        return 1
+    fi
 }

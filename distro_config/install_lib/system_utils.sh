@@ -1141,7 +1141,11 @@ INSTALL_REGISTRY+=(
     "install_openlogi:openlogi (Logitech HID++ manager):Sistema:"
     "install_fastfetch:fastfetch (system info)::"
     "install_flameshot:Flameshot Screenshot Tool:Utilitarios:org.flameshot.Flameshot.desktop"
-    "install_rofi:Rofi Launcher:Utilitarios:rofi.desktop"
+    # gnome_folder is Sistema, not Utilitarios: Rofi was duplicated into both
+    # System (this file's own hardcoded system_app_names list in
+    # ubuntu_workspace.sh) and Utilities (this registry entry) — System is
+    # the folder that fits, per the never-Utilities-on-a-tie rule (#391).
+    "install_rofi:Rofi Launcher:Sistema:rofi.desktop"
     "install_pinta:Pinta Image Editor:Design:com.github.PintaProject.Pinta.desktop"
     "install_gimp:GIMP Image Editor:Design:org.gimp.GIMP.desktop"
     "install_veracrypt_appimage:VeraCrypt AppImage::"

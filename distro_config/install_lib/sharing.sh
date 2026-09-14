@@ -791,7 +791,12 @@ install_clamav() {
 
 INSTALL_REGISTRY+=(
     "install_localsend:LocalSend File Sharing:Sharing:localsend_app.desktop"
-    "install_rustdesk:RustDesk Remote Desktop:Sharing:rustdesk.desktop"
+    # gnome_folder is Infra, not Sharing: RustDesk was duplicated into both
+    # Infra (this file's own hardcoded infra_app_names list in
+    # ubuntu_workspace.sh) and Sharing (this registry entry) — Infra is the
+    # folder that fits (#391). install_rustdesk stays defined here; only the
+    # placement changes.
+    "install_rustdesk:RustDesk Remote Desktop:Infra:rustdesk.desktop"
     "install_insync:Insync (Google Drive):Sharing:insync.desktop"
     "install_rclone:rclone (on-demand cloud mount)::"
     "install_clamav:ClamAV Antivirus:Seguranca:clamtk.desktop"

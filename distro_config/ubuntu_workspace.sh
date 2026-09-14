@@ -600,8 +600,12 @@ organize_app_folders() {
         if [ -f "$desktop_file" ]; then
             local basename
             basename=$(basename "$desktop_file")
+            # kdeconnect excluded: *settings* would otherwise catch
+            # org.kde.kdeconnect-settings.desktop, which Sharing's own
+            # *kdeconnect* glob already claims — Sharing wins (#391).
             if [[ ! "$basename" =~ "game" ]] && [[ ! "$basename" =~ "sound" ]] && \
-               [[ ! "$basename" =~ "color" ]] && [[ ! " ${sistema_apps[*]} " == *" '$basename' "* ]]; then
+               [[ ! "$basename" =~ "color" ]] && [[ ! "$basename" =~ "kdeconnect" ]] && \
+               [[ ! " ${sistema_apps[*]} " == *" '$basename' "* ]]; then
                 sistema_apps+=("'$basename'")
             fi
         fi
@@ -691,9 +695,15 @@ organize_app_folders() {
         'com.github.ADBeveridge.Raider.desktop' 'raider.desktop'
         'org.gnome.Evince.desktop' 'evince.desktop'
         'org.gnome.eog.desktop' 'eog.desktop' 'org.gnome.ImageViewer.desktop'
-        'org.gnome.seahorse.Application.desktop' 'seahorse.desktop'
-        'org.gnome.Software.desktop' 'gnome-software.desktop' 'software-center.desktop'
-        'snap-store_ubuntu-software.desktop' 'snap-store_snap-store.desktop' 'snap-store.desktop'
+        # 'seahorse.desktop' deliberately absent: Security already claims it
+        # (#391) and is the folder that fits.
+        'org.gnome.seahorse.Application.desktop'
+        # 'org.gnome.Software.desktop' / 'software-center.desktop' deliberately
+        # absent: System already claims both (#391).
+        'gnome-software.desktop'
+        # 'snap-store_ubuntu-software.desktop' deliberately absent: System
+        # already claims it (#391).
+        'snap-store_snap-store.desktop' 'snap-store.desktop'
         'io.snapcraft.Store.desktop' 'snapcraft-store.desktop'
         'org.gnome.Extensions.desktop' 'gnome-extensions.desktop' 'gnome-shell-extension-prefs.desktop'
         'com.mattjakeman.ExtensionManager.desktop' 'extension-manager.desktop' 'gnome-extension-manager.desktop'
@@ -757,9 +767,20 @@ organize_app_folders() {
         if [ -f "$desktop_file" ]; then
             local basename
             basename=$(basename "$desktop_file")
+            # Exclusions below narrow the `org.gnome.*`, `*viewer*`, `*software*`
+            # and `snap-store*` globs above so they stop re-adding ids System
+            # or Ereader already own (#391): the id itself can't be dropped
+            # from THIS array (it was never here — it's glob-caught), only the
+            # glob narrowed. org.gnome.Settings/SystemMonitor/PowerStats/
+            # Software → System; remote-viewer/calibre-*viewer* → Ereader/Infra;
+            # snap-store_ubuntu-software/software-center → System.
             if [[ ! "$basename" =~ "settings" ]] && [[ ! "$basename" =~ "control-center" ]] && \
                [[ ! "$basename" =~ "software-properties" ]] && [[ ! "$basename" =~ "update" ]] && \
-               [[ ! "$basename" =~ "firmware" ]] && [[ ! " ${utilitarios_apps[*]} " == *" '$basename' "* ]]; then
+               [[ ! "$basename" =~ "firmware" ]] && \
+               [[ ! "$basename" =~ ^org\.gnome\.(Settings|Software|SystemMonitor|PowerStats)\.desktop$ ]] && \
+               [[ ! "$basename" =~ "remote-viewer" ]] && [[ ! "$basename" =~ "calibre" ]] && \
+               [[ ! "$basename" =~ "ubuntu-software" ]] && [[ "$basename" != "software-center.desktop" ]] && \
+               [[ ! " ${utilitarios_apps[*]} " == *" '$basename' "* ]]; then
                 utilitarios_apps+=("'$basename'")
             fi
         fi
@@ -1107,10 +1128,14 @@ EOF
     print_status "info" "Creating Office folder..."
     local office_apps=()
 
+    # 'com.github.PintaProject.Pinta.desktop' deliberately absent: Design
+    # already claims it via install_pinta's INSTALL_REGISTRY entry (#391).
+    # 'pinta.desktop' (the apt-package id) stays — it's a different install
+    # path with no registry counterpart, so it isn't a cross-folder duplicate.
     for app in 'libreoffice-calc.desktop' 'libreoffice-draw.desktop' 'libreoffice-impress.desktop' \
             'libreoffice-math.desktop' 'libreoffice-writer.desktop' 'libreoffice-base.desktop' \
             'libreoffice-startcenter.desktop' 'libreoffice-xsltfilter.desktop' \
-            'pinta.desktop' 'com.github.PintaProject.Pinta.desktop'; do
+            'pinta.desktop'; do
         if result=$(find_app_desktop_file "$app"); then
             office_apps+=("'$result'")
         fi

@@ -284,6 +284,7 @@ editors_setup: vscode_setup ai_clients  ## Setup all code editors + AI clients
 
 test:  ## Run the bats unit test suite (tests/) — local parity with CI
 	@command -v bats >/dev/null 2>&1 || { echo "bats not found — run 'make install_coding' (bats step) or 'brew install bats-core'"; exit 1; }
+	@bash tests/bats_negation_gate.sh
 	@bats tests/
 
 lessons_mirror:  ## Regenerate this repo's git-ignored lesson mirrors (.specs/_lessons/) from the global stores

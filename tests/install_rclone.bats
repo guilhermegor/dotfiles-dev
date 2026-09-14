@@ -40,6 +40,16 @@ teardown() {
     rm -rf "$TMP"
 }
 
+# refute_rclone_log PATTERN
+# Asserts PATTERN never appears in the fake rclone's invocation log. NOT
+# `! grep -q …`: bash exempts a `!`-inverted command from `set -e`, so such
+# a line is not a real assertion unless it happens to be the test's last
+# statement (issue #380).
+refute_rclone_log() {
+    run grep -q -- "$1" "$RCLONE_LOG"
+    [ "$status" -ne 0 ]
+}
+
 _write_rclone_stub() {
     cat > "$TMP/bin/rclone" <<STUB
 #!/bin/bash
@@ -76,7 +86,7 @@ STUB
     run install_rclone
     [ "$status" -eq 0 ]
     if [ -f "$RCLONE_LOG" ]; then
-        ! grep -q '^config' "$RCLONE_LOG"
+        refute_rclone_log '^config'
     fi
 }
 
@@ -145,7 +155,9 @@ STUB
     # The directives (from [Unit] onward) are fully substituted; the header
     # comments above them deliberately keep the literal placeholders (#365
     # — asserted separately below).
-    ! sed -n '/^\[Unit\]/,$p' "$unit" | grep -q '{{'
+    local directives
+    directives="$(sed -n '/^\[Unit\]/,$p' "$unit")"
+    [[ "$directives" != *'{{'* ]]
 }
 
 @test "install_rclone_mount_unit never enables or starts the unit" {
@@ -262,7 +274,7 @@ STUB
     [ "$status" -eq 0 ]
     [[ "$output" == *"rclone config reconnect onedrive:"* ]]
     if [ -f "$RCLONE_LOG" ]; then
-        ! grep -q '^config reconnect' "$RCLONE_LOG"
+        refute_rclone_log '^config reconnect'
     fi
 }
 

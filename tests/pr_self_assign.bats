@@ -93,7 +93,8 @@ EOF
     [ "$status" -eq 0 ]
     [ -z "$output" ]
     # never reached the edit step
-    ! grep -q '^pr edit' "$GH_LOG"
+    run grep -q '^pr edit' "$GH_LOG"
+    [ "$status" -ne 0 ]
 }
 
 @test "fails open and silently when gh pr edit itself fails" {

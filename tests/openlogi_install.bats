@@ -29,6 +29,15 @@ teardown() {
     rm -rf "$HOME"
 }
 
+# refute_repo_grep PATTERN FILE
+# Asserts PATTERN never appears in FILE. NOT `! grep -q …`: bash exempts a
+# `!`-inverted command from `set -e`, so such a line is not a real assertion
+# unless it happens to be the test's last statement (issue #380).
+refute_repo_grep() {
+    run grep -q -- "$1" "$2"
+    [ "$status" -ne 0 ]
+}
+
 # --- openlogi is wired up -----------------------------------------------------
 
 @test "install_openlogi and verify_openlogi are defined" {
@@ -73,7 +82,8 @@ teardown() {
 # --- Solaar is fully removed ---------------------------------------------------
 
 @test "install_solaar no longer exists" {
-    ! declare -F install_solaar
+    run declare -F install_solaar
+    [ "$status" -ne 0 ]
 }
 
 @test "INSTALL_REGISTRY has no solaar entry" {
@@ -84,9 +94,9 @@ teardown() {
 }
 
 @test "the utilities rollup no longer installs solaar" {
-    ! grep -q "solaar" "$REPO_ROOT/distro_config/install_lib/system_utils.sh"
+    refute_repo_grep "solaar" "$REPO_ROOT/distro_config/install_lib/system_utils.sh"
 }
 
 @test "ubuntu_workspace.sh no longer places a solaar .desktop entry" {
-    ! grep -q "solaar" "$REPO_ROOT/distro_config/ubuntu_workspace.sh"
+    refute_repo_grep "solaar" "$REPO_ROOT/distro_config/ubuntu_workspace.sh"
 }

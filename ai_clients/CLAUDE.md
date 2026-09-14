@@ -153,6 +153,27 @@ It blocks the merge on **either** of two independent findings:
 Both findings share the one escape hatch, since standing aside for either is
 the same deliberate call: `ALLOW_UNRESOLVED_THREADS=1 gh pr merge <n>`.
 
+## Worktree rescue fan-out: two callers, one implementation
+
+`hooks/lib/worktree_fanout.sh` (`fanout_worktrees()` + `classify_worktree_diff()`,
+dotfiles-dev#383) is the shared implementation of "walk every worktree of this
+repo and classify its dirty state as interrupted work vs. a stale revert" —
+same pattern as `hooks/lib/free_surface.sh` and `hooks/lib/review_thread_gate.sh`.
+It has two callers now, not one:
+
+1. `hooks/session_start_context.sh` (`SessionStart`) — the original caller,
+   unchanged in output by the extraction.
+2. `hooks/quota_gap_rescue.sh` (**`UserPromptSubmit`**, the repo's first hook on
+   this event) — re-runs the same walk when the gap since this session's last
+   prompt exceeds a threshold (default 20 min, `QUOTA_GAP_THRESHOLD_SECONDS`).
+   SessionStart only fires once; a quota kill resumes the SAME session, so
+   nothing re-checked the worktrees between the kill and the next `s:dev-loop`
+   round (up to an hour away) until this hook existed. It runs on **every**
+   prompt, so it stays cheap (skips the walk entirely below the threshold, and
+   never calls `gh`) and prints only when `fanout_worktrees()`'s own summary
+   line reports interrupted work — never for a clean worktree or a stale
+   revert, reusing the classifier's verdict rather than re-deriving it.
+
 ## The restore-`.env` prompt
 
 `ai_clients/lib/restore_env_prompt.sh` defines `prompt_restore_env()`, which

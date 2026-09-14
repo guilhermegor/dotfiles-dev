@@ -23,6 +23,40 @@ Only `SC1091` (can't follow sourced file) is excluded globally, because
 scripts source siblings via runtime paths shellcheck can't resolve. Any
 other `disable` must be **line-scoped** and carry a one-line reason comment.
 
+## In a bats test body, never a bare `! <cmd>` — it isn't an assertion
+
+`set -e` never aborts on a command whose exit status is inverted with `!` —
+that is an explicit shell exemption, not a bats quirk. bats takes a test's
+verdict from `set -e` plus the LAST command's status, so `! <cmd>` is a real
+assertion only when it is the test's very last statement — and "it is last
+today" is exactly the property that silently stops being true the moment
+someone appends another assertion below it:
+
+```bash
+# ❌ six of these could never fail — only the last one is a real assertion
+@test "no mutation happened" {
+    run_reconcile
+    ! grep -q 'issue edit'    "$GH_LOG"   # ← passes no matter what the log holds
+    ! grep -q 'item-edit'     "$GH_LOG"   # ← passes no matter what the log holds
+    ! grep -q 'issue comment' "$GH_LOG"   # ← real, only because it is last
+}
+
+# ✅ run captures the status instead of letting `!` swallow it; [ … ] is a
+# plain command set -e does police
+refute_gh() {
+    run grep -q -- "$1" "$GH_LOG"
+    [ "$status" -ne 0 ]
+}
+```
+
+`[[ ! "$output" == *x* ]]` is equally safe — the negation sits *inside* the
+test command rather than inverting it. Add a per-suite `refute_*` helper
+(`refute_gh`, `refute_repo_grep`, …) when a suite repeats the pattern.
+
+Write it correctly the first time — `tests/bats_negation_gate.sh` rejects
+any bare `! <cmd>` inside a `@test` body in `tests/*.bats`, wired into both
+`make test` and CI, with no last-line exemption (dotfiles-dev#380).
+
 ## Status output: always `print_status`, never raw `echo`/`printf`
 
 All user-facing status and operational logging goes through

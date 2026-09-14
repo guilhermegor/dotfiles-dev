@@ -290,6 +290,9 @@ configure_dock() {
     # will silently unpin it again on the next run — that is the deliberate
     # (if surprising) consequence of stating the removal here instead of
     # deleting the pin once by hand.
+    # Passed to _merge_dock_favorites by name (nameref) below, not indexed
+    # directly in this scope — shellcheck can't see that usage.
+    # shellcheck disable=SC2034
     local -a DOCK_UNPINNED=(
         "'postman_postman.desktop'" "'postman.desktop'" "'Postman.desktop'"
         "'docker-desktop.desktop'" "'docker_docker-desktop.desktop'" "'docker.desktop'"

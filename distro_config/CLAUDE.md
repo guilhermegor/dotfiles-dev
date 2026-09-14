@@ -165,6 +165,8 @@ For **pre-installed system apps** (e.g. `gnome-control-center.desktop`, `mission
 
 For **dock pinning**: add the `.desktop` filename to the `favorite-apps` gsettings key in `configure_dock`. The registry does not currently model dock placement.
 
+⚠️ **The dock is declared AND merged — removing a pin needs the explicit unpin list, not just a deleted block.** `configure_dock` builds `favorites` from a fixed set of declared blocks, then `_merge_dock_favorites` re-appends every app already in the live `favorite-apps` value that isn't declared — deliberate, so a hand-pinned app survives a `gsettings set` that replaces the key wholesale (#103). This means **deleting an app's declared block does not unpin it**: the app is simply no longer declared, and the merge re-adds it from the live dock on every run, forever. To actually remove a pin, add its `.desktop` id (plus fallback ids, same pattern as everywhere else in this file) to `DOCK_UNPINNED`, the array `_merge_dock_favorites` is passed as its third argument and skips when merging (#392). Read `DOCK_UNPINNED` as a *declaration of intent*, not a permanent blocklist: if the owner pins one of those apps by hand again, this list will silently unpin it again on the next run — that is the surprising, deliberate consequence of stating a removal here instead of just deleting a pin once by hand.
+
 For **CLI-only tools / background services**: leave `gnome_folder` empty in the registry entry. No placement change needed — the empty field is the documentation.
 
 The `.desktop` filename for a PWA is the value used in the install function (e.g. `google-tasks.desktop`). For Flatpak apps it is the app ID with `.desktop` suffix (e.g. `com.slack.Slack.desktop`).

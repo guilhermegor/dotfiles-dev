@@ -49,3 +49,98 @@ setup() {
         [ "${second_run[$i]}" = "${first_run[$i]}" ]
     done
 }
+
+# --- #392: DOCK_UNPINNED ----------------------------------------------------
+#
+# _merge_dock_favorites takes an optional 3rd arg naming an array of quoted
+# ids to skip when merging the live value back in. Without this, undeclaring
+# an app (removing its favorites block) is not enough — the merge above would
+# re-add it from the live dock forever, which is exactly the trap #392 exists
+# to avoid.
+
+@test "_merge_dock_favorites drops a live app that is in the unpin list" {
+    local -a declared=("'spotify.desktop'" "'firefox.desktop'")
+    local existing_str="['spotify.desktop', 'firefox.desktop', 'postman_postman.desktop', 'docker-desktop.desktop']"
+    local -a unpinned=("'postman_postman.desktop'" "'docker-desktop.desktop'")
+
+    _merge_dock_favorites declared "$existing_str" unpinned
+
+    [ "${#declared[@]}" -eq 2 ]
+    [ "${declared[0]}" = "'spotify.desktop'" ]
+    [ "${declared[1]}" = "'firefox.desktop'" ]
+}
+
+@test "_merge_dock_favorites still preserves a hand-pinned app that is NOT in the unpin list" {
+    local -a declared=("'spotify.desktop'")
+    local existing_str="['spotify.desktop', 'postman_postman.desktop', 'custom-app.desktop']"
+    local -a unpinned=("'postman_postman.desktop'")
+
+    _merge_dock_favorites declared "$existing_str" unpinned
+
+    [ "${#declared[@]}" -eq 2 ]
+    [ "${declared[0]}" = "'spotify.desktop'" ]
+    [ "${declared[1]}" = "'custom-app.desktop'" ]
+}
+
+@test "_merge_dock_favorites unpin is idempotent: a second run stays unpinned" {
+    local -a first_run=("'spotify.desktop'")
+    local existing_str="['spotify.desktop', 'postman_postman.desktop']"
+    local -a unpinned=("'postman_postman.desktop'")
+    _merge_dock_favorites first_run "$existing_str" unpinned
+
+    # Simulate the next run: declared favorites rebuilt fresh, live value is
+    # now whatever the first run wrote (postman already gone).
+    local first_run_str
+    first_run_str=$(IFS=,; echo "${first_run[*]}")
+
+    local -a second_run=("'spotify.desktop'")
+    _merge_dock_favorites second_run "[${first_run_str}]" unpinned
+
+    [ "${#second_run[@]}" -eq 1 ]
+    [ "${second_run[0]}" = "'spotify.desktop'" ]
+}
+
+@test "MUTATION-CHECK: without the unpin filter, the drop test fails" {
+    # Proves the unpin-drop test above actually exercises the filter: mutate
+    # the REAL ubuntu_workspace.sh in place (removing the unpin `continue` —
+    # the pre-#392 behaviour), re-source it, and show the same assertion now
+    # fails. A trap restores the file from a snapshot no matter how this test
+    # exits, and the final diff proves the restore was clean.
+    local real="$REPO_ROOT/distro_config/ubuntu_workspace.sh"
+    local snapshot="$BATS_TEST_TMPDIR/ubuntu_workspace.sh.snapshot"
+    cp "$real" "$snapshot"
+    # shellcheck disable=SC2064  # intentionally expand $real/$snapshot now
+    trap "cp '$snapshot' '$real'" RETURN
+
+    python3 - "$real" <<'PY'
+import sys
+path = sys.argv[1]
+text = open(path).read()
+needle = '        if [[ " ${_merge_unpinned[*]} " == *" ${item} "* ]]; then\n            continue\n        fi\n'
+assert text.count(needle) == 1, "unpin guard not found exactly once — mutation not applied"
+open(path, "w").write(text.replace(needle, "", 1))
+PY
+
+    # Re-source the (now mutated) real file — same path lib/common.sh
+    # resolves against, so this isn't a copy-in-tmp that breaks relative
+    # sourcing.
+    # shellcheck source=../distro_config/ubuntu_workspace.sh
+    source "$real"
+
+    local -a declared=("'spotify.desktop'" "'firefox.desktop'")
+    local existing_str="['spotify.desktop', 'firefox.desktop', 'postman_postman.desktop', 'docker-desktop.desktop']"
+    local -a unpinned=("'postman_postman.desktop'" "'docker-desktop.desktop'")
+
+    _merge_dock_favorites declared "$existing_str" unpinned
+
+    # Mutated behaviour re-adds the unpinned ids — the count is now 4, not 2.
+    run [ "${#declared[@]}" -eq 2 ]
+    [ "$status" -ne 0 ]
+
+    # Trap has not fired yet (still inside the test body) — restore now so
+    # the diff below observes the post-restore state, then let the trap fire
+    # a harmless second no-op restore on return.
+    cp "$snapshot" "$real"
+    run diff -q "$real" "$snapshot"
+    [ "$status" -eq 0 ]
+}

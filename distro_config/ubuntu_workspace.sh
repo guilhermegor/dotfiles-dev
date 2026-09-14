@@ -603,8 +603,13 @@ organize_app_folders() {
             # kdeconnect excluded: *settings* would otherwise catch
             # org.kde.kdeconnect-settings.desktop, which Sharing's own
             # *kdeconnect* glob already claims — Sharing wins (#391).
+            # firewall excluded: *config* would otherwise catch
+            # firewall-config.desktop, which Security already claims.
+            # system-log excluded: *system* would otherwise catch
+            # gnome-system-log.desktop, which Utilities already claims.
             if [[ ! "$basename" =~ "game" ]] && [[ ! "$basename" =~ "sound" ]] && \
                [[ ! "$basename" =~ "color" ]] && [[ ! "$basename" =~ "kdeconnect" ]] && \
+               [[ ! "$basename" =~ "firewall" ]] && [[ ! "$basename" =~ "system-log" ]] && \
                [[ ! " ${sistema_apps[*]} " == *" '$basename' "* ]]; then
                 sistema_apps+=("'$basename'")
             fi
@@ -740,9 +745,18 @@ organize_app_folders() {
         fi
     done
     
+    # No `org.gnome.*.desktop` glob here (#391): every org.gnome app Utilities
+    # actually wants (Nautilus, Calculator, eog, Evince, Extensions, Shotwell,
+    # clocks, Logs, Characters, font-viewer, gedit/TextEditor, FileRoller,
+    # Screenshot, Weather, Maps, Evolution, Geary, MultiWriter, SimpleScan,
+    # baobab, DiskUtility, FileShredder, seahorse.Application) is already in
+    # utility_app_names above. A blanket org.gnome.* glob catches every OTHER
+    # org.gnome app too — Settings/Software/SystemMonitor/PowerStats (System),
+    # Boxes/Vinagre (Infra), Cheese/Music/Rhythmbox3/SoundRecorder/Totem
+    # (Media), Connections/NetworkDisplays/Yelp/Firmware (System), DejaDup
+    # (Security) — silently duplicating whichever folder already claims it.
     shopt -s nullglob
-    for desktop_file in /usr/share/applications/org.gnome.*.desktop \
-                        /usr/share/applications/*viewer*.desktop \
+    for desktop_file in /usr/share/applications/*viewer*.desktop \
                         /usr/share/applications/*calculator*.desktop \
                         /usr/share/applications/*files*.desktop \
                         /usr/share/applications/*nautilus*.desktop \
@@ -758,7 +772,6 @@ organize_app_folders() {
                         /var/lib/flatpak/exports/share/applications/*Raider*.desktop \
                         /var/lib/flatpak/exports/share/applications/*shredder*.desktop \
                         /var/lib/flatpak/exports/share/applications/*flameshot*.desktop \
-                        "$HOME/.local/share/applications"/org.gnome.*.desktop \
                         "$HOME/.local/share/applications"/*evolution*.desktop \
                         "$HOME/.local/share/applications"/*scan*.desktop \
                         "$HOME/.local/share/applications"/*geomview*.desktop \
@@ -767,17 +780,15 @@ organize_app_folders() {
         if [ -f "$desktop_file" ]; then
             local basename
             basename=$(basename "$desktop_file")
-            # Exclusions below narrow the `org.gnome.*`, `*viewer*`, `*software*`
-            # and `snap-store*` globs above so they stop re-adding ids System
-            # or Ereader already own (#391): the id itself can't be dropped
-            # from THIS array (it was never here — it's glob-caught), only the
-            # glob narrowed. org.gnome.Settings/SystemMonitor/PowerStats/
-            # Software → System; remote-viewer/calibre-*viewer* → Ereader/Infra;
+            # Exclusions below narrow the `*viewer*`, `*software*` and
+            # `snap-store*` globs above so they stop re-adding ids System or
+            # Ereader already own (#391): the id itself can't be dropped from
+            # THIS array (it was never here — it's glob-caught), only the glob
+            # narrowed. remote-viewer/calibre-*viewer* → Infra/Ereader;
             # snap-store_ubuntu-software/software-center → System.
             if [[ ! "$basename" =~ "settings" ]] && [[ ! "$basename" =~ "control-center" ]] && \
                [[ ! "$basename" =~ "software-properties" ]] && [[ ! "$basename" =~ "update" ]] && \
                [[ ! "$basename" =~ "firmware" ]] && \
-               [[ ! "$basename" =~ ^org\.gnome\.(Settings|Software|SystemMonitor|PowerStats)\.desktop$ ]] && \
                [[ ! "$basename" =~ "remote-viewer" ]] && [[ ! "$basename" =~ "calibre" ]] && \
                [[ ! "$basename" =~ "ubuntu-software" ]] && [[ "$basename" != "software-center.desktop" ]] && \
                [[ ! " ${utilitarios_apps[*]} " == *" '$basename' "* ]]; then

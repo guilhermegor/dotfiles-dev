@@ -4,7 +4,7 @@
 #
 # GNOME workspace, dock, theme, keybindings, and app-folder organisation.
 #
-# App-folder organisation (`organize_app_folders` below) draws from TWO sources:
+# App-folder organisation (`organize_app_folders` below) draws from THREE sources:
 #   1. Static `<folder>_app_names` arrays inside this script — covers pre-installed
 #      system apps (gnome-control-center, mission-center, etc.) that no installer
 #      script manages.
@@ -12,6 +12,26 @@
 #      app declared with a `gnome_folder` field automatically gets placed.
 #      This eliminates the previous drift where install_<foo>() and the folder
 #      arrays had to be kept in sync by hand.
+#   3. Filename globs inside each folder block (`*viewer*`, `org.gnome.*`, …) —
+#      convenience catch-alls for apps neither of the above names explicitly.
+#
+# These three sources can disagree about where an app belongs — none of them
+# can see what the other two are about to add — and an app can end up in two
+# folders at once (#391). The tie-break: Utilities (`Utilitarios`) is the
+# fallback folder and loses to any other folder that also claims an id; a
+# folder's glob or hardcoded list must explicitly exclude an id another
+# folder already owns rather than relying on `sort -u` (that only dedupes
+# entries *within* one folder's array, never across folders).
+#
+# Source 1 and source 2 legitimately overlap for the SAME folder: an app
+# with an installer function is both hand-listed (for machines that predate
+# its INSTALL_REGISTRY entry) and registry-declared. That overlap is
+# harmless (each folder's array is `sort -u`'d) and is not cleaned up here —
+# the registry's `gnome_folder` is the authoritative source for anything
+# with an install function; the hand-written arrays exist only for apps NO
+# install function manages. `tests/gnome_folder_registry_invariant.bats`
+# guards the case that matters (an id claimed by two DIFFERENT folders),
+# not this same-folder redundancy.
 
 # ----------------------------------------------------------------------------
 # Source shared utilities (print_status, color vars, command_exists, …) from

@@ -286,7 +286,7 @@ test:  ## Run the bats unit test suite (tests/) — local parity with CI
 	@command -v bats >/dev/null 2>&1 || { echo "bats not found — run 'make install_coding' (bats step) or 'brew install bats-core'"; exit 1; }
 	@bats tests/
 
-lessons_mirror:  ## Regenerate this repo's git-ignored lesson mirrors (.specs/lessons/) from the global stores
+lessons_mirror:  ## Regenerate this repo's git-ignored lesson mirrors (.specs/_lessons/) from the global stores
 	@bash ai_clients/claude/hooks/lib/generate_lesson_mirrors.sh "$(CURDIR)"
 
 git_hooks:  ## Enable this repo's local git hooks (gitlint commit-msg lint)

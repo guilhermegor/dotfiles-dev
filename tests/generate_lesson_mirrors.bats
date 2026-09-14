@@ -104,3 +104,59 @@ lesson() {
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"matches-repo.md' originated here but"* ]]
 }
+
+# --- PR #388 review: the Origin predicate -------------------------------------
+# `-` is a non-word character, so a `\b${repo}\b` search matched `dotfiles-dev`
+# inside `not-dotfiles-dev`. Every repo name in use contains a dash.
+
+@test "an Origin that only CONTAINS the repo name is excluded (not-dotfiles-dev)" {
+	lesson "$BX_STORE" "lookalike" "not-dotfiles-dev, 2026-09-14"
+	run bash "$GEN" "$REPO"
+	[ "$status" -eq 0 ]
+	run grep -qF "lookalike.md" "$REPO/.specs/_lessons/blueprintx-lessons.md"
+	[ "$status" -ne 0 ]
+}
+
+# The two real Origin shapes a literal whole-field compare would drop (8 of 43 real
+# lessons in lessons-dotfiles were written this way, measured 2026-09-14).
+@test "a two-repo Origin (blueprintx / dotfiles-dev) is included for either repo" {
+	lesson "$BX_STORE" "shared-finding" "blueprintx / dotfiles-dev (2026-08-17), after x"
+	run bash "$GEN" "$REPO"
+	[ "$status" -eq 0 ]
+	grep -qF "shared-finding.md" "$REPO/.specs/_lessons/blueprintx-lessons.md"
+}
+
+@test "an Origin carrying an issue ref (dotfiles-dev#344) is included" {
+	lesson "$BX_STORE" "issue-ref" "dotfiles-dev#344 (closed not-planned), #345 filed"
+	run bash "$GEN" "$REPO"
+	[ "$status" -eq 0 ]
+	grep -qF "issue-ref.md" "$REPO/.specs/_lessons/blueprintx-lessons.md"
+}
+
+@test "a repo cited after the comma as a SOURCE is not treated as the Origin" {
+	FC="$TEST_TMP/filings-cvm"
+	mkdir -p "$FC"
+	lesson "$BX_STORE" "cited-source" "dotfiles-dev#126 / PR #127, from filings-cvm #180."
+	run bash "$GEN" "$FC"
+	[ "$status" -eq 0 ]
+	run grep -qF "cited-source.md" "$FC/.specs/_lessons/blueprintx-lessons.md"
+	[ "$status" -ne 0 ]
+}
+
+# --- PR #388 review: failures must surface ------------------------------------
+# The generator runs under `set -uo pipefail`, NOT `-e`.
+
+@test "an invalid repository root is rejected, and nothing is written under /" {
+	lesson "$BX_STORE" "matches-repo" "dotfiles-dev"
+	run bash "$GEN" "$TEST_TMP/does-not-exist"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Invalid repository root"* ]]
+}
+
+@test "a failed mirror write fails the whole run instead of reporting success" {
+	lesson "$BX_STORE" "matches-repo" "dotfiles-dev"
+	# A regular FILE where the directory must go makes `mkdir -p .specs/_lessons` fail.
+	printf 'not a directory\n' >"$REPO/.specs"
+	run bash "$GEN" "$REPO"
+	[ "$status" -ne 0 ]
+}

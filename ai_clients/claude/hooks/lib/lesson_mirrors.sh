@@ -63,7 +63,44 @@ mirror_expected_for_repo() {
 # ONE predicate both check_mirrors() and the generator use to decide which
 # lessons belong in a given repo's mirror (bullet optional: the stores use
 # both "- **Origin:**" and a bare "**Origin:**").
+#
+# ⚠️ Compares the FIRST TOKEN after the marker literally — never a `\b${repo}\b`
+# search over the whole line. `-` is a non-word character, so `\bdotfiles-dev\b`
+# matches inside `not-dotfiles-dev`, and every repo name here contains a dash.
+# Measured (PR #388 review): that regex accepted `**Origin:** not-dotfiles-dev`
+# for repo `dotfiles-dev`, which would put an unrelated lesson in the mirror AND
+# make the audit accept the same false association — a wrong answer both sides
+# agree on is the worst shape, since the cross-check cannot catch it.
+#
+# ⚠️ A literal whole-field compare is ALSO wrong, and was measured so: it drops 8
+# real lessons out of 43, because the stores use two shapes a single value cannot
+# express —
+#   - **Origin:** blueprintx / dotfiles-dev (2026-08-17)   ← two repos, both true
+#   - **Origin:** dotfiles-dev#344 (closed not-planned)    ← repo plus issue ref
+# So the value is cut at the first `(`/`,`/`.`/`—` (everything after is prose),
+# split on `/`, reduced to each segment's first word, and stripped of a `#NNN`
+# suffix. Each resulting token is then compared literally.
+#
+# That accepts both shapes above and still rejects `not-dotfiles-dev`, which is
+# the whole point. It also correctly declines `dotfiles-dev#126 / PR #127, from
+# blueprintx #180` for repo `blueprintx`: cut at the comma, blueprintx is cited
+# as the SOURCE of the idea, not the origin repo — the old regex matched it.
 lesson_originates_in_repo() {
-	local file="$1" repo="$2"
-	grep -qiE "^[[:space:]]*([-*][[:space:]]+)?\*\*Origin:\*\*.*\b${repo}\b" "$file"
+	local file="$1" repo="$2" value segment token
+	value="$(sed -nE 's/^[[:space:]]*([-*][[:space:]]+)?\*\*[Oo]rigin:\*\*[[:space:]]*(.*)/\2/p' \
+		"$file" 2>/dev/null | head -n1)"
+	[ -n "$value" ] || return 1
+	value="${value%%(*}"
+	value="${value%%,*}"
+	value="${value%%.*}"
+	value="${value%%—*}"
+
+	local IFS='/'
+	for segment in $value; do
+		token="${segment#"${segment%%[![:space:]]*}"}"   # ltrim
+		token="${token%%[[:space:]]*}"                    # first word only
+		token="${token%%#*}"                              # drop a #NNN issue ref
+		[ "${token,,}" = "${repo,,}" ] && return 0
+	done
+	return 1
 }

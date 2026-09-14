@@ -133,19 +133,28 @@ configure_mouse() {
 # Merge a gsettings favorite-apps live value into a declared-favorites array,
 # by reference, so hand-pinned apps survive a `gsettings set` (which replaces
 # the key wholesale). Declared apps keep their order; any existing app not
-# already covered is appended, preserving its relative order among itself.
+# already covered is appended, preserving its relative order among itself —
+# UNLESS it appears in the unpin list (#392), in which case it is dropped
+# instead of re-appended.
 # $1: name of the array variable to merge into (nameref)
 # $2: raw `gsettings get org.gnome.shell favorite-apps` output, e.g.
 #     "['org.gnome.Nautilus.desktop', 'spotify.desktop']"
+# $3: (optional) name of an array variable listing quoted ids to skip when
+#     merging (nameref), e.g. DOCK_UNPINNED. Omit for "merge everything".
 _merge_dock_favorites() {
     local -n _merge_declared="$1"
     local existing_str="$2"
+    local -a _merge_no_unpin=()
+    local -n _merge_unpinned="${3:-_merge_no_unpin}"
     local -a existing=()
     if [ -n "$existing_str" ]; then
         mapfile -t existing < <(grep -oE "'[^']+'" <<< "$existing_str")
     fi
     local item
     for item in "${existing[@]}"; do
+        if [[ " ${_merge_unpinned[*]} " == *" ${item} "* ]]; then
+            continue
+        fi
         if [[ ! " ${_merge_declared[*]} " == *" ${item} "* ]]; then
             _merge_declared+=("$item")
         fi
@@ -236,14 +245,9 @@ configure_dock() {
         fi
     done
     
-    # 4. Google Chrome
-    for app in 'google-chrome.desktop' 'chrome.desktop'; do
-        if result=$(find_desktop_file "$app"); then
-            favorites+=("'$result'")
-            break
-        fi
-    done
-    
+    # Google Chrome is deliberately NOT pinned here (#392) — it lives in the
+    # Browsers app folder instead. See DOCK_UNPINNED below.
+
     # Google Keep is deliberately NOT pinned here — it lives in the Planning
     # app folder instead, via its INSTALL_REGISTRY entry in install_lib/productivity.sh.
 
@@ -271,29 +275,32 @@ configure_dock() {
         fi
     done
     
-    # 8. Postman
-    for app in 'Postman.desktop' 'postman_postman.desktop' 'postman.desktop'; do
-        if result=$(find_desktop_file "$app"); then
-            favorites+=("'$result'")
-            break
-        fi
-    done
-    
-    # 9. Docker Desktop
-    for app in 'docker-desktop.desktop' 'docker_docker-desktop.desktop' 'docker.desktop'; do
-        if result=$(find_desktop_file "$app"); then
-            favorites+=("'$result'")
-            break
-        fi
-    done
-    
+    # Postman and Docker Desktop are deliberately NOT pinned here (#392) —
+    # they live in the Data and Infra app folders instead. See DOCK_UNPINNED
+    # below.
+
     # `gsettings set` replaces favorite-apps wholesale, so any app pinned by
     # hand (and not declared above) would otherwise be silently dropped.
     # Merge it back in — declared apps keep their canonical order, hand-pinned
     # extras are appended in their existing relative order (see #103).
+    #
+    # DOCK_UNPINNED (#392) is a DECLARATION of intent, not a permanent
+    # blocklist: it stops these three specific ids from being re-added by the
+    # merge above. If the owner pins one of them by hand again, this list
+    # will silently unpin it again on the next run — that is the deliberate
+    # (if surprising) consequence of stating the removal here instead of
+    # deleting the pin once by hand.
+    # Passed to _merge_dock_favorites by name (nameref) below, not indexed
+    # directly in this scope — shellcheck can't see that usage.
+    # shellcheck disable=SC2034
+    local -a DOCK_UNPINNED=(
+        "'postman_postman.desktop'" "'postman.desktop'" "'Postman.desktop'"
+        "'docker-desktop.desktop'" "'docker_docker-desktop.desktop'" "'docker.desktop'"
+        "'google-chrome.desktop'" "'chrome.desktop'"
+    )
     local current_favorites_str
     current_favorites_str=$(gsettings get org.gnome.shell favorite-apps 2>/dev/null) || current_favorites_str=""
-    _merge_dock_favorites favorites "$current_favorites_str"
+    _merge_dock_favorites favorites "$current_favorites_str" DOCK_UNPINNED
 
     # Convert array to comma-separated string
     local favorites_str
@@ -1021,6 +1028,7 @@ EOF
 
     local data_app_names=(
         'pgadmin4.desktop' 'pgadmin4_pgadmin4.desktop' 'org.pgadmin.pgAdmin4.desktop'
+        'postman_postman.desktop' 'postman.desktop' 'Postman.desktop'
     )
 
     for app in "${data_app_names[@]}"; do

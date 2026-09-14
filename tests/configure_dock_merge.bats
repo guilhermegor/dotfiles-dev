@@ -101,18 +101,29 @@ setup() {
 }
 
 @test "MUTATION-CHECK: without the unpin filter, the drop test fails" {
-    # Proves the unpin-drop test above actually exercises the filter: mutate
-    # the REAL ubuntu_workspace.sh in place (removing the unpin `continue` —
-    # the pre-#392 behaviour), re-source it, and show the same assertion now
-    # fails. A trap restores the file from a snapshot no matter how this test
-    # exits, and the final diff proves the restore was clean.
+    # Proves the unpin-drop test above actually exercises the filter: mutate a
+    # copy of ubuntu_workspace.sh (removing the unpin `continue` — the pre-#392
+    # behaviour), source the copy, and show the same assertion now fails.
+    #
+    # ⚠️ The copy lives NEXT TO the original, not in $BATS_TEST_TMPDIR, and never
+    # replaces it. Two constraints have to hold at once:
+    #   - the script does `source "$SCRIPT_DIR/lib/common.sh"`, so a mutant in
+    #     /tmp cannot resolve its own dependency — hence same-directory;
+    #   - the ORIGINAL is tracked, so mutating it in place makes a hard kill
+    #     (SIGKILL, a quota kill, Ctrl-C between the mutation and the restore)
+    #     leave the working tree dirty with the feature silently removed. In
+    #     this repo that is not a cosmetic risk: `s:dev-loop` step 1 RESCUE
+    #     treats an uncommitted worktree as interrupted work and commits it, so
+    #     the automation itself would ship the reverted guard. A trap does not
+    #     cover a SIGKILL.
+    # A leftover mutant file is untracked, inert, and named to be obvious.
     local real="$REPO_ROOT/distro_config/ubuntu_workspace.sh"
-    local snapshot="$BATS_TEST_TMPDIR/ubuntu_workspace.sh.snapshot"
-    cp "$real" "$snapshot"
-    # shellcheck disable=SC2064  # intentionally expand $real/$snapshot now
-    trap "cp '$snapshot' '$real'" RETURN
+    local mutant="$REPO_ROOT/distro_config/.mutant-configure-dock-$$.sh"
+    cp "$real" "$mutant"
+    # shellcheck disable=SC2064  # intentionally expand $mutant now, not at trap time
+    trap "rm -f '$mutant'" RETURN
 
-    python3 - "$real" <<'PY'
+    python3 - "$mutant" <<'PY'
 import sys
 path = sys.argv[1]
 text = open(path).read()
@@ -121,11 +132,10 @@ assert text.count(needle) == 1, "unpin guard not found exactly once — mutation
 open(path, "w").write(text.replace(needle, "", 1))
 PY
 
-    # Re-source the (now mutated) real file — same path lib/common.sh
-    # resolves against, so this isn't a copy-in-tmp that breaks relative
-    # sourcing.
-    # shellcheck source=../distro_config/ubuntu_workspace.sh
-    source "$real"
+    # Same directory as the original, so the script's own
+    # `source "$SCRIPT_DIR/lib/common.sh"` still resolves.
+    # shellcheck source=/dev/null
+    source "$mutant"
 
     local -a declared=("'spotify.desktop'" "'firefox.desktop'")
     local existing_str="['spotify.desktop', 'firefox.desktop', 'postman_postman.desktop', 'docker-desktop.desktop']"
@@ -137,10 +147,14 @@ PY
     run [ "${#declared[@]}" -eq 2 ]
     [ "$status" -ne 0 ]
 
-    # Trap has not fired yet (still inside the test body) — restore now so
-    # the diff below observes the post-restore state, then let the trap fire
-    # a harmless second no-op restore on return.
-    cp "$snapshot" "$real"
-    run diff -q "$real" "$snapshot"
+    # The tracked original was never written to: assert it, rather than assert a
+    # restore worked. Nothing to roll back is a stronger guarantee than rolling
+    # back correctly.
+    run git -C "$REPO_ROOT" diff --quiet -- distro_config/ubuntu_workspace.sh
     [ "$status" -eq 0 ]
+
+    # And the mutant really was mutated — otherwise the failure above could come
+    # from something else entirely and this test would prove nothing.
+    run grep -q '_merge_unpinned\[\*\]' "$mutant"
+    [ "$status" -ne 0 ]
 }

@@ -14,7 +14,11 @@
 - Refactored [Script/Template] for [Reason].
 
 **Fixed**:
-- Issue #[Number]: [Brief description].
+- Closes #[Number]: [Brief description].
+  <!-- Keep the `Closes` keyword: GitHub only links (and auto-closes) an issue when the body
+       uses Closes/Fixes/Resolves. A bare `Issue #N:` reads correct to a human, leaves
+       `closingIssuesReferences` empty, and the issue silently survives the merge. -->
+- Closes #[Number]: [one line per issue this PR closes]. Delete the rows you do not use.
 
 ---
 

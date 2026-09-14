@@ -159,3 +159,63 @@ GraphQL strips the [bot] marker and the suffix test therefore matched nothing at
     run bash -c "payload 'ALLOW_UNRESOLVED_THREADS=1 gh pr merge 42' | '$GUARD'"
     [ "$status" -eq 0 ]
 }
+
+# --- an empty thread list is UNKNOWN, not clean, while the reviewer's own check is mid-flight ---
+# dotfiles-dev#379: #376 merged with CodeRabbit's check still PENDING and reviewThreads == [].
+
+# Patches a CheckRun onto a clean/resolved threads_fixture and writes a roster naming it.
+checkrun_fixture() {
+    threads_fixture "guilhermegor" "User" true "$LONG_REPLY"
+    printf 'reviewers:\n  - login: coderabbitai[bot]\n' > .review-bots.yaml
+    jq --arg status "$1" '.data.repository.pullRequest.commits = {nodes: [{commit: {statusCheckRollup: {
+        contexts: {totalCount: 1, nodes: [{
+            __typename: "CheckRun", name: "CodeRabbit", status: $status,
+            checkSuite: {app: {slug: "coderabbitai"}}
+        }]}
+    }}}]}' "$FIXTURE" > "$FIXTURE.tmp"
+    mv "$FIXTURE.tmp" "$FIXTURE"
+}
+
+@test "blocks a zero-thread PR while the roster reviewer's check is IN_PROGRESS" {
+    checkrun_fixture "IN_PROGRESS"
+    run bash -c "payload 'gh pr merge 42' | '$GUARD'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"still running"* ]]
+    [[ "$output" == *"CodeRabbit"* ]]
+}
+
+@test "passes a zero-thread PR once the roster reviewer's check is terminal" {
+    # This is the ordinary shape of a clean PR (dotfiles-dev#378): no threads, reviewer's check
+    # finished SUCCESS. Blocking here would be the false-block this guard must not reintroduce.
+    checkrun_fixture "COMPLETED"
+    run bash -c "payload 'gh pr merge 42' | '$GUARD'"
+    [ "$status" -eq 0 ]
+}
+
+@test "does not block on a pending check when no roster file names the reviewer" {
+    threads_fixture "guilhermegor" "User" true "$LONG_REPLY"
+    jq '.data.repository.pullRequest.commits = {nodes: [{commit: {statusCheckRollup: {
+        contexts: {totalCount: 1, nodes: [{
+            __typename: "CheckRun", name: "CodeRabbit", status: "IN_PROGRESS",
+            checkSuite: {app: {slug: "coderabbitai"}}
+        }]}
+    }}}]}' "$FIXTURE" > "$FIXTURE.tmp"
+    mv "$FIXTURE.tmp" "$FIXTURE"
+    run bash -c "payload 'gh pr merge 42' | '$GUARD'"
+    [ "$status" -eq 0 ]
+}
+
+@test "does not block on an unrelated CI check still running" {
+    checkrun_fixture "IN_PROGRESS"
+    jq '.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[0].checkSuite.app.slug = "github-actions"' \
+        "$FIXTURE" > "$FIXTURE.tmp"
+    mv "$FIXTURE.tmp" "$FIXTURE"
+    run bash -c "payload 'gh pr merge 42' | '$GUARD'"
+    [ "$status" -eq 0 ]
+}
+
+@test "the escape hatch also stands aside for a still-running reviewer check" {
+    checkrun_fixture "IN_PROGRESS"
+    run bash -c "payload 'ALLOW_UNRESOLVED_THREADS=1 gh pr merge 42' | '$GUARD'"
+    [ "$status" -eq 0 ]
+}

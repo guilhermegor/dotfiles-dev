@@ -43,10 +43,18 @@ source "$HOOK_DIR/lib/free_surface.sh"
 # Pure data: did this session's transcript ever call the Skill tool with
 # skill "dev-loop"? A session that never ran the loop is not this hook's
 # concern — never fire on an unrelated session.
+# Parsed with jq, never grepped: key-value spacing is not part of the JSONL
+# contract, so a literal '"skill":"dev-loop"' match silently misses a record
+# serialized as '"skill": "dev-loop"' and the hook never fires.
 dev_loop_invoked() {
 	local transcript="$1"
 	[ -r "$transcript" ] || return 1
-	grep -qF '"skill":"dev-loop"' "$transcript" 2>/dev/null
+	jq -e 'select(.message.content != null)
+		| .message.content[]?
+		| select(.type == "tool_use"
+			and .name == "Skill"
+			and .input.skill == "dev-loop")' \
+		"$transcript" >/dev/null 2>&1
 }
 
 # subagents_running TRANSCRIPT
@@ -69,6 +77,20 @@ subagents_running() {
 		printf '%s\n' "$resolved" | grep -qxF "$id" || return 0
 	done <<<"$dispatched"
 	return 1
+}
+
+# Every `gh` call this hook makes — its own, and every one inside
+# gate_free_surface — goes through this wrapper. A Stop hook is synchronous and
+# settings.json declares no timeout for it, and the GitHub CLI has no default
+# request deadline, so one stalled request would hang the stop indefinitely. A
+# timeout exits non-zero, which the gate already reads as UNREADABLE — the
+# fail-closed path, never a false "clean".
+# `timeout gh`, never `timeout command gh`: `command` is a shell builtin, so
+# timeout would look for a binary of that name and exit 127 — every gh call
+# failing silently. timeout execs from PATH and cannot see this function, so
+# there is no recursion to guard against.
+gh() {
+	timeout "${DISPATCH_GUARD_GH_TIMEOUT:-20}" gh "$@"
 }
 
 main() {
@@ -97,7 +119,15 @@ main() {
 
 	if ! gate_free_surface "$owner" "$name"; then
 		{
-			echo "free surface UNREADABLE (gh API failure) — not the same as empty."
+			# Name the actual cause. "gh API failure" for every failure is how a
+			# missing lib/ file read as a network problem for four rounds
+			# (dotfiles-dev, PR #400 review) — the gate was never even loaded.
+			if ! declare -F gate_free_surface >/dev/null 2>&1; then
+				echo "free surface UNREADABLE (gate not loaded — lib/free_surface.sh missing;" \
+					"run 'make ai_clients') — not the same as empty."
+			else
+				echo "free surface UNREADABLE (gh call failed or timed out) — not the same as empty."
+			fi
 			echo
 			echo "s:dev-loop step 6 (DISPATCH) cannot tell right now whether there is unclaimed"
 			echo "work. Re-run the gate once the API answers, before reporting the board clear —"

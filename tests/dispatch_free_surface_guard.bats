@@ -149,3 +149,49 @@ transcript_dev_loop_agent_resolved() {
     [[ "$output" == *"UNREADABLE"* ]]
     [[ "$output" != *"do not stop here without dispatching"* ]]
 }
+
+# --- the two PR #400 review findings, pinned ------------------------------------------------
+
+# Key-value spacing is not part of the JSONL contract, so the Skill event is parsed, never
+# grepped as a literal. A `grep -qF '"skill":"dev-loop"'` implementation passes every other
+# test in this file and fails only this one.
+@test "detects the dev-loop Skill event when the record is serialised with spaces" {
+    stub_gh '42'
+    local t="$TEST_TMP/spaced.jsonl"
+    {
+        echo '{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "s1", "name": "Skill", "input": {"skill": "dev-loop"}}]}}'
+        echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"a1","name":"Agent","input":{}}]}}'
+        echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"a1","content":"done"}]}}'
+    } >"$t"
+
+    run run_guard "$t"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"#42"* ]]
+}
+
+# A Stop hook is synchronous and settings.json declares no timeout, so an unbounded gh call
+# would hang the stop forever. A stalled call must land on the fail-closed path instead.
+@test "a stalled gh call times out and reports UNREADABLE, never hangs the stop" {
+    cat >"$BIN/gh" <<'STUB'
+#!/bin/bash
+case "$*" in
+"repo view --json nameWithOwner -q .nameWithOwner") echo "acme/widgets" ;;
+*) sleep 30 ;;
+esac
+STUB
+    chmod +x "$BIN/gh"
+    t="$(transcript_dev_loop_agent_resolved)"
+
+    # Elapsed time is the assertion, not the exit code: an UNBOUNDED call also ends in
+    # UNREADABLE (a slept-out stub returns empty output, which the gate reads as a failed
+    # read), so exit 2 alone passes even with no timeout at all. Only the clock separates
+    # "bounded" from "hung" — each stubbed call sleeps 30s, so an unwrapped gh cannot
+    # finish inside this budget.
+    local started=$SECONDS
+    DISPATCH_GUARD_GH_TIMEOUT=1 run run_guard "$t"
+    local elapsed=$(( SECONDS - started ))
+
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"UNREADABLE"* ]]
+    [ "$elapsed" -lt 15 ]
+}

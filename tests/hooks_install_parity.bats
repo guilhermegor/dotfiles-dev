@@ -29,12 +29,16 @@ registered_hooks() {
         | sort -u
 }
 
-# Every name passed to copy_hook_file in install_hooks().
+# Every LITERAL name passed to copy_hook_file in install_hooks().
 # Comment lines are stripped first: the file header documents the convention with a literal
 # `copy_hook_file "<name>.sh"` example, which an unfiltered grep picks up as a real call.
+# Interpolated calls are skipped too — lib/ is copied by a loop over the directory
+# (`copy_hook_file "lib/$(basename "$f")"`), which no static extractor can enumerate; the
+# "every lib/ file a hook sources is actually installed" test below covers that path by
+# running the installer instead of reading it.
 installed_hooks() {
     grep -v '^[[:space:]]*#' "$HOOKS_LIB" \
-        | grep -oE 'copy_hook_file[[:space:]]+"[^"]+"' \
+        | grep -oE 'copy_hook_file[[:space:]]+"[^"$]+"' \
         | sed -E 's/.*"([^"]+)".*/\1/' \
         | sort -u
 }
@@ -63,6 +67,40 @@ installed_hooks() {
     if [ -n "$missing" ]; then
         echo "Registered in settings.json but never copied by install_hooks():$missing"
         echo "Add a copy_hook_file call for each, per the header note in lib/hooks.sh."
+        return 1
+    fi
+}
+
+# Every lib/ file a hook SOURCES must land in the installed tree. The registered=>installed
+# check above cannot see this: a lib is never registered in settings.json, so a missing one is
+# invisible there. Measured 2026-09-16: install_hooks() copied lib/ as a hand-kept list of 8
+# names while hooks/lib/ held 10, so the installed subagent_stop_sweep.sh sourced a
+# free_surface.sh that was never deployed, gate_free_surface was undefined, and DISPATCH
+# reported "free surface UNKNOWN — (gh API failure)" every round — a missing file misreported
+# as a network failure.
+@test "every lib/ file a hook sources is actually installed" {
+    local dest="$BATS_TEST_TMPDIR/claude-home"
+    mkdir -p "$dest"
+
+    run bash -c "
+        print_status() { :; }
+        CLAUDE_DIR='$dest'
+        source '$HOOKS_LIB'
+        install_hooks
+    "
+    [ "$status" -eq 0 ]
+
+    local missing=""
+    local lib
+    while IFS= read -r lib; do
+        [ -n "$lib" ] || continue
+        [ -f "$dest/hooks/lib/$lib" ] || missing="$missing $lib"
+    done < <(grep -hoE 'source[[:space:]]+"\$HOOK_DIR/lib/[A-Za-z0-9_.-]+"' \
+        "$REPO_ROOT"/ai_clients/claude/hooks/*.sh \
+        | sed -E 's|.*/lib/([^"]+)".*|\1|' | sort -u)
+
+    if [ -n "$missing" ]; then
+        echo "Sourced by a hook but never installed:$missing"
         return 1
     fi
 }

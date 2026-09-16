@@ -2,9 +2,13 @@
 #
 # Unit tests for ai_clients/claude/hooks/lib/review_thread_gate.sh
 #
-# Scope: `_gate_problems_filter`, the jq program that decides whether a review thread still
-# needs a reply or a resolve. It is tested against fixtures rather than through
-# gate_pr_thread_state(), which needs a live GitHub API.
+# Scope: mostly `_gate_problems_filter`, the jq program that decides whether a review thread
+# still needs a reply or a resolve, tested against fixtures rather than through
+# gate_pr_thread_state() end to end. Two tests at the bottom (dotfiles-dev#398) close that last
+# gap with a stubbed `gh`: gate_pr_thread_state() itself now has a contract test on both the
+# success path (a usable, non-empty GATE_DETAIL) and the fail-closed path (unreadable after 3
+# attempts, never `clean`) -- a regression in the retry loop or the roster-file wiring above the
+# filters could otherwise ship with every filter test still green.
 #
 # Why this file exists: the filter aborted with `jq: error: Cannot index array with string
 # "author"` (exit 5) whenever a roster file was present AND the PR had at least one thread. The
@@ -181,4 +185,52 @@ run_filter() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"3 review threads exist, only 1"* ]]
     [[ "$output" == *"9 comments, only 0 read"* ]]
+}
+
+# --- gate_pr_thread_state: the top-level contract, not just the filters it runs -------------------
+# Every test above exercises one jq filter directly; none call gate_pr_thread_state() itself, so a
+# regression in the retry loop, the roster-file wiring, or the final status assignment could ship
+# with every filter test green (dotfiles-dev#398). These two close that gap: a usable, non-empty
+# answer on success, and the deliberate fail-closed path once the API truly cannot be read.
+
+@test "gate_pr_thread_state: success reports problems with a non-empty, parseable answer" {
+    local fixture
+    fixture="$(mktemp)"
+    cat > "$fixture" <<'JSON'
+{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":1,"nodes":[{"isResolved":false,"path":"b.sh","comments":{"totalCount":0,"nodes":[]}}]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}
+JSON
+
+    run env GH_FIXTURE="$fixture" GATE_LIB="$GATE" bash -c '
+        gh() {
+            case "$*" in
+                *"-F owner=o -F repo=r -F number=5") cat "$GH_FIXTURE" ;;
+                *) return 1 ;;
+            esac
+        }
+        source "$GATE_LIB"
+        gate_pr_thread_state o r 5
+        echo "status=$GATE_STATUS"
+        echo "detail=$GATE_DETAIL"
+    '
+    rm -f "$fixture"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"status=problems"* ]]
+    [[ "$output" == *"b.sh"* ]]
+    [[ "$output" == *"needs a REPLY"* ]]
+}
+
+@test "gate_pr_thread_state: unreachable API after 3 attempts fails closed, never clean" {
+    run env GATE_LIB="$GATE" bash -c '
+        sleep() { return 0; }
+        gh() { return 1; }
+        source "$GATE_LIB"
+        gate_pr_thread_state o r 5
+        echo "status=$GATE_STATUS"
+        echo "detail=$GATE_DETAIL"
+    '
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"status=unreadable"* ]]
+    [[ "$output" != *"status=clean"* ]]
+    [[ "$output" == *"after 3 attempts"* ]]
 }

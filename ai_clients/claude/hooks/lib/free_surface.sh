@@ -82,9 +82,11 @@ _free_held_paths() {
 		# Aborting here disabled DISPATCH entirely on any repo with a docs-site branch
 		# — the sweep reported "free surface UNKNOWN" every round and no agent was ever
 		# dispatched (dotfiles-dev, measured on blueprintx: 1 of 33 branches, 49 open
-		# issues invisible). Skip the branch; keep every other read fail-closed.
+		# issues invisible). Skip ONLY on GitHub's own "No common ancestor" 404 — a
+		# rate limit, auth or 5xx error must still fail closed, or the gate returns an
+		# incomplete held set and reports ok.
 		if ! diff="$(gh api "repos/$slug/compare/$db...$b" --jq '.files[]?.filename' 2>/dev/null)"; then
-			gh api "repos/$slug/branches/$b" --jq '.name' >/dev/null 2>&1 || return 1
+			[[ "$(gh api "repos/$slug/compare/$db...$b" 2>&1)" == *"No common ancestor"* ]] || return 1
 			continue
 		fi
 		[ -n "$diff" ] && paths="$(printf '%s\n%s' "$paths" "$diff")"

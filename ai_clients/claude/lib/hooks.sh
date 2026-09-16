@@ -33,15 +33,21 @@ install_hooks() {
     local hooks_dir="$CLAUDE_DIR/hooks"
     mkdir -p "$hooks_dir"
 
+    # Every file in hooks/lib/ ships, derived from the directory — never a
+    # hand-kept list. The list had gone stale: free_surface.sh and
+    # roadmap_unblock.sh were never installed, so the installed
+    # subagent_stop_sweep.sh sourced a missing file, gate_free_surface was
+    # undefined, and DISPATCH reported "free surface UNKNOWN" every round.
+    local lib_file
+    for lib_file in "$HOOKS_SRC_DIR"/lib/*; do
+        [[ -f "$lib_file" ]] || continue
+        copy_hook_file "lib/$(basename "$lib_file")" "$hooks_dir"
+    done
+
     copy_hook_file "session_start_context.sh" "$hooks_dir"
-    copy_hook_file "lib/worktree_fanout.sh" "$hooks_dir"
     copy_hook_file "quota_gap_rescue.sh" "$hooks_dir"
     copy_hook_file "pr_template_guard.sh" "$hooks_dir"
     copy_hook_file "issue_template_guard.sh" "$hooks_dir"
-    copy_hook_file "lib/gh_body_guard_common.sh" "$hooks_dir"
-    copy_hook_file "lib/gh_cmd_match.py" "$hooks_dir"
-    copy_hook_file "lib/commit_command_matcher.sh" "$hooks_dir"
-    copy_hook_file "lib/deploy_drift.sh" "$hooks_dir"
     copy_hook_file "commit_title_length_guard.sh" "$hooks_dir"
     copy_hook_file "commit_body_wrap.sh" "$hooks_dir"
     copy_hook_file "commit_secret_guard.sh" "$hooks_dir"
@@ -54,14 +60,12 @@ install_hooks() {
     copy_hook_file "claude_artifact_source_guard.sh" "$hooks_dir"
     copy_hook_file "lesson_capture_checkpoint.sh" "$hooks_dir"
     copy_hook_file "release_due_nudge.sh" "$hooks_dir"
-    copy_hook_file "lib/lesson_mirrors.sh" "$hooks_dir"
-    copy_hook_file "lib/generate_lesson_mirrors.sh" "$hooks_dir"
     copy_hook_file "session_capture_audit.sh" "$hooks_dir"
     copy_hook_file "pr_merge_threads_guard.sh" "$hooks_dir"
     copy_hook_file "open_review_threads_nudge.sh" "$hooks_dir"
     copy_hook_file "gh_prose_language_guard.sh" "$hooks_dir"
-    copy_hook_file "lib/review_thread_gate.sh" "$hooks_dir"
     copy_hook_file "subagent_stop_sweep.sh" "$hooks_dir"
     copy_hook_file "uncommitted_worktree_guard.sh" "$hooks_dir"
+    copy_hook_file "dispatch_free_surface_guard.sh" "$hooks_dir"
     copy_hook_file "pr_self_assign.sh" "$hooks_dir"
 }

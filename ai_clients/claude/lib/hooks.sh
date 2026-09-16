@@ -63,5 +63,6 @@ install_hooks() {
     copy_hook_file "lib/review_thread_gate.sh" "$hooks_dir"
     copy_hook_file "subagent_stop_sweep.sh" "$hooks_dir"
     copy_hook_file "uncommitted_worktree_guard.sh" "$hooks_dir"
+    copy_hook_file "dispatch_free_surface_guard.sh" "$hooks_dir"
     copy_hook_file "pr_self_assign.sh" "$hooks_dir"
 }

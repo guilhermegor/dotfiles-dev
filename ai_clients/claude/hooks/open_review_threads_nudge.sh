@@ -157,6 +157,13 @@ _repo_wide_scan() {
 	while read -r n; do
 		[ -n "$n" ] || continue
 		gate_pr_thread_state "$owner" "$name" "$n" "$ROSTER_FILE"
+		# An unreadable answer fails OPEN here, and is never cached. The two paths differ
+		# deliberately: the branch-scoped path above fails CLOSED because that PR is this
+		# session's own work, while a transient GraphQL failure on some unrelated PR must not
+		# block this stop — and caching it would extend one blip across the whole TTL.
+		if [ "$GATE_STATUS" = "unreadable" ]; then
+			return 1
+		fi
 		if [ "$GATE_STATUS" != "clean" ]; then
 			REPORT_NUMBER="$n"
 			break

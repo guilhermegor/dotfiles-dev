@@ -212,3 +212,31 @@ problem_fixture() {
     [ "$status" -eq 2 ]
     [ "$(wc -l <"$PRLIST_LOG")" -eq 2 ]
 }
+
+# --- PR #401 review finding: unreadable must fail OPEN in the repo-wide scan ------------------
+
+# gate_pr_thread_state sets GATE_STATUS=unreadable when a PR's threads cannot be read. The scan
+# used to treat every non-clean status as a blocking finding, so ONE transient GraphQL failure
+# on an unrelated PR blocked the stop — and cached that verdict for the whole TTL. The
+# branch-scoped path still fails closed on purpose; this one must not.
+@test "repo-wide scan: an unreadable PR fails open instead of blocking" {
+    unset PR_VIEW_NUMBER
+    export PR_LIST=$'7\n8'
+    problem_fixture 8   # a real finding exists further down the list
+    # no fixture for 7 -> the stub returns '{}' -> that PR reads as unreadable
+
+    run bash -c 'payload false sess-unreadable | "$0"' "$HOOK"
+    [ "$status" -eq 0 ]
+}
+
+@test "repo-wide scan: an unreadable answer is never cached" {
+    unset PR_VIEW_NUMBER
+    export PR_LIST=$'7\n8'
+    problem_fixture 8
+
+    run bash -c 'payload false sess-nocache | "$0"' "$HOOK"
+    [ "$status" -eq 0 ]
+
+    run grep -rl 'unreadable' "$CLAUDE_CONFIG_DIR"
+    [ "$status" -ne 0 ]
+}

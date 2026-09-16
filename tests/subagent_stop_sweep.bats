@@ -145,3 +145,104 @@ STUB
     [ "$status" -eq 1 ]
     [[ "$output" == *"uncommitted"* ]]
 }
+
+# --- sweep_orphan_branches: a pushed stash reads as a snapshot, never a missing-PR branch --------
+# dotfiles-dev#399: `subagent_stop_sweep.sh`'s [3] check used to print every branch with no PR the
+# same way, so a pushed `git stash` (tip titled `WIP on <branch>: ...` by git stash itself) read
+# as unfinished work missing a PR, round after round, on blueprintx's `rescue/pep8-naming-422-wip`.
+
+stub_gh_orphan() {
+    # ORPHAN_PR_NUMS       = PR numbers the state=all query returns (space/newline separated)
+    # ORPHAN_PR_FILES_<n>  = space-separated filenames PR <n> touches
+    cat > "$BIN/gh" <<'STUB'
+#!/bin/bash
+case "$*" in
+*"pulls?head="*"&state=all --jq"*)
+    echo ""
+    ;;
+*"pulls?state=all --paginate --jq"*)
+    printf '%s\n' "${ORPHAN_PR_NUMS:-}"
+    ;;
+*"/files --paginate --jq"*)
+    n="$(printf '%s' "$*" | sed -n 's#.*pulls/\([0-9]\{1,\}\)/files.*#\1#p')"
+    var="ORPHAN_PR_FILES_$n"
+    printf '%s\n' "${!var:-}" | tr ' ' '\n'
+    ;;
+*)
+    exit 1
+    ;;
+esac
+STUB
+    chmod +x "$BIN/gh"
+}
+
+@test "an ordinary branch with no PR is reported as a branch, not a snapshot" {
+    stub_gh_orphan
+    git checkout -q -b feature/real-work
+    echo work > realfile.txt
+    git add realfile.txt
+    git commit -q -m "add real feature work"
+    git push -q origin HEAD:refs/heads/feature/real-work
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" == *"- feature/real-work"* ]]
+    [[ "$output" != *"STASH SNAPSHOT"* ]]
+}
+
+@test "a pushed stash snapshot is reported with base/diff/overlap context" {
+    stub_gh_orphan
+    echo original > tracked.txt
+    git add tracked.txt
+    git commit -q -m "add tracked file"
+    git push -q origin HEAD:refs/heads/main
+    base="$(git rev-parse --short HEAD)"
+
+    git checkout -q -b rescue/wip-branch
+    echo changed > tracked.txt
+    git commit -q -am "WIP on feat/foo: $base add tracked file"
+    git push -q origin HEAD:refs/heads/rescue/wip-branch
+
+    git checkout -q main
+    echo more > other.txt
+    git add other.txt
+    git commit -q -m "advance main"
+    git push -q origin HEAD:refs/heads/main
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" == *"rescue/wip-branch: STASH SNAPSHOT"* ]]
+    [[ "$output" == *"main gained 1 commit(s) since this snapshot's base"* ]]
+    [[ "$output" == *"tracked.txt: +1/-1"* ]]
+    [[ "$output" == *"no open or merged PR touches these files"* ]]
+}
+
+@test "a stash snapshot whose files a merged PR already touches names that PR" {
+    export ORPHAN_PR_NUMS="7"
+    export ORPHAN_PR_FILES_7="tracked.txt"
+    stub_gh_orphan
+
+    echo original > tracked.txt
+    git add tracked.txt
+    git commit -q -m "add tracked file"
+    git push -q origin HEAD:refs/heads/main
+    base="$(git rev-parse --short HEAD)"
+
+    git checkout -q -b rescue/wip-branch2
+    echo changed > tracked.txt
+    git commit -q -am "WIP on feat/foo: $base add tracked file"
+    git push -q origin HEAD:refs/heads/rescue/wip-branch2
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" == *"same files touched by: #7"* ]]
+}
+
+@test "an index-on-<branch> stash title is also recognised" {
+    stub_gh_orphan
+    git checkout -q -b rescue/index-branch
+    echo x > untracked.txt
+    git add untracked.txt
+    git commit -q -m "index on feat/foo: 0000000 add file"
+    git push -q origin HEAD:refs/heads/rescue/index-branch
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" == *"rescue/index-branch: STASH SNAPSHOT"* ]]
+}

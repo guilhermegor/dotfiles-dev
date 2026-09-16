@@ -29,3 +29,26 @@ b/other.sh'
     run free_classify_files a/held.sh.bak a/
     [[ "$output" == "free" ]]
 }
+
+# One non-PR branch whose compare call fails with $COMPARE_ERR.
+gh() {
+    case "$*" in
+        "api repos/o/r --jq .default_branch") echo master ;;
+        "pr list"*) echo '[]' ;;
+        "api repos/o/r/branches"*) printf 'master\nside\n' ;;
+        "api repos/o/r/compare/"*) echo "gh: $COMPARE_ERR" >&2; return 1 ;;
+        *) return 1 ;;
+    esac
+}
+
+@test "an orphan branch (no common ancestor) is skipped, not a read failure" {
+    COMPARE_ERR='No common ancestor between master and side. (HTTP 404)'
+    run _free_held_paths o r
+    [ "$status" -eq 0 ]
+}
+
+@test "any other compare failure fails the held-path read closed" {
+    COMPARE_ERR='API rate limit exceeded (HTTP 403)'
+    run _free_held_paths o r
+    [ "$status" -eq 1 ]
+}

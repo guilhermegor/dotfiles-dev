@@ -76,7 +76,19 @@ _free_held_paths() {
 		[ -n "$b" ] || continue
 		[ "$b" = "$db" ] && continue
 		printf '%s\n' "$pr_heads" | grep -qxF "$b" && continue
-		diff="$(gh api "repos/$slug/compare/$db...$b" --jq '.files[]?.filename' 2>/dev/null)" || return 1
+		# A branch with NO MERGE BASE (an orphan like `gh-pages`) makes compare 404.
+		# That is not a read failure and must not fail the gate closed: such a branch
+		# shares no history with the default branch, so it holds no paths against it.
+		# Aborting here disabled DISPATCH entirely on any repo with a docs-site branch
+		# — the sweep reported "free surface UNKNOWN" every round and no agent was ever
+		# dispatched (dotfiles-dev, measured on blueprintx: 1 of 33 branches, 49 open
+		# issues invisible). Skip ONLY on GitHub's own "No common ancestor" 404 — a
+		# rate limit, auth or 5xx error must still fail closed, or the gate returns an
+		# incomplete held set and reports ok.
+		if ! diff="$(gh api "repos/$slug/compare/$db...$b" --jq '.files[]?.filename' 2>/dev/null)"; then
+			[[ "$(gh api "repos/$slug/compare/$db...$b" 2>&1)" == *"No common ancestor"* ]] || return 1
+			continue
+		fi
 		[ -n "$diff" ] && paths="$(printf '%s\n%s' "$paths" "$diff")"
 	done <<<"$branches"
 

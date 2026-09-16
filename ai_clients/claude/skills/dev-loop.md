@@ -453,6 +453,16 @@ erroring. `.claude/release.conf` is the declared list where one exists.
 
 ## 6. DISPATCH — the loop's other half
 
+This step is now observed, not just written down: `hooks/dispatch_free_surface_guard.sh`
+(a `Stop` hook, sibling of `uncommitted_worktree_guard.sh`, dotfiles-dev#396) refuses to end the
+turn when the free surface below is non-empty and nothing of this session's own is still working
+it — the deterministic half of what the owner had to ask for four times. It reads this session's
+own transcript, never anything the session merely "knows about itself" (the same decidability
+test the `Do Not` section applies): whether `s:dev-loop` was actually invoked this session, and
+whether an `Agent` dispatch of this session's own is still unresolved. A gate it cannot read
+(`gate_free_surface` returning UNKNOWN) blocks too, loudly, in its own words — never falls
+through quiet, which is exactly how cause 1 above went unnoticed for so long.
+
 ### Pre-dispatch: is there room to finish what you're about to start?
 
 🔴 **Check budget at spawn time, not at 90%.** A 90% context/quota alarm narrows the window in

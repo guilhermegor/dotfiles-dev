@@ -174,6 +174,47 @@ It has two callers now, not one:
    line reports interrupted work — never for a clean worktree or a stale
    revert, reusing the classifier's verdict rather than re-deriving it.
 
+## A gate's contract: a usable answer, not just a clean exit (dotfiles-dev#398)
+
+Every shared gate above (`free_surface.sh`, `review_thread_gate.sh`,
+`roadmap_unblock.sh`) calls `gh` and fails closed on a read error — but
+"fails closed" and "never crashed" are not the same claim, and #395 shipped
+the gap between them: `gate_free_surface` hit an orphan branch's compare
+404, returned its documented `exit 1` with empty output, and its caller
+rendered that as routine text ("free surface UNKNOWN"). Nothing was ever
+red. No test called the gate itself — only its sub-helpers — so the defect
+shipped and stayed invisible for four dispatch rounds with 40 issues
+unclaimed, found only when a human ran it by hand.
+
+**A gate's test contract has two halves, and a passing suite must prove
+both:**
+
+1. **Success returns a usable answer.** `exit 0` with empty output is
+   exactly as wrong as `exit 1` — it is the easier failure to accept
+   silently, because nothing downstream treats an empty success as an
+   error. A contract test asserts the *shape* of the answer (the
+   documented globals are set, and are non-empty on a fixture that
+   provably has non-empty content), not merely that the function returned
+   0.
+2. **The fail-closed path is exercised deliberately**, with a fixture that
+   makes the underlying `gh` call fail, asserting the gate's status field
+   reads "unknown"/"unreadable" and every output global stays empty (never
+   a partial answer). Skipping this half is how a fail-closed gate
+   quietly drifts into fail-open: "tolerate this one 404" (#395's own fix)
+   is one bad refactor away from "treat any API failure as empty" if
+   nothing pins the *other* branch red.
+
+Tests for all three `gh`-calling gates use stubbed `gh` fixtures (a shell
+function or fake-`gh`-on-`PATH`, never a live token) so CI stays
+deterministic — see `tests/free_surface.bats`, `tests/review_thread_gate.bats`,
+and `tests/roadmap_unblock.bats` for the pattern. `roadmap_unblock.bats`
+already covers both halves for `reconcile_roadmap_unblock()` (its own
+top-level function); `free_surface.bats` and `review_thread_gate.bats`
+originally tested only their internal sub-helpers (`_free_held_paths`,
+`_gate_problems_filter`, …) and were extended to also call the top-level
+gate function (`gate_free_surface`, `gate_pr_thread_state`) directly, since
+a sub-helper passing proves nothing about the wiring above it.
+
 ## The restore-`.env` prompt
 
 `ai_clients/lib/restore_env_prompt.sh` defines `prompt_restore_env()`, which

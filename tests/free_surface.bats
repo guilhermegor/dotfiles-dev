@@ -52,3 +52,58 @@ gh() {
     run _free_held_paths o r
     [ "$status" -eq 1 ]
 }
+
+# --- gate_free_surface: the top-level contract, not just its sub-helpers -------------------------
+# The two tests above only exercise _free_held_paths. Nothing called gate_free_surface itself, so a
+# regression in how it wires _free_held_paths + _free_claimed_issues + the issue list together —
+# or a partial-answer bug in that wiring — could ship with every sub-helper test green (dotfiles-
+# dev#398). These assert the whole function's contract: a usable, non-empty answer on success, and
+# a fully-empty, never-partial answer on the fail-closed path.
+
+@test "gate_free_surface: success sets ok with a non-empty, parseable answer" {
+    gh() {
+        case "$*" in
+            "api repos/o/r --jq .default_branch") echo master ;;
+            "pr list --repo o/r --state open --json number,headRefName --limit 200") echo '[]' ;;
+            "api repos/o/r/branches --paginate --jq .[].name") printf 'master\nfeature\n' ;;
+            "api repos/o/r/compare/master...feature --jq .files[]?.filename") echo 'held/file.sh' ;;
+            "api graphql -f query="*)
+                echo '{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}' ;;
+            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number")
+                printf '5\n6\n7\n' ;;
+            *) return 1 ;;
+        esac
+    }
+
+    gate_free_surface o r
+    local rc=$?
+
+    [ "$rc" -eq 0 ]
+    [ "$FREE_STATUS" = "ok" ]
+    [ "$FREE_HELD_PATHS" = "held/file.sh" ]
+    # Whole records, not substrings: "15" or "567" must not pass for 5, 6, 7.
+    [ "$FREE_UNCLAIMED_ISSUES" = $'5\n6\n7' ]
+}
+
+@test "gate_free_surface: one failing call fails the whole gate closed, no partial answer" {
+    gh() {
+        case "$*" in
+            "api repos/o/r --jq .default_branch") echo master ;;
+            "pr list --repo o/r --state open --json number,headRefName --limit 200") echo '[]' ;;
+            "api repos/o/r/branches --paginate --jq .[].name") echo master ;;
+            "api graphql -f query="*) echo "gh: API rate limit exceeded (HTTP 403)" >&2; return 1 ;;
+            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number")
+                printf '5\n6\n7\n' ;;
+            *) return 1 ;;
+        esac
+    }
+
+    local rc=0
+    gate_free_surface o r || rc=$?
+
+    [ "$rc" -eq 1 ]
+    [ "$FREE_STATUS" = "unknown" ]
+    [ -z "$FREE_HELD_PATHS" ]
+    [ -z "$FREE_CLAIMED_ISSUES" ]
+    [ -z "$FREE_UNCLAIMED_ISSUES" ]
+}

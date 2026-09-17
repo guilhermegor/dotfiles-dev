@@ -149,14 +149,97 @@ sweep_review_gate() {
 	done <<<"$prs"
 }
 
+# A pushed `git stash` snapshot has a tip commit titled by `git stash` itself
+# (`WIP on <branch>: ...`, `index on <branch>: ...`, or, for `-u`, `untracked
+# files on <branch>: ...`) — never a title a person or an agent would write.
+# Matching on that title is what tells a real branch missing a PR apart from
+# a stash pushed under a branch name (dotfiles-dev#399).
+is_stash_snapshot_title() {
+	case "$1" in
+	"WIP on "* | "index on "* | "untracked files on "*) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+# Extra context for a stash snapshot so the loop can decide whether to ask
+# about deleting it, without re-deriving the diff by hand: how far $db has
+# moved since the snapshot's base, and the three-dot per-file +/- (a mostly-
+# deleting file is a stale snapshot re-adding lines $db already removed).
+stash_snapshot_diff_context() {
+	local cwd="$1" db="$2" b="$3" base gained
+	base="$($GIT -C "$cwd" merge-base "origin/$db" "origin/$b" 2>/dev/null)"
+	if [ -z "$base" ]; then
+		echo "      no merge-base with $db — can't date this snapshot"
+		return
+	fi
+	gained="$($GIT -C "$cwd" rev-list --count "$base..origin/$db" 2>/dev/null || echo 0)"
+	echo "      $db gained $gained commit(s) since this snapshot's base"
+	echo "      per-file +/- (three-dot diff vs $db):"
+	$GIT -C "$cwd" diff --numstat "origin/$db...origin/$b" 2>/dev/null |
+		while read -r add del path; do
+			[ -n "$path" ] || continue
+			echo "        $path: +$add/-$del"
+		done
+}
+
+# Whether any open OR merged PR already touches the same files this snapshot
+# touches — if so, opening a PR for the snapshot would bring back old content
+# that is either already in flight or already landed.
+#
+# ⚠️ An API failure must read UNKNOWN, never "no open or merged PR touches
+# these files" — the two gh calls below are checked for their own exit
+# status (not just their captured text), because an empty result on success
+# and an empty result on failure are otherwise indistinguishable, and the
+# silently-empty reading is the wrong one to act on (CodeRabbit, PR #403).
+stash_snapshot_pr_overlap() {
+	local cwd="$1" repo="$2" db="$3" b="$4" files pr_nums n pr_files f hits=""
+	files="$($GIT -C "$cwd" diff --name-only "origin/$db...origin/$b" 2>/dev/null)"
+	if [ -z "$files" ]; then
+		echo "      touches no files vs $db"
+		return
+	fi
+	if ! pr_nums="$(gh api "repos/$repo/pulls?state=all" --paginate \
+		--jq '.[] | select(.merged_at != null or .state == "open") | .number' 2>/dev/null)"; then
+		echo "      UNKNOWN — could not list open/merged PRs (gh API failure)"
+		return
+	fi
+	while read -r n; do
+		[ -n "$n" ] || continue
+		if ! pr_files="$(gh api "repos/$repo/pulls/$n/files" --paginate --jq '.[].filename' 2>/dev/null)"; then
+			echo "      UNKNOWN — could not list files for PR #$n (gh API failure)"
+			return
+		fi
+		while read -r f; do
+			[ -n "$f" ] || continue
+			if printf '%s\n' "$files" | grep -qxF "$f"; then
+				hits="$hits #$n"
+				break
+			fi
+		done <<<"$pr_files"
+	done <<<"$pr_nums"
+	hits="${hits# }"
+	if [ -n "$hits" ]; then
+		echo "      same files touched by: $hits"
+	else
+		echo "      no open or merged PR touches these files"
+	fi
+}
+
 sweep_orphan_branches() {
-	local cwd="$1" repo="$2" owner="$3" db="$4" b p any=0
+	local cwd="$1" repo="$2" owner="$3" db="$4" b p any=0 title
 	while read -r b; do
 		[ -n "$b" ] || continue
 		case "$b" in "$db" | gh-pages) continue ;; esac
 		p="$(gh api "repos/$repo/pulls?head=$owner:$b&state=all" --jq '.[0].number // empty' 2>/dev/null)"
 		if [ -z "$p" ]; then
-			echo "    - $b"
+			title="$($GIT -C "$cwd" log -1 --format=%s "origin/$b" 2>/dev/null)"
+			if is_stash_snapshot_title "$title"; then
+				echo "    - $b: STASH SNAPSHOT (\"$title\"), not a branch missing a PR"
+				stash_snapshot_diff_context "$cwd" "$db" "$b"
+				stash_snapshot_pr_overlap "$cwd" "$repo" "$db" "$b"
+			else
+				echo "    - $b"
+			fi
 			any=1
 		fi
 	done < <($GIT -C "$cwd" ls-remote --heads origin 2>/dev/null | sed 's#.*refs/heads/##')

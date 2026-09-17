@@ -70,7 +70,20 @@ on a branch that had 0.** A sweep that cries wolf is worse than none — the ope
 it, and then it catches nothing.
 
 Three states, three actions:
-- **uncommitted** → commit and push it;
+- **uncommitted** → commit it onto *that worktree's own branch* and push **that branch** — never
+  `git stash` and push the stash. ⚠️ **A rescue is a commit, never a stash.** A `git stash`
+  snapshot has **two parents** (the base commit and the index) — the same shape a merge commit
+  has — which is exactly what makes a pushed stash unreadable as a normal branch later: its tip
+  commit title is `WIP on <branch>: ...` / `index on <branch>: ...`, not anything a person or an
+  agent would write, and a sweep with no stash check reports it as an ordinary "branch pushed
+  without PR" round after round. That happened on blueprintx: a pushed stash under
+  `rescue/pep8-naming-422-wip` read as unfinished work missing a PR for several sweep rounds, and
+  its base was 33 commits behind `main` — opening a PR for it would have brought back already-
+  superseded content (dotfiles-dev#399). Commit the real work with a real message instead; that
+  produces a one-parent commit the sweep and any later reader can read as what it is. The stash
+  stack is also shared across every worktree of this repo (step 0 already warns about this), so
+  it is a bad place to put work that has to survive a lost session even before the sweep
+  confusion;
 - **committed, no PR** → open the PR. ⚠️ An agent may commit onto its *anonymous*
   `worktree-agent-<id>` branch, so check branch names too;
 - **dirty but stale** → before rescuing, diff the file against `origin/main`. A worktree on an old

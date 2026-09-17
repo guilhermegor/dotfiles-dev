@@ -198,8 +198,9 @@ both:**
    0.
 2. **The fail-closed path is exercised deliberately**, with a fixture that
    makes the underlying `gh` call fail, asserting the gate's status field
-   reads "unknown"/"unreadable" and every output global stays empty (never
-   a partial answer). Skipping this half is how a fail-closed gate
+   reads "unknown"/"unreadable" and every result global stays empty (never
+   a partial answer) — only the status field and its diagnostic detail
+   (e.g. `GATE_DETAIL`) are set. Skipping this half is how a fail-closed gate
    quietly drifts into fail-open: "tolerate this one 404" (#395's own fix)
    is one bad refactor away from "treat any API failure as empty" if
    nothing pins the *other* branch red.

@@ -81,10 +81,8 @@ gh() {
     [ "$rc" -eq 0 ]
     [ "$FREE_STATUS" = "ok" ]
     [ "$FREE_HELD_PATHS" = "held/file.sh" ]
-    [ -n "$FREE_UNCLAIMED_ISSUES" ]
-    [[ "$FREE_UNCLAIMED_ISSUES" == *"5"* ]]
-    [[ "$FREE_UNCLAIMED_ISSUES" == *"6"* ]]
-    [[ "$FREE_UNCLAIMED_ISSUES" == *"7"* ]]
+    # Whole records, not substrings: "15" or "567" must not pass for 5, 6, 7.
+    [ "$FREE_UNCLAIMED_ISSUES" = $'5\n6\n7' ]
 }
 
 @test "gate_free_surface: one failing call fails the whole gate closed, no partial answer" {

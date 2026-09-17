@@ -154,6 +154,8 @@ STUB
 stub_gh_orphan() {
     # ORPHAN_PR_NUMS       = PR numbers the state=all query returns (space/newline separated)
     # ORPHAN_PR_FILES_<n>  = space-separated filenames PR <n> touches
+    # ORPHAN_FAIL_PULLS_ALL=1 = the state=all PR-listing call fails (exit 1)
+    # ORPHAN_FAIL_FILES=1     = every per-PR files call fails (exit 1)
     cat > "$BIN/gh" <<'STUB'
 #!/bin/bash
 case "$*" in
@@ -161,9 +163,11 @@ case "$*" in
     echo ""
     ;;
 *"pulls?state=all --paginate --jq"*)
+    [ "${ORPHAN_FAIL_PULLS_ALL:-0}" = 1 ] && exit 1
     printf '%s\n' "${ORPHAN_PR_NUMS:-}"
     ;;
 *"/files --paginate --jq"*)
+    [ "${ORPHAN_FAIL_FILES:-0}" = 1 ] && exit 1
     n="$(printf '%s' "$*" | sed -n 's#.*pulls/\([0-9]\{1,\}\)/files.*#\1#p')"
     var="ORPHAN_PR_FILES_$n"
     printf '%s\n' "${!var:-}" | tr ' ' '\n'
@@ -245,4 +249,57 @@ STUB
 
     run sweep_orphan_branches "$REPO" "o/r" "o" "main"
     [[ "$output" == *"rescue/index-branch: STASH SNAPSHOT"* ]]
+}
+
+@test "an untracked-files-on-<branch> stash title (git stash -u) is also recognised" {
+    stub_gh_orphan
+    git checkout -q -b rescue/untracked-branch
+    echo x > newfile.txt
+    git add newfile.txt
+    git commit -q -m "untracked files on feat/foo: 0000000 add file"
+    git push -q origin HEAD:refs/heads/rescue/untracked-branch
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" == *"rescue/untracked-branch: STASH SNAPSHOT"* ]]
+}
+
+@test "a gh API failure listing PRs reports UNKNOWN, never a clean overlap" {
+    export ORPHAN_FAIL_PULLS_ALL=1
+    stub_gh_orphan
+
+    echo original > tracked.txt
+    git add tracked.txt
+    git commit -q -m "add tracked file"
+    git push -q origin HEAD:refs/heads/main
+    base="$(git rev-parse --short HEAD)"
+
+    git checkout -q -b rescue/wip-branch3
+    echo changed > tracked.txt
+    git commit -q -am "WIP on feat/foo: $base add tracked file"
+    git push -q origin HEAD:refs/heads/rescue/wip-branch3
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" == *"UNKNOWN — could not list open/merged PRs"* ]]
+    [[ "$output" != *"no open or merged PR touches these files"* ]]
+}
+
+@test "a gh API failure listing one PR's files reports UNKNOWN, never a clean overlap" {
+    export ORPHAN_PR_NUMS="9"
+    export ORPHAN_FAIL_FILES=1
+    stub_gh_orphan
+
+    echo original > tracked.txt
+    git add tracked.txt
+    git commit -q -m "add tracked file"
+    git push -q origin HEAD:refs/heads/main
+    base="$(git rev-parse --short HEAD)"
+
+    git checkout -q -b rescue/wip-branch4
+    echo changed > tracked.txt
+    git commit -q -am "WIP on feat/foo: $base add tracked file"
+    git push -q origin HEAD:refs/heads/rescue/wip-branch4
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" == *"UNKNOWN — could not list files for PR #9"* ]]
+    [[ "$output" != *"no open or merged PR touches these files"* ]]
 }

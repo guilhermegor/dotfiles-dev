@@ -185,16 +185,30 @@ stash_snapshot_diff_context() {
 # Whether any open OR merged PR already touches the same files this snapshot
 # touches — if so, opening a PR for the snapshot would bring back old content
 # that is either already in flight or already landed.
+#
+# ⚠️ An API failure must read UNKNOWN, never "no open or merged PR touches
+# these files" — the two gh calls below are checked for their own exit
+# status (not just their captured text), because an empty result on success
+# and an empty result on failure are otherwise indistinguishable, and the
+# silently-empty reading is the wrong one to act on (CodeRabbit, PR #403).
 stash_snapshot_pr_overlap() {
-	local cwd="$1" repo="$2" db="$3" b="$4" files n pr_files f hits=""
+	local cwd="$1" repo="$2" db="$3" b="$4" files pr_nums n pr_files f hits=""
 	files="$($GIT -C "$cwd" diff --name-only "origin/$db...origin/$b" 2>/dev/null)"
 	if [ -z "$files" ]; then
 		echo "      touches no files vs $db"
 		return
 	fi
+	if ! pr_nums="$(gh api "repos/$repo/pulls?state=all" --paginate \
+		--jq '.[] | select(.merged_at != null or .state == "open") | .number' 2>/dev/null)"; then
+		echo "      UNKNOWN — could not list open/merged PRs (gh API failure)"
+		return
+	fi
 	while read -r n; do
 		[ -n "$n" ] || continue
-		pr_files="$(gh api "repos/$repo/pulls/$n/files" --paginate --jq '.[].filename' 2>/dev/null)"
+		if ! pr_files="$(gh api "repos/$repo/pulls/$n/files" --paginate --jq '.[].filename' 2>/dev/null)"; then
+			echo "      UNKNOWN — could not list files for PR #$n (gh API failure)"
+			return
+		fi
 		while read -r f; do
 			[ -n "$f" ] || continue
 			if printf '%s\n' "$files" | grep -qxF "$f"; then
@@ -202,8 +216,7 @@ stash_snapshot_pr_overlap() {
 				break
 			fi
 		done <<<"$pr_files"
-	done < <(gh api "repos/$repo/pulls?state=all" --paginate \
-		--jq '.[] | select(.merged_at != null or .state == "open") | .number' 2>/dev/null)
+	done <<<"$pr_nums"
 	hits="${hits# }"
 	if [ -n "$hits" ]; then
 		echo "      same files touched by: $hits"

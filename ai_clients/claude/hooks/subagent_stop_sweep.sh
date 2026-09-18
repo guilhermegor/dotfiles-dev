@@ -131,7 +131,10 @@ sweep_worktrees() {
 
 sweep_review_gate() {
 	local owner="$1" name="$2" repo="$3" roster_file="$4" prs
-	prs="$(gh api "repos/$repo/pulls?state=open" --jq '.[].number' 2>/dev/null)"
+	if ! prs="$(gh api "repos/$repo/pulls?state=open" --jq '.[].number' 2>/dev/null)"; then
+		echo "    UNKNOWN — could not list open PRs (gh API failure), not 'none'"
+		return
+	fi
 	if [ -z "$prs" ]; then
 		echo "    no open PRs"
 		return
@@ -226,12 +229,18 @@ stash_snapshot_pr_overlap() {
 }
 
 sweep_orphan_branches() {
-	local cwd="$1" repo="$2" owner="$3" db="$4" b p any=0 title
+	local cwd="$1" repo="$2" owner="$3" db="$4" b heads any=0 title
+	# ONE call for every PR head ref, never one per branch: the per-branch form
+	# cost an API call per remote branch (33 on blueprintx) and, on a 403,
+	# rendered EVERY branch as missing a PR (see s:dev-loop, GitHub API budget).
+	if ! heads="$(gh api "repos/$repo/pulls?state=all&per_page=100" --paginate --jq '.[].head.ref' 2>/dev/null)"; then
+		echo "    UNKNOWN — could not list PR head refs (gh API failure), not 'no PR'"
+		return
+	fi
 	while read -r b; do
 		[ -n "$b" ] || continue
 		case "$b" in "$db" | gh-pages) continue ;; esac
-		p="$(gh api "repos/$repo/pulls?head=$owner:$b&state=all" --jq '.[0].number // empty' 2>/dev/null)"
-		if [ -z "$p" ]; then
+		if ! printf '%s\n' "$heads" | grep -qxF "$b"; then
 			title="$($GIT -C "$cwd" log -1 --format=%s "origin/$b" 2>/dev/null)"
 			if is_stash_snapshot_title "$title"; then
 				echo "    - $b: STASH SNAPSHOT (\"$title\"), not a branch missing a PR"

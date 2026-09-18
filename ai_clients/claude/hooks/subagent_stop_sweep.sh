@@ -230,17 +230,22 @@ stash_snapshot_pr_overlap() {
 
 sweep_orphan_branches() {
 	local cwd="$1" repo="$2" owner="$3" db="$4" b heads any=0 title
-	# ONE call for every PR head ref, never one per branch: the per-branch form
+	# ONE call for every PR head, never one per branch: the per-branch form
 	# cost an API call per remote branch (33 on blueprintx) and, on a 403,
 	# rendered EVERY branch as missing a PR (see s:dev-loop, GitHub API budget).
-	if ! heads="$(gh api "repos/$repo/pulls?state=all&per_page=100" --paginate --jq '.[].head.ref' 2>/dev/null)"; then
+	# `head.label` ("<owner>:<branch>"), never `head.ref`: a fork PR can carry
+	# the same branch name as ours, and matching the bare name would read that
+	# fork's PR as covering OUR branch, hiding a real orphan. The per-branch
+	# query this replaces was owner-scoped (`?head=$owner:$b`) for the same
+	# reason, so matching "$owner:$b" below keeps that property.
+	if ! heads="$(gh api "repos/$repo/pulls?state=all&per_page=100" --paginate --jq '.[].head.label' 2>/dev/null)"; then
 		echo "    UNKNOWN — could not list PR head refs (gh API failure), not 'no PR'"
 		return
 	fi
 	while read -r b; do
 		[ -n "$b" ] || continue
 		case "$b" in "$db" | gh-pages) continue ;; esac
-		if ! printf '%s\n' "$heads" | grep -qxF "$b"; then
+		if ! printf '%s\n' "$heads" | grep -qxF "$owner:$b"; then
 			title="$($GIT -C "$cwd" log -1 --format=%s "origin/$b" 2>/dev/null)"
 			if is_stash_snapshot_title "$title"; then
 				echo "    - $b: STASH SNAPSHOT (\"$title\"), not a branch missing a PR"

@@ -58,10 +58,22 @@ An agent killed mid-flight leaves work in its worktree. A worktree is torn down;
 /usr/bin/git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r p; do
   b=$(/usr/bin/git -C "$p" rev-parse --abbrev-ref HEAD 2>/dev/null)
   d=$(/usr/bin/git -C "$p" status --porcelain 2>/dev/null | wc -l)
-  u=$(/usr/bin/git -C "$p" rev-list --count "origin/$b..$b" 2>/dev/null || echo NO-REMOTE)
-  [ "$d" != "0" ] || [ "$u" != "0" ] && echo "$b dirty=$d unpushed=$u"
+  if /usr/bin/git -C "$p" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1; then
+    u=$(/usr/bin/git -C "$p" rev-list --count '@{upstream}..HEAD' 2>/dev/null || echo 0)
+  else
+    u=NO-REMOTE
+  fi
+  [ "$d" != "0" ] || { [ "$u" != "0" ] && [ "$u" != "NO-REMOTE" ]; } && echo "$b dirty=$d unpushed=$u"
 done
 ```
+
+🔴 **`@{upstream}`, never `origin/$b`.** On a **detached HEAD** — every `--detach` worktree, which
+is the normal shape for inspecting a PR — `rev-parse --abbrev-ref HEAD` prints the literal string
+`HEAD`, so `origin/$b` becomes `origin/HEAD`, a symref to the default branch. The count then means
+*"commits ahead of `main`"*, and every detached worktree reports phantom unpushed work. Measured
+twice in two rounds on blueprintx: three scratch worktrees reported 8/3/4 "unpushed" commits that
+were already on `origin`, byte-identical. Same failure family as the rtk-proxy trap below — the
+command succeeds and answers a question nobody asked.
 
 🔴 **`/usr/bin/git`, never the rtk proxy — not even for `worktree list`.** The proxy returns `ok`
 for a clean tree, which `wc -l` counts as 1, and its reformatted `worktree list` breaks the

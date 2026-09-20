@@ -33,7 +33,28 @@ setup() {
 #!/bin/bash
 case "$1 $2" in
 "pr view")
-    [ -n "${PR_VIEW_NUMBER:-}" ] && echo "$PR_VIEW_NUMBER"
+    shift 2
+    number="" json="" jqfilter=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --json) shift; json="$1" ;;
+        --jq | -q) shift; jqfilter="$1" ;;
+        --repo | -R) shift ;;
+        -*) ;;
+        *) number="$1" ;;
+        esac
+        shift
+    done
+    # Keyed on the --json/--jq PROJECTION, never the number/URL (dotfiles-dev#409's lesson): the
+    # live re-check added for #423 asks `--json state --jq .state` for an explicit PR number,
+    # which is a different call shape than the fast path's `--json number,state -q '...'` with no
+    # number argument at all.
+    if [ "$json" = "state" ] && [ "$jqfilter" = ".state" ]; then
+        var="PR_STATE_${number}"
+        printf '%s\n' "${!var:-OPEN}"
+    else
+        [ -n "${PR_VIEW_NUMBER:-}" ] && echo "$PR_VIEW_NUMBER"
+    fi
     ;;
 "repo view")
     echo "o/r"
@@ -227,6 +248,38 @@ problem_fixture() {
 
     run bash -c 'payload false sess-unreadable | "$0"' "$HOOK"
     [ "$status" -eq 0 ]
+}
+
+# --- dotfiles-dev#423: a cached verdict must not outlive the PR's own merge ---------------------
+
+@test "a cached non-clean verdict for a PR that has since merged is dropped, not replayed" {
+    export PR_LIST=$'10\n20'
+    export OPEN_THREADS_NUDGE_CACHE_TTL=600
+    clean_fixture 10
+    problem_fixture 20
+    run bash -c "payload false sess-423 | '$HOOK'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"PR #20"* ]]
+
+    # #20 merges inside the TTL window -- nothing re-scans, the cache is still "fresh".
+    export PR_STATE_20=MERGED
+    run bash -c "payload false sess-423 | '$HOOK'"
+    [ "$status" -eq 0 ]
+    [ "$(wc -l <"$PRLIST_LOG")" -eq 1 ]
+}
+
+@test "a cached non-clean verdict for a PR still open is replayed as before" {
+    export PR_LIST=$'10\n20'
+    export OPEN_THREADS_NUDGE_CACHE_TTL=600
+    clean_fixture 10
+    problem_fixture 20
+    run bash -c "payload false sess-423b | '$HOOK'"
+    [ "$status" -eq 2 ]
+
+    export PR_STATE_20=OPEN
+    run bash -c "payload false sess-423b | '$HOOK'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"PR #20"* ]]
 }
 
 @test "repo-wide scan: an unreadable answer is never cached" {

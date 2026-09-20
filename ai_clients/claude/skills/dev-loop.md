@@ -281,7 +281,10 @@ measured running **6 times in 21 hours** — GitHub throttles scheduled workflow
 repos, hardest where the mechanism is most needed. `schedule:` is the one trigger GitHub is free to
 skip; a session-owned `CronCreate` poll is not.
 
-1. **Classify the slot, three states plus an escape hatch — never a binary busy/free.** Read the
+1. **Classify the slot, three states plus an escape hatch — never a binary busy/free.** Pipe the
+   comment page into `hooks/lib/slot_classify.py`, which prints one token (`FREE|<reason>`,
+   `BUSY|<reason>`, `UNKNOWN`); **never re-derive this by hand** (dotfiles-dev#433) — reading the
+   newest notice by eye re-commits all three defects its fixtures pin down. Read the
    newest roster notice, querying `is:pr` **without** `is:open`: a PR that merged since its last
    notice still spent the same account-level quota, and scoping to open PRs alone makes that spend
    invisible.
@@ -465,6 +468,13 @@ on a non-Python repo fails **silently and inverted** — it *suppresses* a relea
 erroring. `.claude/release.conf` is the declared list where one exists.
 
 ## 6. DISPATCH — the loop's other half
+
+`hooks/round_dispatch_guard.sh` (a `Stop` hook, dotfiles-dev#433) refuses to end a round that
+had dispatchable candidates and started no agent, naming each candidate and its file surface;
+the legitimate zero case is every candidate carrying its own named reason, never an override
+flag. It reads `hooks/lib/dispatch_plan.py` for that verdict — **never re-derive the
+non-colliding set by hand** — and until that planner ships it announces itself as a no-op rather
+than passing quietly.
 
 This step is now observed, not just written down: `hooks/dispatch_free_surface_guard.sh`
 (a `Stop` hook, sibling of `uncommitted_worktree_guard.sh`, dotfiles-dev#396) refuses to end the

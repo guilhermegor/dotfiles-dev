@@ -391,6 +391,53 @@ skip; a session-owned `CronCreate` poll is not.
    pending," and let step 4 settle it next round.** Do not poll the ack — a refusal and an
    acceptance-then-refusal are the same outcome, and the ack only answers a question the gate answers
    more reliably.
+5. **Fallback the ask itself — qwen, then codex, when the primary rung reports BUSY or UNKNOWN.**
+   Item 1 above used to mean "stop, wait for the next tick" on those two states. It no longer has
+   to: `ai_clients/claude/hooks/lib/reviewer_ladder.sh` resolves one fallback rung and posts a
+   review instead of leaving the window unspent (dotfiles-dev#444).
+
+   🔴 **Never hardcode a model name — resolve by measured capability, at run time, every call.**
+   Model names churn (`astra`/`sol`/`terra` were the expected Codex tiers; the account measured
+   2026-09-21 exposed `gpt-5.6-terra`/`gpt-5.6-luna`/`gpt-5.5`/`gpt-reserve`/`codex-auto-review`
+   instead — none of the names anyone expected). `resolve_fallback_reviewer` enumerates what
+   `~/.codex/models_cache.json` and `~/.qwen/settings.json` report RIGHT NOW, live-probes each
+   candidate with a trivial call (`"reply with the single word OK"`), and only then picks a winner.
+   A rung that resolves nothing is skipped — the ladder falls through, it never guesses a name.
+
+   ⚠️ **`priority` in `models_cache.json` is NOT a capability rank — do not sort by it.** Measured
+   2026-09-21: `codex-auto-review` — a model named for reviewing — carries `priority: 43`, while
+   `gpt-5.5`, a general model, carries `priority: 12`. Sorting ascending picks the general model
+   over the review-specialised one while looking principled; sorting descending does no better —
+   neither direction of `priority` correlates with review capability. `visibility: list` is
+   equally rejected as an entitlement proxy: `codex-auto-review` is `visibility: hide` on this
+   account and still answered a live probe call (`codex exec -m codex-auto-review` returned `OK`)
+   — `hide` means "not advertised in the picker," not "not entitled." The cache lists what
+   EXISTS, never what this account is ENTITLED to call — only a live probe answers that. The
+   resolver's accepted signal, in order: (1) a review-specialised slug (name matches `/review/i`)
+   that PASSES the live probe, else (2) the richest `supported_reasoning_levels` set among the
+   candidates that pass the probe ("number of parameters" is not a field either cache exposes).
+   Neither `priority` nor `visibility` is read for ranking anywhere in the resolver.
+
+   qwen exposes no cache-with-priority equivalent — `~/.qwen/settings.json`'s
+   `.modelProviders.openai[]` is a flat id list. qwen ships a **native** `--fallback-model` flag
+   instead (repeatable, max 3, for capacity errors 429/503/529): the resolver hands its runner-up
+   candidates to that flag rather than reimplementing per-model retry, and only live-probes the
+   primary qwen candidate — `--fallback-model` already covers the capacity-error case for the rest.
+
+   Every fallback review is **clearly attributed** in the comment it posts —
+   `Fallback review — runtime: <qwen|codex>, model: <resolved slug> (selected by: <signal>)` — a
+   reader must never have to guess which reviewer produced a finding, because their false-positive
+   rates differ. The same blast-radius discipline as item 2 applies, plus two more: **one PR per
+   invocation** (there is no loop-over-PRs form of `run_fallback_review`), and **never re-review a
+   PR whose comments already carry a higher rung's attribution line**.
+
+   `DRY_RUN=1` (or a trailing `--dry-run`) resolves and reports the chosen rung+model without
+   invoking a runtime or posting anything — required for any manual check of this step; never post
+   a live review to a real PR while verifying the ladder by hand.
+
+   **Non-goals:** this does not replace the primary reviewer (item 3/4 above still runs first and
+   this only fires when that rung is unavailable), does not add a Claude marketplace plugin (both
+   CLIs are already on `PATH`), and is not a general multi-model router — one ladder, one step.
 
 Report **time-to-first-review per PR**, never requests per hour: a PR sitting unreviewed is the
 user-visible cost, and that is the number this step must move.

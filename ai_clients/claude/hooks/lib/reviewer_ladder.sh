@@ -231,13 +231,34 @@ ladder_attribution_line() {
 		"$runtime" "$model" "$signal"
 }
 
-# ladder_already_covered COMMENTS_TEXT
-# True when a fallback attribution line already exists among a PR's comment
-# bodies (caller supplies the joined text) — a lower rung never re-reviews
-# what a higher one already covered.
+# ladder_poster_login
+# The account _post_pr_comment posts as — `gh`'s authenticated user. Override
+# via REVIEWER_LADDER_POSTER for tests. Empty on any gh error (the caller then
+# matches no author, i.e. fails closed into "not covered").
+ladder_poster_login() {
+	if [ -n "${REVIEWER_LADDER_POSTER:-}" ]; then
+		printf '%s\n' "$REVIEWER_LADDER_POSTER"
+		return 0
+	fi
+	gh api user --jq '.login' 2>/dev/null
+}
+
+# ladder_already_covered COMMENTS_JSON
+# True when a fallback attribution line already exists among a PR's comments,
+# AUTHORED BY THE LADDER'S OWN POSTING ACCOUNT — a lower rung never re-reviews
+# what a higher one already covered. COMMENTS_JSON is the `gh api
+# .../issues/N/comments` array (or any `[{author|user.login, body}]` list);
+# structured, never joined text, because any PR commenter can type the marker
+# line and a text match would let them skip the review (CWE-345).
 ladder_already_covered() {
-	local comments="$1"
-	printf '%s' "$comments" | grep -q '^Fallback review — runtime:'
+	local comments="$1" poster
+	poster="$(ladder_poster_login)"
+	[ -n "$poster" ] || return 1
+	printf '%s' "$comments" | jq -e --arg who "$poster" '
+		type == "array" and any(.[];
+			((.author.login // .user.login // "") == $who)
+			and ((.body // "") | test("^Fallback review — runtime:"; "m")))
+	' >/dev/null 2>&1 || return 1
 }
 
 # ladder_recently_pushed PUSHED_EPOCH NOW_EPOCH
@@ -281,7 +302,9 @@ _run_runtime_review() {
 			[ -n "$fb" ] || continue
 			fb_args+=(--fallback-model "$fb")
 		done <<<"$fallbacks"
-		qwen -m "$model" "${fb_args[@]}" review run "$pr_number" --json
+		# No --json: that prints the raw result object, and the caller posts
+		# this output verbatim as the review comment.
+		qwen -m "$model" "${fb_args[@]}" review run "$pr_number"
 		;;
 	*)
 		return 1
@@ -300,12 +323,16 @@ _post_pr_comment() {
 	gh pr comment "$pr_number" --repo "$owner/$repo" --body "$body"
 }
 
-# run_fallback_review OWNER REPO PR_NUMBER MERGE_STATE PUSHED_EPOCH NOW_EPOCH COMMENTS_TEXT [--dry-run]
+# run_fallback_review OWNER REPO PR_NUMBER MERGE_STATE PUSHED_EPOCH NOW_EPOCH COMMENTS_JSON [--dry-run]
 # The one entrypoint callers use. One PR per call is the blast-radius cap
 # (issue #444 item 6) — there is no loop-over-PRs form of this function.
-# DRY_RUN=1 (env) or a trailing --dry-run resolves and prints the chosen
-# rung+model WITHOUT invoking a runtime or posting anything (issue #444 item
-# 7) — tests and manual verification MUST use this path.
+# COMMENTS_JSON is the PR's issue-comment array as gh returns it (see
+# ladder_already_covered). DRY_RUN=1 (env) or a trailing --dry-run resolves
+# and prints the chosen rung+model WITHOUT invoking a runtime, probing, or
+# posting anything (issue #444 item 7) — tests and manual verification MUST
+# use this path. A dry run therefore reports the cache's top-ranked candidate
+# UNPROBED: the probe is itself a live model call, and "no runtime" has to
+# mean no runtime.
 run_fallback_review() {
 	local owner="$1" repo="$2" pr_number="$3" merge_state="$4" \
 		pushed="$5" now="$6" comments="$7"
@@ -321,6 +348,16 @@ run_fallback_review() {
 		return 1
 	fi
 
+	# Dynamic scoping: these locals are what the probes read while we are on
+	# the stack, so a dry run never reaches the real `codex`/`qwen` binaries.
+	# `true` accepts every candidate, which is exactly "unprobed".
+	local REVIEWER_LADDER_CODEX_PROBE="${REVIEWER_LADDER_CODEX_PROBE:-}" \
+		REVIEWER_LADDER_QWEN_PROBE="${REVIEWER_LADDER_QWEN_PROBE:-}"
+	if [ "$dry_run" = "1" ]; then
+		: "${REVIEWER_LADDER_CODEX_PROBE:=true}"
+		: "${REVIEWER_LADDER_QWEN_PROBE:=true}"
+	fi
+
 	if ! resolve_fallback_reviewer; then
 		print_status "warning" "no fallback rung resolved (qwen and codex both unavailable)"
 		return 1
@@ -330,7 +367,7 @@ run_fallback_review() {
 	attribution="$(ladder_attribution_line "$LADDER_RUNTIME" "$LADDER_MODEL" "$LADDER_SIGNAL")"
 
 	if [ "$dry_run" = "1" ]; then
-		print_status "info" "DRY RUN — would post to PR #$pr_number: $attribution"
+		print_status "info" "DRY RUN (candidates unprobed) — would probe, then post to PR #$pr_number: $attribution"
 		return 0
 	fi
 

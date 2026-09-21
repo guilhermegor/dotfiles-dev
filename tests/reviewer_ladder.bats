@@ -200,15 +200,39 @@ setup() {
     [[ "$output" == "Fallback review — runtime: codex, model: codex-auto-review (selected by: review-specialized-slug)" ]]
 }
 
-@test "already-covered: a higher rung's attribution line blocks a re-review" {
-    run ladder_already_covered "some comment
-Fallback review — runtime: codex, model: codex-auto-review (selected by: review-specialized-slug)
-another comment"
+ATTRIBUTION='Fallback review — runtime: codex, model: codex-auto-review (selected by: review-specialized-slug)'
+
+@test "already-covered: the ladder's own attribution comment blocks a re-review" {
+    export REVIEWER_LADDER_POSTER=ladder-bot
+    run ladder_already_covered "$(jq -cn --arg a "$ATTRIBUTION" \
+        '[{user:{login:"someone"},body:"some comment"},{user:{login:"ladder-bot"},body:$a}]')"
     [ "$status" -eq 0 ]
 }
 
 @test "already-covered: no attribution line present is not covered" {
-    run ladder_already_covered "just a normal comment, no ladder marker"
+    export REVIEWER_LADDER_POSTER=ladder-bot
+    run ladder_already_covered '[{"user":{"login":"ladder-bot"},"body":"a normal comment, no marker"}]'
+    [ "$status" -eq 1 ]
+}
+
+@test "already-covered: a forged marker from another commenter does NOT skip the review" {
+    export REVIEWER_LADDER_POSTER=ladder-bot
+    run ladder_already_covered "$(jq -cn --arg a "$ATTRIBUTION" \
+        '[{user:{login:"drive-by"},body:$a}]')"
+    [ "$status" -eq 1 ]
+}
+
+@test "already-covered: joined text (the old contract) is not an array — not covered" {
+    export REVIEWER_LADDER_POSTER=ladder-bot
+    run ladder_already_covered "$ATTRIBUTION"
+    [ "$status" -eq 1 ]
+}
+
+@test "already-covered: an unresolvable poster login fails closed into not covered" {
+    export REVIEWER_LADDER_POSTER=""
+    gh() { return 1; }
+    export -f gh
+    run ladder_already_covered "$(jq -cn --arg a "$ATTRIBUTION" '[{user:{login:"x"},body:$a}]')"
     [ "$status" -eq 1 ]
 }
 
@@ -237,18 +261,34 @@ another comment"
     _post_pr_comment() { echo "SHOULD NOT BE CALLED" >&2; return 1; }
     export -f _run_runtime_review _post_pr_comment
 
-    run run_fallback_review o r 42 BLOCKED "" 5000 "" --dry-run
+    run run_fallback_review o r 42 BLOCKED "" 5000 "[]" --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *"DRY RUN"* ]]
     [[ "$output" != *"SHOULD NOT BE CALLED"* ]]
 }
 
+@test "dry-run never reaches a live probe: no override set, real binaries shadowed" {
+    export REVIEWER_LADDER_QWEN_SETTINGS="$FIXTURES/qwen_settings.json"
+    export REVIEWER_LADDER_CODEX_CACHE="$FIXTURES/codex_full.json"
+    unset REVIEWER_LADDER_QWEN_PROBE REVIEWER_LADDER_CODEX_PROBE
+    qwen() { echo "LIVE PROBE" >&2; return 1; }
+    codex() { echo "LIVE PROBE" >&2; return 1; }
+    export -f qwen codex
+
+    run run_fallback_review o r 42 BLOCKED "" 5000 "[]" --dry-run
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"DRY RUN"* ]]
+    [[ "$output" == *"unprobed"* ]]
+    [[ "$output" != *"LIVE PROBE"* ]]
+}
+
 @test "already-covered PR is skipped before the resolver ever runs" {
+    export REVIEWER_LADDER_POSTER=ladder-bot
     resolve_fallback_reviewer() { echo "SHOULD NOT RESOLVE" >&2; return 1; }
     export -f resolve_fallback_reviewer
 
     run run_fallback_review o r 42 BLOCKED "" 5000 \
-        "Fallback review — runtime: codex, model: codex-auto-review (selected by: review-specialized-slug)"
+        "$(jq -cn --arg a "$ATTRIBUTION" '[{user:{login:"ladder-bot"},body:$a}]')"
     [ "$status" -eq 0 ]
     [[ "$output" != *"SHOULD NOT RESOLVE"* ]]
 }

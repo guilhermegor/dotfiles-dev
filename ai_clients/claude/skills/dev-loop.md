@@ -400,8 +400,10 @@ skip; a session-owned `CronCreate` poll is not.
    Model names churn (`astra`/`sol`/`terra` were the expected Codex tiers; the account measured
    2026-09-21 exposed `gpt-5.6-terra`/`gpt-5.6-luna`/`gpt-5.5`/`gpt-reserve`/`codex-auto-review`
    instead — none of the names anyone expected). `resolve_fallback_reviewer` enumerates what
-   `~/.codex/models_cache.json` and `~/.qwen/settings.json` report RIGHT NOW, live-probes each
-   candidate with a trivial call (`"reply with the single word OK"`), and only then picks a winner.
+   `~/.codex/models_cache.json` and `~/.qwen/settings.json` report RIGHT NOW, live-probes a
+   candidate with a trivial call (`"reply with the single word OK"`), and only then picks a winner
+   — every codex candidate in rank order until one passes; for qwen only the primary, because its
+   runner-ups ride the native `--fallback-model` flag instead (the qwen paragraph below).
    A rung that resolves nothing is skipped — the ladder falls through, it never guesses a name.
 
    ⚠️ **`priority` in `models_cache.json` is NOT a capability rank — do not sort by it.** Measured
@@ -432,8 +434,11 @@ skip; a session-owned `CronCreate` poll is not.
    PR whose comments already carry a higher rung's attribution line**.
 
    `DRY_RUN=1` (or a trailing `--dry-run`) resolves and reports the chosen rung+model without
-   invoking a runtime or posting anything — required for any manual check of this step; never post
-   a live review to a real PR while verifying the ladder by hand.
+   invoking a runtime or posting anything — and the entitlement probe IS a runtime call, so a dry
+   run skips it too and reports the cache's top-ranked candidate **unprobed** (its output says so).
+   A dry run therefore verifies the ranking and the plumbing, never the entitlement; only a live
+   run measures that. Required for any manual check of this step; never post a live review to a
+   real PR while verifying the ladder by hand.
 
    **Non-goals:** this does not replace the primary reviewer (item 3/4 above still runs first and
    this only fires when that rung is unavailable), does not add a Claude marketplace plugin (both

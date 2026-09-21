@@ -114,6 +114,22 @@ run_hook() {
     [[ "$output" != *"is empty"* ]]
 }
 
+@test "an excluded record with no reason is UNREADABLE, never a passing zero" {
+    tool_use Skill '{"skill":"dev-loop"}'
+    planner '{"dispatchable":[],"excluded":[{"issue":426}]}'
+    run run_hook
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"UNREADABLE"* ]]
+}
+
+@test "a plan whose collections are not arrays is UNREADABLE, never a passing zero" {
+    tool_use Skill '{"skill":"dev-loop"}'
+    planner '{"dispatchable":null,"excluded":{}}'
+    run run_hook
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"UNREADABLE"* ]]
+}
+
 @test "a stop already caused by a hook is never blocked twice" {
     tool_use Skill '{"skill":"dev-loop"}'
     planner '{"dispatchable":[{"issue":433,"surface":["a"]}],"excluded":[]}'

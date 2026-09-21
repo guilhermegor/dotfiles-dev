@@ -117,7 +117,15 @@ main() {
 	[ -r "$PLANNER" ] || announce_no_planner "$session_id"
 
 	plan="$(timeout "$PLANNER_TIMEOUT" python3 "$PLANNER" 2>/dev/null)"
-	if ! printf '%s' "$plan" | jq -e 'has("dispatchable") and has("excluded")' >/dev/null 2>&1; then
+	# Shape, not just keys: `{"dispatchable":null,"excluded":{}}` has both keys, formats to
+	# nothing, and would exit 0 below as a false "nothing to dispatch". Every dispatchable
+	# record needs an issue number; every excluded record needs a non-empty reason — an
+	# exclusion with no reason is exactly the silent skip this hook exists to refuse.
+	if ! printf '%s' "$plan" | jq -e '
+		(.dispatchable | type == "array") and (.excluded | type == "array")
+		and all(.dispatchable[]; (.issue | type == "number"))
+		and all(.excluded[]; (.issue | type == "number") and ((.reason // "") | length > 0))
+	' >/dev/null 2>&1; then
 		{
 			echo "round_dispatch_guard: dispatch plan UNREADABLE (planner failed, timed out, or"
 			echo "printed something that is not the documented object) — not the same as empty."

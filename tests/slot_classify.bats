@@ -20,17 +20,21 @@
 
 setup() {
     CLASSIFY="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/ai_clients/claude/hooks/lib/slot_classify.py"
+    # One clock read per test: ts() and reset_hhmm() both derive from it, so a minute
+    # boundary crossed between building the input and computing the expectation cannot
+    # make them disagree.
+    NOW_EPOCH="$(date -u +%s)"
 }
 
 # ts MINUTES_AGO -> an ISO-8601 Z timestamp that many minutes in the past.
 ts() {
-    date -u -d "$1 minutes ago" +%Y-%m-%dT%H:%M:%SZ
+    date -u -d "@$((NOW_EPOCH - $1 * 60))" +%Y-%m-%dT%H:%M:%SZ
 }
 
 # reset_hhmm MINUTES_AGO STATED_WAIT -> the HH:MM the classifier should report for a notice
 # posted MINUTES_AGO carrying a STATED_WAIT-minute wait.
 reset_hhmm() {
-    date -u -d "$(( $2 - $1 )) minutes" +%H:%M
+    date -u -d "@$((NOW_EPOCH + ($2 - $1) * 60))" +%H:%M
 }
 
 @test "an unrelated notice as the newest comment does not mask a running limit" {

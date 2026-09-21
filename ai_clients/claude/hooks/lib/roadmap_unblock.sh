@@ -37,6 +37,16 @@
 # ⚠️ A `decision:` blocker — the literal prefix, case-insensitive, recorded in the "Blocked by"
 # project text field or the issue body's own "**Blocked by:**" line — is NEVER auto-cleared,
 # closed native blockers or not. By definition only a person removes a decision blocker.
+#
+# dotfiles-dev#416: a blocker recorded only as PROSE (the "Blocked by" field or the body's
+# "**Blocked by:**" line naming `#N` / `owner/repo#N`) is invisible to GitHub's native
+# `blocked_by` relation — nothing resolves it, so an item stays "still blocked" forever even
+# after the named issue closes. When native `blocked_by` is empty, this file now parses issue
+# references out of that same recorded text and reads each one's own state, as an ADDITIONAL
+# source feeding the same three verdicts (unblocked / still blocked / UNKNOWN) — never a fourth
+# path and never a weakening of the two rules above: a `decision:` blocker is checked first and
+# always wins (this file never reaches the prose-ref resolution for one), and a failed state read
+# is UNKNOWN, left untouched, same fail-closed contract as the native read.
 set -u
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
@@ -73,6 +83,33 @@ _ru_native_blockers() {
 	# -s: --paginate emits one array per page, so slurp before validating or reading.
 	printf '%s' "$json" | jq -se 'length > 0 and all(type == "array")' >/dev/null 2>&1 || return 1
 	printf '%s' "$json" | jq -sr '.[][] | "\(.state)\t\(.repository.full_name)#\(.number)"' 2>/dev/null
+}
+
+# _ru_prose_refs TEXT DEFAULT_REPO
+# Prints every "#N" / "owner/repo#N" issue reference found in TEXT, one normalized
+# "owner/repo#number" per line (deduplicated) — a bare "#N" is qualified with DEFAULT_REPO. Prints
+# nothing when TEXT has no reference GitHub's own dependency graph would recognise.
+_ru_prose_refs() {
+	local text="$1" default_repo="$2" ref
+	printf '%s' "$text" | grep -oE '([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#[0-9]+' | while IFS= read -r ref; do
+		if [[ "$ref" == */* ]]; then
+			printf '%s\n' "$ref"
+		else
+			printf '%s%s\n' "$default_repo" "$ref"
+		fi
+	done | sort -u
+}
+
+# _ru_ref_state REF (as "owner/repo#number")
+# Prints the referenced issue's state, lowercased ("open"/"closed"). Returns 1 on any read
+# failure — the caller's fail-closed signal, same contract as _ru_native_blockers.
+_ru_ref_state() {
+	local ref="$1" repo number state
+	repo="${ref%#*}"
+	number="${ref##*#}"
+	state="$(gh issue view "$number" --repo "$repo" --json state --jq '.state' 2>/dev/null)" || return 1
+	[[ -n "$state" ]] || return 1
+	printf '%s\n' "${state,,}"
 }
 
 # _ru_has_comment REPO NUMBER TEXT
@@ -159,7 +196,44 @@ _ru_process_item() {
 	fi
 
 	if [[ -n "$field_text" || -n "$body_line" ]]; then
-		printf 'still blocked %s: recorded blocker %s\n' "$ident" "${field_text:-$body_line}"
+		local prose_text refs
+		prose_text="$field_text"$'\n'"$body_line"
+		refs="$(_ru_prose_refs "$prose_text" "$repo")"
+		if [[ -z "$refs" ]]; then
+			# No parseable "#N" reference in the recorded text — nothing to resolve.
+			printf 'still blocked %s: recorded blocker %s\n' "$ident" "${field_text:-$body_line}"
+			return 0
+		fi
+
+		local ref ref_state ref_rc=0 open_refs="" closed_refs=""
+		while IFS= read -r ref; do
+			[[ -n "$ref" ]] || continue
+			ref_state="$(_ru_ref_state "$ref")" || { ref_rc=1; break; }
+			if [[ "$ref_state" == "closed" ]]; then
+				closed_refs="$(printf '%s\n%s' "$closed_refs" "$ref")"
+			else
+				open_refs="$(printf '%s\n%s' "$open_refs" "$ref")"
+			fi
+		done <<<"$refs"
+		if ((ref_rc != 0)); then
+			printf 'UNKNOWN %s: could not read prose blocker state — left untouched\n' "$ident"
+			return 0
+		fi
+		open_refs="$(printf '%s\n' "$open_refs" | sed '/^$/d')"
+		closed_refs="$(printf '%s\n' "$closed_refs" | sed '/^$/d')"
+
+		if [[ -z "$open_refs" ]]; then
+			local detail
+			detail="$(printf '%s' "$closed_refs" | paste -sd, -)"
+			if _ru_unblock "$owner" "$project" "$repo" "$number" "$url" "$detail"; then
+				printf 'unblocked %s: prose blocker(s) closed (%s) -> Ready\n' "$ident" "$detail"
+			else
+				printf 'FAILED to unblock %s: a gh write failed partway — verify by hand\n' "$ident"
+			fi
+		else
+			printf 'still blocked %s: open prose blocker(s) %s\n' \
+				"$ident" "$(printf '%s' "$open_refs" | paste -sd, -)"
+		fi
 		return 0
 	fi
 

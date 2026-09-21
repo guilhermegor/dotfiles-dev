@@ -16,13 +16,16 @@ name: review_threads
 # BLOCKED forever). It DOES always post a plain PR comment either way: "Full
 # review finished" on success, a rate-limit refusal otherwise (review_retry.yml
 # already reacts to that second shape). `issue_comment` is the missing signal,
-# added third here — guarded HARD to CodeRabbit's own completion marker so a
-# human "LGTM", a rate-limit refusal, or any other comment can never stand in
-# for an actual review: that guard is what keeps the never-reviewed-must-FAIL
-# property (blueprintx#213) intact after this trigger is added. The verdict
-# itself is still computed live inside the step below, same as every other
-# trigger — this only widens WHEN the gate is asked to compute it, never what
-# it decides at push time.
+# added third here.
+#
+# ⚠️ The step below NEVER short-circuits to success just because an
+# issue_comment fired it — a GitHub Actions job that exits 0 posts a real
+# green check-run, so bailing early on "not CodeRabbit's marker" would let a
+# rate-limit refusal (or any human comment) silently satisfy the required
+# check before any review happened, reopening blueprintx#213 through a side
+# door. Every trigger — including issue_comment — instead falls through to
+# the SAME live re-check of reviews/threads; the completion marker only ever
+# ADDS a positive "a reviewer has reported" signal, it never skips the check.
 on:
   pull_request_review:
     types: [submitted, edited, dismissed]
@@ -55,20 +58,12 @@ jobs:
           # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
           source ai_clients/claude/hooks/lib/review_thread_gate.sh
 
-          # An issue_comment run only counts once we know it IS CodeRabbit's
-          # own completion marker — any other comment on this event is not a
-          # review signal at all, so bail before touching the gate (keeps
-          # every non-CodeRabbit comment a silent no-op, same as before #431).
+          # CodeRabbit's own completion marker is a positive signal only —
+          # see the header comment for why this never becomes an early exit.
           reviewer_reported=0
-          if [ "$EVENT_NAME" = "issue_comment" ]; then
-            if [ "$COMMENT_AUTHOR" != "coderabbitai[bot]" ]; then
-              echo "not CodeRabbit's comment — nothing to gate yet"
-              exit 0
-            fi
-            if ! printf '%s' "$COMMENT_BODY" | grep -qi 'full review finished'; then
-              echo "a CodeRabbit comment, but not its review-finished marker (e.g. a rate-limit refusal) — nothing to gate yet"
-              exit 0
-            fi
+          if [ "$EVENT_NAME" = "issue_comment" ] \
+            && [ "$COMMENT_AUTHOR" = "coderabbitai[bot]" ] \
+            && printf '%s' "$COMMENT_BODY" | grep -qi 'full review finished'; then
             reviewer_reported=1
           fi
 

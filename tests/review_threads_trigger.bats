@@ -37,16 +37,18 @@ teardown() {
     rm -f "$SCRIPT"
 }
 
-# run_step EVENT_NAME COMMENT_AUTHOR COMMENT_BODY REVIEW_COUNT THREADS_JSON
+# run_step EVENT_NAME COMMENT_AUTHOR COMMENT_BODY REVIEW_COUNT THREADS_JSON [ASSOCIATION]
 # Stubs `gh` for both calls the step makes (`pr view --json files`,
 # `pr view --json reviews`) plus the GraphQL call review_thread_gate.sh makes,
 # then runs the extracted script from the repo root so its relative `source`
 # resolves.
 run_step() {
     local event="$1" author="$2" body="$3" review_count="$4" threads_json="$5"
+    local association="${6:-}"
     run env \
         GH_TOKEN=x OWNER=o REPO=r PR_NUMBER=5 \
         EVENT_NAME="$event" COMMENT_AUTHOR="$author" COMMENT_BODY="$body" \
+        COMMENT_AUTHOR_ASSOCIATION="$association" \
         REVIEW_COUNT="$review_count" THREADS_JSON="$threads_json" \
         REPO_ROOT="$REPO_ROOT" SCRIPT="$SCRIPT" \
         bash -c '
@@ -125,4 +127,49 @@ run_step() {
     run_step "pull_request_review" "" "" 1 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
     [ "$status" -eq 0 ]
     [[ "$output" != *"no reviewer has reported"* ]]
+}
+
+# --- dotfiles-dev#451: the reviewer ladder's fallback review is a report ----
+# The ladder (#444/#446/#449) posts its fallback review as an issue_comment
+# from the operator's own account — never a review object — so review_count
+# stays 0 and only the marker + author_association can tell "reviewed via
+# the ladder" apart from "nobody has reported yet".
+
+LADDER_BODY="Fallback review — runtime: codex, model: codex-auto-review (selected by: review-specialized-slug)
+
+No findings."
+ZERO_THREADS='{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+ONE_OPEN_THREAD='{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":1,"nodes":[{"isResolved":false,"path":"a.sh","comments":{"totalCount":0,"nodes":[]}}]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+
+@test "ladder marker from OWNER, zero reviews, zero threads: passes" {
+    run_step "issue_comment" "guilhermegor" "$LADDER_BODY" 0 "$ZERO_THREADS" "OWNER"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"no reviewer has reported"* ]]
+}
+
+@test "ladder marker from author_association=NONE: fails" {
+    run_step "issue_comment" "guilhermegor" "$LADDER_BODY" 0 "$ZERO_THREADS" "NONE"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"no reviewer has reported"* ]]
+}
+
+@test "ladder marker from author_association=CONTRIBUTOR: fails" {
+    run_step "issue_comment" "guilhermegor" "$LADDER_BODY" 0 "$ZERO_THREADS" "CONTRIBUTOR"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"no reviewer has reported"* ]]
+}
+
+@test "ladder marker quoted on a non-first line: fails" {
+    local quoted="Re-posting for visibility:
+
+$LADDER_BODY"
+    run_step "issue_comment" "guilhermegor" "$quoted" 0 "$ZERO_THREADS" "OWNER"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"no reviewer has reported"* ]]
+}
+
+@test "ladder marker present but a thread is still open: fails" {
+    run_step "issue_comment" "guilhermegor" "$LADDER_BODY" 0 "$ONE_OPEN_THREAD" "OWNER"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"review gate status=problems"* ]]
 }

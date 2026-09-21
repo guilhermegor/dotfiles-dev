@@ -11,6 +11,15 @@ live here:
   at execution time, but the approval prompt shows the pre-hook command, so
   "don't ask again" creates a wrong allowlist entry (`Bash(git *)` instead
   of `Bash(rtk git *)`) unless the `rtk` form is what was typed.
+  ⚠️ **Worktree-isolated agents are the one case where this rewrite must not
+  fire.** A harness-provisioned isolated worktree (`.claude/worktrees/agent-
+  <id>/`) has its own guard that refuses an `rtk`-prefixed git invocation it
+  cannot statically verify — and since the rewrite runs before that guard
+  sees the command, no spelling the agent types satisfies both layers
+  (dotfiles-dev#417). `hooks/rtk_worktree_passthrough.sh` sits in front of
+  `rtk hook claude` and skips the rewrite (stripping any `rtk`/`rtk proxy`
+  prefix back to plain `git`) whenever cwd matches that path shape — a
+  worktree an agent creates itself under any other name is unaffected.
 - **Filtered-listing checks.** Use the **Read** or **Glob** tool — never
   rtk-proxied `ls`/`find` — to confirm a path exists. List a directory
   reliably with **Glob** (`dir/**`) or the raw escape hatch

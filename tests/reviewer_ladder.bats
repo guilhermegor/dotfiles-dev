@@ -317,7 +317,8 @@ ATTRIBUTION='Fallback review — runtime: codex, model: codex-auto-review (selec
 
 @test "codex review: passes --base and never --skip-git-repo-check" {
     codex() { printf 'codex %s\n' "$*"; }
-    export -f codex
+    git() { [ "$1" = rev-parse ] && return 0; command git "$@"; }
+    export -f codex git
     export REVIEWER_LADDER_BASE=origin/master
     run _run_runtime_review codex codex-auto-review "" 447
     [ "$status" -eq 0 ]
@@ -337,7 +338,16 @@ ATTRIBUTION='Fallback review — runtime: codex, model: codex-auto-review (selec
 }
 
 @test "print_status falls back to stderr, never to silence, when common.sh is absent" {
-    run bash -c "unset -f print_status; source '$BATS_TEST_DIRNAME/../ai_clients/claude/hooks/lib/reviewer_ladder.sh'; LIB_DIR=/nonexistent; declare -F print_status >/dev/null && print_status warning hello"
+    run bash -c "unset -f print_status; LIB_DIR=/nonexistent; source '$BATS_TEST_DIRNAME/../ai_clients/claude/hooks/lib/reviewer_ladder.sh'; declare -F print_status >/dev/null && print_status warning hello"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"hello"* ]]
+    [ "$output" = "warning: hello" ]
+}
+
+@test "codex review: a base that is not a git ref fails closed, calling no runtime" {
+    codex() { echo "RUNTIME CALLED" >&2; return 0; }
+    export -f codex
+    export REVIEWER_LADDER_BASE=origin/no-such-branch-xyz
+    run _run_runtime_review codex codex-auto-review "" 447
+    [ "$status" -eq 1 ]
+    [[ "$output" != *"RUNTIME CALLED"* ]]
 }

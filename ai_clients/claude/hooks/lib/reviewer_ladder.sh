@@ -51,7 +51,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	exit 1
 fi
 
-LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # shellcheck source=../../../../lib/common.sh
 source "$LIB_DIR/../../../../lib/common.sh" 2>/dev/null || true
 # Deployed to ~/.claude/hooks/lib/ the relative common.sh above does not exist,
@@ -292,11 +292,14 @@ ladder_candidate_ok() {
 # when neither resolves — the caller fails closed rather than diffing against
 # a guessed branch name.
 _review_base_ref() {
-	if [ -n "${REVIEWER_LADDER_BASE:-}" ]; then
-		printf '%s\n' "$REVIEWER_LADDER_BASE"
-		return 0
+	local base="${REVIEWER_LADDER_BASE:-}"
+	if [ -z "$base" ]; then
+		base="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" || return 1
 	fi
-	git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null
+	# A name is not a ref: a typo in REVIEWER_LADDER_BASE or a dangling
+	# origin/HEAD must fail closed here, not inside `codex review`.
+	git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1 || return 1
+	printf '%s\n' "$base"
 }
 
 # _run_runtime_review RUNTIME MODEL FALLBACKS PR_NUMBER

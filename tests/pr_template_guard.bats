@@ -63,6 +63,15 @@ payload() {
     [[ "$output" != *"unexpanded shell variable"* ]]
 }
 
+@test "recommends the git-ignored root-level scratch path, not .git/ (dotfiles-dev#441)" {
+    # .git/ is a plain FILE (not a directory) inside a git worktree, so the old advice ("move
+    # it into $root/.git/") failed outright there and left orphaned bodies with no lifecycle.
+    run bash -c "payload 'gh pr create --title x --body-file /tmp/outside-repo-441/body.md' | '$GUARD'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *".git-pr-<slug>.md"* ]]
+    [[ "$output" != *"e.g. $REPO/.git/"* ]]
+}
+
 @test "still names the create-and-consume/typo cause for a literal path inside the repo (#78)" {
     # A literal, absolute path INSIDE the repo root that simply does not exist yet must keep the
     # #78 behaviour (fail loud) without being misdiagnosed as "outside the project directory".

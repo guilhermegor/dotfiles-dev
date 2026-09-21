@@ -54,7 +54,11 @@ fi
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../../../lib/common.sh
 source "$LIB_DIR/../../../../lib/common.sh" 2>/dev/null || true
-declare -F print_status >/dev/null 2>&1 || print_status() { :; }
+# Deployed to ~/.claude/hooks/lib/ the relative common.sh above does not exist,
+# so a `:` fallback would make every status line (including "no rung
+# resolved") vanish — measured 2026-09-21: the first live dry run printed
+# nothing at all. Fall back to plain stderr, never to silence.
+declare -F print_status >/dev/null 2>&1 || print_status() { printf '%s: %s\n' "$1" "$2" >&2; }
 
 # --- codex rung --------------------------------------------------------------
 
@@ -282,10 +286,25 @@ ladder_candidate_ok() {
 	! ladder_recently_pushed "$pushed" "$now"
 }
 
+# _review_base_ref
+# The base `codex review --base` diffs against: REVIEWER_LADDER_BASE, else the
+# remote's default branch as the current checkout knows it. Empty (return 1)
+# when neither resolves — the caller fails closed rather than diffing against
+# a guessed branch name.
+_review_base_ref() {
+	if [ -n "${REVIEWER_LADDER_BASE:-}" ]; then
+		printf '%s\n' "$REVIEWER_LADDER_BASE"
+		return 0
+	fi
+	git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null
+}
+
 # _run_runtime_review RUNTIME MODEL FALLBACKS PR_NUMBER
 # Invokes the resolved CLI's own non-interactive review subcommand and prints
 # its findings. Override via REVIEWER_LADDER_RUN_CMD for tests/dry-run — never
 # executed when DRY_RUN=1 (run_fallback_review returns before reaching this).
+# Runs in the caller's cwd, which must be a checkout of the PR's head branch:
+# `codex review` reads the working tree, it does not fetch a PR by number.
 _run_runtime_review() {
 	local runtime="$1" model="$2" fallbacks="$3" pr_number="$4"
 	if [ -n "${REVIEWER_LADDER_RUN_CMD:-}" ]; then
@@ -294,7 +313,16 @@ _run_runtime_review() {
 	fi
 	case "$runtime" in
 	codex)
-		codex -m "$model" review --skip-git-repo-check "PR #$pr_number"
+		# `codex review` has no --skip-git-repo-check (that flag belongs to
+		# `codex exec`, the probe); measured live 2026-09-21 on #447, the first
+		# real run: "unexpected argument '--skip-git-repo-check'". `-m` is a
+		# global option and stays before the subcommand.
+		local base
+		base="$(_review_base_ref)" || {
+			print_status "error" "cannot resolve the review base (set REVIEWER_LADDER_BASE)"
+			return 1
+		}
+		codex -m "$model" review --base "$base" "PR #$pr_number"
 		;;
 	qwen)
 		local fb_args=() fb

@@ -53,6 +53,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
           COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
         run: |
           set -euo pipefail
           # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
@@ -65,6 +66,22 @@ jobs:
             && [ "$COMMENT_AUTHOR" = "coderabbitai[bot]" ] \
             && printf '%s' "$COMMENT_BODY" | grep -qi 'full review finished'; then
             reviewer_reported=1
+          fi
+
+          # The reviewer ladder (#444/#446/#449) posts its fallback review as
+          # an issue_comment from the OPERATOR'S OWN account — never a review
+          # object, so review_count can't see it either (dotfiles-dev#451).
+          # The attribution marker is PUBLIC TEXT anyone could paste into a
+          # comment, so it is a positive signal only paired with the ONE
+          # unforgeable part: author_association (same CWE-345 lesson #446's
+          # review thread taught the ladder itself — never key on login).
+          if [ "$reviewer_reported" -eq 0 ] && [ "$EVENT_NAME" = "issue_comment" ]; then
+            first_line=$(printf '%s\n' "$COMMENT_BODY" | head -n1)
+            ladder_marker_re='^Fallback review — runtime: (qwen|codex), model: .+ \(selected by: .+\)$'
+            if [[ "$first_line" =~ $ladder_marker_re ]] \
+              && [[ "$COMMENT_AUTHOR_ASSOCIATION" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]]; then
+              reviewer_reported=1
+            fi
           fi
 
           # Selective, not full-parity (dotfiles-dev#157): none of the three

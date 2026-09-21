@@ -321,7 +321,8 @@ ATTRIBUTION='Fallback review — runtime: codex, model: codex-auto-review (selec
     export REVIEWER_LADDER_BASE=origin/master
     run _run_runtime_review codex codex-auto-review "" 447
     [ "$status" -eq 0 ]
-    [[ "$output" == "codex -m codex-auto-review review --base origin/master PR #447" ]]
+    [[ "$output" == "codex -m codex-auto-review review --base origin/master --title PR #447" ]]
+    [[ "$output" != *"review --base origin/master PR"* ]]
     [[ "$output" != *"skip-git-repo-check"* ]]
 }
 

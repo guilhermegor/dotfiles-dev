@@ -322,7 +322,10 @@ _run_runtime_review() {
 			print_status "error" "cannot resolve the review base (set REVIEWER_LADDER_BASE)"
 			return 1
 		}
-		codex -m "$model" review --base "$base" "PR #$pr_number"
+		# `--base` and the positional [PROMPT] are mutually exclusive (measured
+		# live on #434: "the argument '--base <BRANCH>' cannot be used with
+		# '[PROMPT]'"); the PR label rides on --title instead.
+		codex -m "$model" review --base "$base" --title "PR #$pr_number"
 		;;
 	qwen)
 		local fb_args=() fb

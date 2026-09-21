@@ -57,6 +57,7 @@ An agent killed mid-flight leaves work in its worktree. A worktree is torn down;
 ```bash
 /usr/bin/git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r p; do
   b=$(/usr/bin/git -C "$p" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  [ "$b" = "HEAD" ] && b="detached@$(/usr/bin/git -C "$p" rev-parse --short HEAD 2>/dev/null)"
   d=$(/usr/bin/git -C "$p" status --porcelain 2>/dev/null | wc -l)
   if /usr/bin/git -C "$p" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1; then
     u=$(/usr/bin/git -C "$p" rev-list --count '@{upstream}..HEAD' 2>/dev/null || echo 0)

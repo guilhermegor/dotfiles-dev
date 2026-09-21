@@ -123,6 +123,35 @@ The issue guard derives its requirements straight from each template file:
 A repo with several issue templates passes if the body satisfies **any
 one** of them — an issue follows one template, not all.
 
+### Where a PR body scratch file lives (dotfiles-dev#441)
+
+`pr_template_guard.sh`'s filesystem view is sandboxed to the project
+directory (see `block_unresolved_body_file()`), so a `--body-file` under
+`/tmp` or any other out-of-repo path is rejected outright. The body must
+live inside the repo, but a PR body is not source — it must never be
+committed. The home is a **root-level `$root/.git-pr-<slug>.md`**, already
+git-ignored (`.gitignore`'s `.git-pr-*.md` entry, dotfiles-dev#197) —
+**not** `$root/.git/`, which the guard used to recommend. `.git/` fails in
+two ways: inside a git worktree it is a plain FILE, not a directory, so a
+write there fails outright (this repo's own agents work almost entirely in
+worktrees under `.claude/worktrees/`); and even where it is writable,
+nothing ever looks at it again — 31 files rotted there in blueprintx alone
+before this was caught. A `.git-pr-<slug>.md` file works identically in a
+worktree or the main checkout, and stays visible to `ls` at the repo root
+(unlike `.git/`, which every tool skips by convention) — easier to notice,
+not easier to lose.
+
+`hooks/pr_body_orphan_check.sh` is the deterministic reaper's first half:
+run it (`ai_clients/claude/hooks/pr_body_orphan_check.sh [repo-root]`) to
+report every `.git-pr-*.md` file with **no corresponding PR**, matched by
+CONTENT rather than filename (a name like `issue_rmw.md` says nothing
+about which PR it belongs to). It is deliberately **not** wired into
+`settings.json` as a live hook — it is a manual/periodic report, run by a
+human or `/session-closeout`-style flow. It **never deletes anything**: a
+file whose PR can't be determined (no `gh`/`jq`, or the `gh` call itself
+fails) is reported UNKNOWN, never treated as orphaned — reaping is a
+follow-up once the matching is trusted, not this cut.
+
 ## PR merge guard: review threads AND a reviewer's own check
 
 `hooks/pr_merge_threads_guard.sh` is a third `PreToolUse` hook, but it gates

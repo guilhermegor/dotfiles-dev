@@ -6,9 +6,78 @@ produce before and during implementation, and what `s:work-breakdown`'s
 auto-sizing step (dotfiles-dev#306) produces for a decomposed feature. See
 dotfiles-dev#303.
 
+## Top-level allowlist
+
+`.specs/` may contain exactly these entries at its top level — nothing
+else, including a change-type folder (`bugfix/`, `chore/`, `feat/`, …; see
+"Type-folders are rejected" below). Mechanically enforced by
+`tests/check_specs_structure.sh` (dotfiles-dev#443), wired into CI and the
+local pre-commit hook.
+
+| Entry       | What it holds                                                    |
+|-------------|-------------------------------------------------------------------|
+| `CLAUDE.md` | this file — required whenever `.specs/` exists                    |
+| `features/` | one directory per unit of work (see "What belongs here" below)    |
+| `backlog/`  | cross-feature efforts that map to no single feature (see below)   |
+| `_lessons/` | generated lesson mirrors, git-ignored (see below)                 |
+
+## Type-folders are rejected — recorded so this is not re-raised
+
+`bugfix/`, `chore/`, `feat/` and similar change-type folders at the
+`.specs/` top level were considered and deliberately **not** adopted
+(dotfiles-dev#442):
+
+- `features/` splits on **lifecycle** (design → plan → tasks → PR), not
+  change type. Change type is an orthogonal axis, and mixing the two forces
+  a choice with no right answer: a bugfix that needed a real design
+  document, a chore that produced three PRs.
+- The type is already recorded twice — the Conventional-Commit prefix and
+  the branch name. A third copy in a path is a third thing to keep in sync.
+- A feature directory is not the place to learn what kind of change it
+  was — that is what the PR and the commits say.
+
+`tests/check_specs_structure.sh` enforces this by construction: the
+top-level allowlist above has no entry for a type-folder, so anything
+outside `CLAUDE.md`/`features/`/`backlog/`/`_lessons/` fails — type-folders
+included, with no special-casing needed.
+
+## `backlog/` — cross-feature efforts that map to no single feature
+
+Not every piece of work fits `features/<name>/`'s one-unit-of-work shape.
+Some records are cross-cutting notes, decisions, or triage items that map
+to no single feature. Those live flat under `.specs/backlog/`, one file per
+entry — this is distinct from "Backlog / issue-triage notes", which still
+routes to `docs/backlog/` (see "What does NOT belong here" below); this
+directory is for cross-feature *spec-shaped* records, not triage notes.
+
+**Naming: `<kebab-slug>.md`** — the same convention `features/<name>/`
+uses, not the `<topic>_YYYYMMDD_HHMMSS.md` timestamp pattern blueprintx's
+migrated backlog files use (blueprintx#575). One naming rule across
+`.specs/` is simpler than two to state, follow, and mechanically check, and
+dotfiles-dev's own `.specs/backlog/` starts empty — there is no existing
+content whose pattern needs preserving. git history already carries the
+timeline, the same reasoning `features/<name>/`'s slug-not-date naming
+uses below.
+
+## Scaffolded `.specs/` (generated projects) — a different, smaller contract
+
+blueprintx's `templates/common/.specs/` (blueprintx#446) ships `spec.md` +
+`features/.gitkeep` to every generated project. That is a deliberately
+smaller, different contract from this file's — a generated project has not
+adopted the full `CLAUDE.md`/`features/`/`backlog/`/`_lessons/` layout
+described here just because it was scaffolded a `.specs/` starting point.
+`tests/check_specs_structure.sh` checks dotfiles-dev's own tree only; it is
+not run against scaffolded output, so this is stated explicitly rather than
+reconciled here (dotfiles-dev#442 non-goal — blueprintx#583 owns the
+scaffold-side validator).
+
 ## What belongs here
 
 Per feature, one directory: `.specs/features/<feature-name>/`
+
+**Required: at least one of `spec.md`, `design.md`, `plan.md`.** Everything
+else below is optional. `tests/check_specs_structure.sh` checks this
+mechanically.
 
 - `spec.md` — `s:work-breakdown`'s always-present output: acceptance criteria,
   sized one-liner/brief/full per its auto-sizing table (#306)
@@ -19,6 +88,11 @@ Per feature, one directory: `.specs/features/<feature-name>/`
 - `tasks.md` — `s:work-breakdown`'s Large-scope per-task breakdown for a
   decomposed, multi-issue feature (#306) — a different shape than `plan.md`,
   written only when the feature was split into parallel-dispatchable issues
+- `pr.md` — the PR body, written before the PR exists (dotfiles-dev#441
+  settled this as `pr.md`'s home). A single PR: `pr.md`. Several PRs from
+  one feature: `pr-N-<slug>.md` per PR — the body is written **before** the
+  PR number exists, so the filename can't carry it; the number goes on a
+  header line inside the file instead (e.g. `# PR 3: <slug>`).
 - `progress.md` — **optional**, and unlike the four above it is not written up
   front by a planning skill: the session doing the work writes and updates it
   as the work happens, so an interrupted session can be resumed without

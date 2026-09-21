@@ -9,16 +9,35 @@ name: review_threads
 # review lands (blueprintx#180 merged with two threads open, all green).
 # ⚠️ Also fails when NO reviewer has reported at all, not only when a thread
 # is left open (blueprintx#213 merged unreviewed with every check green).
+#
+# ⚠️ dotfiles-dev#431: a CLEAN review fires neither of the two triggers above
+# — CodeRabbit posts NO pull_request_review and NO review comment when it
+# finds nothing (measured on #412: `pulls/412/reviews` length 0, mergeStateStatus
+# BLOCKED forever). It DOES always post a plain PR comment either way: "Full
+# review finished" on success, a rate-limit refusal otherwise (review_retry.yml
+# already reacts to that second shape). `issue_comment` is the missing signal,
+# added third here — guarded HARD to CodeRabbit's own completion marker so a
+# human "LGTM", a rate-limit refusal, or any other comment can never stand in
+# for an actual review: that guard is what keeps the never-reviewed-must-FAIL
+# property (blueprintx#213) intact after this trigger is added. The verdict
+# itself is still computed live inside the step below, same as every other
+# trigger — this only widens WHEN the gate is asked to compute it, never what
+# it decides at push time.
 on:
   pull_request_review:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
     types: [created, edited]
+  issue_comment:
+    types: [created]
 
 jobs:
   gate:
     name: Review threads answered
     runs-on: ubuntu-latest
+    # issue_comment fires for both issues and PRs; skip a plain-issue comment
+    # outright rather than let PR_NUMBER resolve to a non-PR issue number.
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request != null
     steps:
       - uses: actions/checkout@v5
 
@@ -27,17 +46,37 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           set -euo pipefail
           # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
           source ai_clients/claude/hooks/lib/review_thread_gate.sh
 
-          # Selective, not full-parity (dotfiles-dev#157): pull_request_review
-          # and pull_request_review_comment events carry no `paths:` filter,
-          # so the scope decision is re-checked here at runtime instead.
-          # OWNER and REPO come from the env: block above, which actionlint
-          # cannot see when it lints this run: script standalone — hence SC2153.
+          # An issue_comment run only counts once we know it IS CodeRabbit's
+          # own completion marker — any other comment on this event is not a
+          # review signal at all, so bail before touching the gate (keeps
+          # every non-CodeRabbit comment a silent no-op, same as before #431).
+          reviewer_reported=0
+          if [ "$EVENT_NAME" = "issue_comment" ]; then
+            if [ "$COMMENT_AUTHOR" != "coderabbitai[bot]" ]; then
+              echo "not CodeRabbit's comment — nothing to gate yet"
+              exit 0
+            fi
+            if ! printf '%s' "$COMMENT_BODY" | grep -qi 'full review finished'; then
+              echo "a CodeRabbit comment, but not its review-finished marker (e.g. a rate-limit refusal) — nothing to gate yet"
+              exit 0
+            fi
+            reviewer_reported=1
+          fi
+
+          # Selective, not full-parity (dotfiles-dev#157): none of the three
+          # trigger events above carry a `paths:` filter, so the scope
+          # decision is re-checked here at runtime instead. OWNER and REPO
+          # come from the env: block above, which actionlint cannot see when
+          # it lints this run: script standalone — hence SC2153.
           # shellcheck disable=SC2153
           changed=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
             --json files --jq '.files[].path')
@@ -49,9 +88,14 @@ jobs:
           # No review at all is a distinct failure from "thread left open" —
           # the shared gate reports "clean" on zero threads, which is correct
           # for its own soft-nudge callers but wrong for a required check.
+          # A clean CodeRabbit review also submits zero review objects
+          # (dotfiles-dev#431), so `review_count` alone can no longer tell
+          # "reviewed, found nothing" apart from "never reviewed" — the
+          # verified issue_comment marker above is what makes that call now.
           review_count=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
             --json reviews --jq '.reviews | length')
-          if [ "$review_count" -eq 0 ]; then
+          [ "$review_count" -gt 0 ] && reviewer_reported=1
+          if [ "$reviewer_reported" -eq 0 ]; then
             echo "::error::no reviewer has reported on this PR yet"
             exit 1
           fi

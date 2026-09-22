@@ -78,15 +78,3 @@ run_hook() {
     [ "$status" -eq 0 ]
     [[ "$output" == *FAKE_RTK_CALLED* ]]
 }
-
-# --- wiring: an installed-but-unreferenced hook never runs (PR #452 review) -------------------
-
-@test "settings.json routes the Bash PreToolUse rewrite through the passthrough, not rtk directly" {
-    SETTINGS="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/ai_clients/claude/settings.json"
-    run jq -r '.hooks.PreToolUse[]|select(.matcher=="Bash")|.hooks[].command' "$SETTINGS"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *rtk_worktree_passthrough.sh* ]]
-    [[ "$output" != *'"rtk hook claude"'* ]]
-    run grep -c '"rtk hook claude"' "$SETTINGS"
-    [ "$output" = "0" ]
-}

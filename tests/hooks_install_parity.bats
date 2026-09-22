@@ -10,9 +10,16 @@
 # printed success for the 21 hooks it did copy. A green test proves a hook WORKS; it does not
 # prove the hook is DEPLOYED.
 #
-# Direction asserted: registered => installed. The reverse is deliberately NOT asserted --
-# lib/review_thread_gate.sh is a shared library that is installed but never registered as a
-# hook entry, and that is correct.
+# Both directions are asserted: registered => installed (below), AND installed => registered
+# (dotfiles-dev#458). The second gap shipped in PR #452: rtk_worktree_passthrough.sh was
+# installed by hooks.sh, had its own passing bats suite, and settings.json still invoked
+# `rtk hook claude` directly -- no PreToolUse payload ever reached it. An installed file
+# nothing references looks identical to a working hook from every place a test previously
+# looked (file exists, is executable, its own suite passes).
+#
+# lib/ is the one legitimate exception to installed => registered: a lib is sourced by a
+# hook, never registered as a hook entry itself. Any other exception must be an explicit
+# allowlist entry with a reason, never an implicit pass.
 #
 # Run locally:  bats tests/            (install with: sudo apt-get install -y bats)
 
@@ -21,6 +28,10 @@ setup() {
     SETTINGS="$REPO_ROOT/ai_clients/claude/settings.json"
     HOOKS_LIB="$REPO_ROOT/ai_clients/claude/lib/hooks.sh"
 }
+
+# Hooks installed by hooks.sh but intentionally not registered as a hook entry in
+# settings.json. Empty today -- any future entry here must carry a one-line reason.
+ORPHAN_ALLOWLIST=()
 
 # Every "hooks/<name>.sh" path named in settings.json, deduped.
 registered_hooks() {
@@ -67,6 +78,27 @@ installed_hooks() {
     if [ -n "$missing" ]; then
         echo "Registered in settings.json but never copied by install_hooks():$missing"
         echo "Add a copy_hook_file call for each, per the header note in lib/hooks.sh."
+        return 1
+    fi
+}
+
+@test "every hook installed by hooks.sh is registered in settings.json" {
+    local orphaned=""
+    local hook
+    while IFS= read -r hook; do
+        [ -n "$hook" ] || continue
+        [[ "$hook" == lib/* ]] && continue  # libs are sourced, never registered
+        if printf '%s\n' "${ORPHAN_ALLOWLIST[@]-}" | grep -qxF "$hook"; then
+            continue
+        fi
+        if ! registered_hooks | grep -qxF "$hook"; then
+            orphaned="$orphaned $hook"
+        fi
+    done < <(installed_hooks)
+
+    if [ -n "$orphaned" ]; then
+        echo "Installed by hooks.sh but never registered in settings.json:$orphaned"
+        echo "Add a settings.json hook entry, or add an ORPHAN_ALLOWLIST entry with a reason."
         return 1
     fi
 }

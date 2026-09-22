@@ -295,7 +295,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "rtk hook claude"
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/rtk_worktree_passthrough.sh\""
           },
           {
             "type": "command",

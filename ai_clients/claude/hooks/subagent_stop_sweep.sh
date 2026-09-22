@@ -116,7 +116,22 @@ sweep_worktrees() {
 		[ "$wt" = "$main_wt" ] && continue
 		b="$($GIT -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null)"
 		st="$($GIT -C "$wt" status --porcelain 2>/dev/null | wc -l)"
-		un="$($GIT -C "$wt" rev-list --count "origin/$b..$b" 2>/dev/null || echo no-remote)"
+		# Measure "unpushed" against the branch's OWN upstream, never `origin/$b`.
+		# On a DETACHED HEAD, `rev-parse --abbrev-ref HEAD` prints the literal string
+		# "HEAD", so `origin/$b` silently becomes `origin/HEAD` — a symref to the default
+		# branch — and the count turns into "commits ahead of main". Every detached
+		# worktree then reports phantom unpushed work whose only cure is deleting it;
+		# measured twice in two rounds on blueprintx, 3 scratch worktrees reported
+		# 8/3/4 "unpushed" commits that were all already on origin. A sweep that cries
+		# wolf is worse than none — the operator learns to skip it, and then it catches
+		# nothing. lib/worktree_fanout.sh already got this right; this is that same form.
+		if $GIT -C "$wt" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1; then
+			un="$($GIT -C "$wt" rev-list --count '@{upstream}..HEAD' 2>/dev/null || echo 0)"
+			[ -n "$un" ] || un=0
+		else
+			un=no-remote
+		fi
+		[ "$b" = "HEAD" ] && b="detached@$($GIT -C "$wt" rev-parse --short HEAD 2>/dev/null)"
 		if [ "$st" != "0" ]; then
 			echo "    - $b: $st uncommitted"
 			any=1

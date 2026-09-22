@@ -154,6 +154,21 @@ main() {
 	# Explicit opt-out.
 	printf '%s' "$command" | grep -q "$ESCAPE_HATCH" && exit 0
 
+	# `--auto` off the REAL argv (dotfiles-dev#462, see the header). Stand aside only when the
+	# matcher positively reports both `matched` and `auto`; every other outcome -- no python3,
+	# an untokenizable command, a `--auto` that lives inside a quoted value -- leaves the checks
+	# below running, so uncertainty keeps today's blocking behaviour rather than waving a merge
+	# through on a guess.
+	if command -v python3 >/dev/null 2>&1; then
+		local match_json
+		if match_json="$(printf '%s' "$command" \
+			| python3 "$(dirname "${BASH_SOURCE[0]}")/lib/gh_cmd_match.py" pr 2>/dev/null)" \
+			&& [[ -n "$match_json" ]] \
+			&& [[ "$(printf '%s' "$match_json" | jq -r '.matched and .auto' 2>/dev/null)" == "true" ]]; then
+			exit 0
+		fi
+	fi
+
 	# The MERGE TARGET, not "whatever PR this branch happens to be on".
 	#
 	# ⚠️ `gh pr merge` takes its target as a number, a branch name OR a URL, in any position among

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Find and tokenize one `gh <noun> create|edit` invocation inside a raw shell command string.
+"""Find and tokenize one `gh <noun> create|edit|merge` invocation inside a raw shell command
+string.
 
 Used by pr_template_guard.sh and issue_template_guard.sh (via resolve_gh_command() in
 gh_body_guard_common.sh) to replace regex scraping of the raw command text with real argv
@@ -8,12 +9,17 @@ inside a quoted argument, and only ever looked at the START of the whole command
 missing every invocation chained after `;`, `&&`, `||`, `|`, `&`, or a newline (dotfiles-dev,
 CodeRabbit review on PR #371).
 
+`merge` was added for pr_merge_threads_guard.sh (dotfiles-dev#462): it needs to know whether
+`--auto` is present on `gh pr merge`, off the same real argv, for the identical reason — a
+`--auto` INSIDE a quoted `--title`/`--body` value must not count, and the same chaining rule
+applies.
+
 Reads the raw command string on stdin, takes the noun ("pr" or "issue") as argv[1], and prints
 one line of JSON to stdout:
 
     {"matched": false}
     {"matched": true, "repo": "...", "has_body": true, "body": "...",
-     "has_body_file": false, "body_file": null, "labels": ["state:blocked"]}
+     "has_body_file": false, "body_file": null, "labels": ["state:blocked"], "auto": false}
 
 Exit code 0 on success (matched or not — "not matched" is a normal, common outcome, not a
 failure). Exit code 1 if the command could not be tokenized at all (an unbalanced quote or an
@@ -95,7 +101,9 @@ def split_segments(command):
 
 
 def matching_argv(segments, noun):
-    """Return the argv of the first segment shaped like `[rtk] gh <noun> create|edit`, or None."""
+    """Return the argv of the first segment shaped like `[rtk] gh <noun> create|edit|merge`, or
+    None.
+    """
     for segment in segments:
         argv = shlex.split(segment, posix=True)  # ValueError propagates: caller must fail open
         idx = 1 if argv[:1] == ["rtk"] else 0
@@ -103,7 +111,7 @@ def matching_argv(segments, noun):
             len(argv) >= idx + 3
             and argv[idx] == "gh"
             and argv[idx + 1] == noun
-            and argv[idx + 2] in ("create", "edit")
+            and argv[idx + 2] in ("create", "edit", "merge")
         ):
             return argv[idx + 3:]
     return None
@@ -177,6 +185,7 @@ def main():
         "has_body_file": has_body_file,
         "body_file": body_file,
         "labels": labels,
+        "auto": "--auto" in argv,
     }))
     return 0
 

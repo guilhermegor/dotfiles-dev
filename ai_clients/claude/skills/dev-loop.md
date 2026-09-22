@@ -57,11 +57,24 @@ An agent killed mid-flight leaves work in its worktree. A worktree is torn down;
 ```bash
 /usr/bin/git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r p; do
   b=$(/usr/bin/git -C "$p" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  [ "$b" = "HEAD" ] && b="detached@$(/usr/bin/git -C "$p" rev-parse --short HEAD 2>/dev/null)"
   d=$(/usr/bin/git -C "$p" status --porcelain 2>/dev/null | wc -l)
-  u=$(/usr/bin/git -C "$p" rev-list --count "origin/$b..$b" 2>/dev/null || echo NO-REMOTE)
-  [ "$d" != "0" ] || [ "$u" != "0" ] && echo "$b dirty=$d unpushed=$u"
+  if /usr/bin/git -C "$p" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1; then
+    u=$(/usr/bin/git -C "$p" rev-list --count '@{upstream}..HEAD' 2>/dev/null || echo 0)
+  else
+    u=NO-REMOTE
+  fi
+  [ "$d" != "0" ] || { [ "$u" != "0" ] && [ "$u" != "NO-REMOTE" ]; } && echo "$b dirty=$d unpushed=$u"
 done
 ```
+
+🔴 **`@{upstream}`, never `origin/$b`.** On a **detached HEAD** — every `--detach` worktree, which
+is the normal shape for inspecting a PR — `rev-parse --abbrev-ref HEAD` prints the literal string
+`HEAD`, so `origin/$b` becomes `origin/HEAD`, a symref to the default branch. The count then means
+*"commits ahead of `main`"*, and every detached worktree reports phantom unpushed work. Measured
+twice in two rounds on blueprintx: three scratch worktrees reported 8/3/4 "unpushed" commits that
+were already on `origin`, byte-identical. Same failure family as the rtk-proxy trap below — the
+command succeeds and answers a question nobody asked.
 
 🔴 **`/usr/bin/git`, never the rtk proxy — not even for `worktree list`.** The proxy returns `ok`
 for a clean tree, which `wc -l` counts as 1, and its reformatted `worktree list` breaks the
@@ -281,7 +294,10 @@ measured running **6 times in 21 hours** — GitHub throttles scheduled workflow
 repos, hardest where the mechanism is most needed. `schedule:` is the one trigger GitHub is free to
 skip; a session-owned `CronCreate` poll is not.
 
-1. **Classify the slot, three states plus an escape hatch — never a binary busy/free.** Read the
+1. **Classify the slot, three states plus an escape hatch — never a binary busy/free.** Pipe the
+   comment page into `hooks/lib/slot_classify.py`, which prints one token (`FREE|<reason>`,
+   `BUSY|<reason>`, `UNKNOWN`); **never re-derive this by hand** (dotfiles-dev#433) — reading the
+   newest notice by eye re-commits all three defects its fixtures pin down. Read the
    newest roster notice, querying `is:pr` **without** `is:open`: a PR that merged since its last
    notice still spent the same account-level quota, and scoping to open PRs alone makes that spend
    invisible.
@@ -391,6 +407,58 @@ skip; a session-owned `CronCreate` poll is not.
    pending," and let step 4 settle it next round.** Do not poll the ack — a refusal and an
    acceptance-then-refusal are the same outcome, and the ack only answers a question the gate answers
    more reliably.
+5. **Fallback the ask itself — qwen, then codex, when the primary rung reports BUSY or UNKNOWN.**
+   Item 1 above used to mean "stop, wait for the next tick" on those two states. It no longer has
+   to: `ai_clients/claude/hooks/lib/reviewer_ladder.sh` resolves one fallback rung and posts a
+   review instead of leaving the window unspent (dotfiles-dev#444).
+
+   🔴 **Never hardcode a model name — resolve by measured capability, at run time, every call.**
+   Model names churn (`astra`/`sol`/`terra` were the expected Codex tiers; the account measured
+   2026-09-21 exposed `gpt-5.6-terra`/`gpt-5.6-luna`/`gpt-5.5`/`gpt-reserve`/`codex-auto-review`
+   instead — none of the names anyone expected). `resolve_fallback_reviewer` enumerates what
+   `~/.codex/models_cache.json` and `~/.qwen/settings.json` report RIGHT NOW, live-probes a
+   candidate with a trivial call (`"reply with the single word OK"`), and only then picks a winner
+   — every codex candidate in rank order until one passes; for qwen only the primary, because its
+   runner-ups ride the native `--fallback-model` flag instead (the qwen paragraph below).
+   A rung that resolves nothing is skipped — the ladder falls through, it never guesses a name.
+
+   ⚠️ **`priority` in `models_cache.json` is NOT a capability rank — do not sort by it.** Measured
+   2026-09-21: `codex-auto-review` — a model named for reviewing — carries `priority: 43`, while
+   `gpt-5.5`, a general model, carries `priority: 12`. Sorting ascending picks the general model
+   over the review-specialised one while looking principled; sorting descending does no better —
+   neither direction of `priority` correlates with review capability. `visibility: list` is
+   equally rejected as an entitlement proxy: `codex-auto-review` is `visibility: hide` on this
+   account and still answered a live probe call (`codex exec -m codex-auto-review` returned `OK`)
+   — `hide` means "not advertised in the picker," not "not entitled." The cache lists what
+   EXISTS, never what this account is ENTITLED to call — only a live probe answers that. The
+   resolver's accepted signal, in order: (1) a review-specialised slug (name matches `/review/i`)
+   that PASSES the live probe, else (2) the richest `supported_reasoning_levels` set among the
+   candidates that pass the probe ("number of parameters" is not a field either cache exposes).
+   Neither `priority` nor `visibility` is read for ranking anywhere in the resolver.
+
+   qwen exposes no cache-with-priority equivalent — `~/.qwen/settings.json`'s
+   `.modelProviders.openai[]` is a flat id list. qwen ships a **native** `--fallback-model` flag
+   instead (repeatable, max 3, for capacity errors 429/503/529): the resolver hands its runner-up
+   candidates to that flag rather than reimplementing per-model retry, and only live-probes the
+   primary qwen candidate — `--fallback-model` already covers the capacity-error case for the rest.
+
+   Every fallback review is **clearly attributed** in the comment it posts —
+   `Fallback review — runtime: <qwen|codex>, model: <resolved slug> (selected by: <signal>)` — a
+   reader must never have to guess which reviewer produced a finding, because their false-positive
+   rates differ. The same blast-radius discipline as item 2 applies, plus two more: **one PR per
+   invocation** (there is no loop-over-PRs form of `run_fallback_review`), and **never re-review a
+   PR whose comments already carry a higher rung's attribution line**.
+
+   `DRY_RUN=1` (or a trailing `--dry-run`) resolves and reports the chosen rung+model without
+   invoking a runtime or posting anything — and the entitlement probe IS a runtime call, so a dry
+   run skips it too and reports the cache's top-ranked candidate **unprobed** (its output says so).
+   A dry run therefore verifies the ranking and the plumbing, never the entitlement; only a live
+   run measures that. Required for any manual check of this step; never post a live review to a
+   real PR while verifying the ladder by hand.
+
+   **Non-goals:** this does not replace the primary reviewer (item 3/4 above still runs first and
+   this only fires when that rung is unavailable), does not add a Claude marketplace plugin (both
+   CLIs are already on `PATH`), and is not a general multi-model router — one ladder, one step.
 
 Report **time-to-first-review per PR**, never requests per hour: a PR sitting unreviewed is the
 user-visible cost, and that is the number this step must move.
@@ -465,6 +533,13 @@ on a non-Python repo fails **silently and inverted** — it *suppresses* a relea
 erroring. `.claude/release.conf` is the declared list where one exists.
 
 ## 6. DISPATCH — the loop's other half
+
+`hooks/round_dispatch_guard.sh` (a `Stop` hook, dotfiles-dev#433) refuses to end a round that
+had dispatchable candidates and started no agent, naming each candidate and its file surface;
+the legitimate zero case is every candidate carrying its own named reason, never an override
+flag. It reads `hooks/lib/dispatch_plan.py` for that verdict — **never re-derive the
+non-colliding set by hand** — and until that planner ships it announces itself as a no-op rather
+than passing quietly.
 
 This step is now observed, not just written down: `hooks/dispatch_free_surface_guard.sh`
 (a `Stop` hook, sibling of `uncommitted_worktree_guard.sh`, dotfiles-dev#396) refuses to end the

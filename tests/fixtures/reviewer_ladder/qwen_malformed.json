@@ -1,0 +1,4 @@
+{
+  "model": {"name": "qwen3.5-plus"},
+  "note": "no modelProviders key at all"
+}

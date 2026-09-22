@@ -26,6 +26,7 @@ setup() {
     git -C "$REPO_DIR" add present.txt
     git -C "$REPO_DIR" commit -q -m "seed"
     git -C "$REPO_DIR" update-ref refs/remotes/origin/master master
+    git -C "$REPO_DIR" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
 }
 
 teardown() {
@@ -80,6 +81,34 @@ gh_stub_merged_link() {
     [[ "$output" == *"MISSING missing.txt"* ]]
     [[ "$output" == *"present=1 missing=1 of 2"* ]]
     [[ "$output" == *"no merged PR linked this issue"* ]]
+}
+
+@test "shipped_check: no origin/HEAD symref -> UNKNOWN, never guesses origin/master" {
+    local no_head_repo
+    no_head_repo="$(mktemp -d)"
+    git -C "$no_head_repo" init -q -b master
+    git -C "$no_head_repo" config user.email "test@example.com"
+    git -C "$no_head_repo" config user.name "test"
+    echo x > "$no_head_repo/present.txt"
+    git -C "$no_head_repo" add present.txt
+    git -C "$no_head_repo" commit -q -m "seed"
+    git -C "$no_head_repo" update-ref refs/remotes/origin/master master
+    # deliberately no `git symbolic-ref refs/remotes/origin/HEAD` -- the
+    # unconfigured-remote-HEAD case this fix guards against.
+
+    run env REPO_DIR="$no_head_repo" LIB="$LIB" bash -c '
+        cd "$REPO_DIR"
+        gh() { echo should-not-be-called; return 1; }
+        source "$LIB"
+        shipped_check 1 o/r "present.txt"
+        echo "status=$SHIPPED_STATUS"
+        echo "detail=$SHIPPED_DETAIL"
+    '
+    rm -rf "$no_head_repo"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"status=UNKNOWN"* ]]
+    [[ "$output" == *"origin/HEAD not resolvable"* ]]
 }
 
 @test "shipped_check: gh failure fails closed to UNKNOWN, never SHIPPED/OPEN" {

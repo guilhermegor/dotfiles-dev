@@ -11,14 +11,16 @@
 # reliable evidence of PRESENCE, never of absence, so it can only ever be
 # supplementary. (2) Two branches sat 5 and 2 commits ahead of origin/main,
 # indistinguishable by ancestry/diff/ls-remote from real unrescued work; a single
-# content probe against origin/master settled both instantly. What this script
-# does NOT decide: which paths/symbols a given issue actually promises -- that
-# extraction is s:intake-shipped's job, never hardcoded here.
+# content probe against the repo's default branch settled both instantly. What
+# this script does NOT decide: which paths/symbols a given issue actually
+# promises -- that extraction is s:intake-shipped's job, never hardcoded here.
 #
 # Contract: call `shipped_check ISSUE_NUM OWNER/REPO DELIVERABLE [DELIVERABLE...]`
-# A DELIVERABLE is a path (existence probe) or `path::pattern` (grep the path's
-# origin/master content for an extended regex -- e.g. a gate wired into a CI yaml,
-# not only a file that exists).
+# The default branch is resolved locally via refs/remotes/origin/HEAD -- never
+# hardcoded to origin/master, since blueprintx (this gate's own motivating case)
+# defaults to main. A DELIVERABLE is a path (existence probe) or `path::pattern`
+# (grep the path's content on that branch for an extended regex -- e.g. a gate
+# wired into a CI yaml, not only a file that exists).
 # Sets two globals, returns nothing meaningful (check SHIPPED_STATUS):
 #   SHIPPED_STATUS = SHIPPED | OPEN | UNKNOWN
 #   SHIPPED_DETAIL = evidence: the link check, one PRESENT/MISSING line per
@@ -31,28 +33,62 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     exit 1
 fi
 
-# _shipped_probe_one DELIVERABLE
-# Content-tests one deliverable against origin/master. Never merge-base,
-# ls-remote, or diff-emptiness -- see SKILL.md's table for why each of those
-# lies about a squash-merged or delete-on-merge branch.
+# _shipped_probe_one BASE_REF DELIVERABLE
+# Content-tests one deliverable against BASE_REF (the repo's resolved default
+# branch, e.g. origin/master or origin/main). Never merge-base, ls-remote, or
+# diff-emptiness -- see SKILL.md's table for why each of those lies about a
+# squash-merged or delete-on-merge branch.
+#
+# Returns three states, not two: 0 PRESENT, 1 MISSING (confirmed absent --
+# git's own stderr says so), 2 UNKNOWN (git failed for any other reason: a
+# corrupt object, an unfetched pack, a bad path traversal). `set -u` with no
+# `pipefail` means a pipeline's status is the LAST command's (grep's), so
+# git's own exit code is captured separately here rather than trusted through
+# a pipe -- a `git show`/`cat-file` operational failure must never collapse
+# into "missing", which the caller would read as evidence the deliverable was
+# never shipped (dotfiles-dev#427 PR #460 review).
 _shipped_probe_one() {
-    local deliverable="$1" path pattern
+    local base_ref="$1" deliverable="$2" path pattern
+    local errfile content git_status stderr_msg
     path="${deliverable%%::*}"
+    errfile="$(mktemp)" || { echo "UNKNOWN $path (mktemp failed)"; return 2; }
+
     if [[ "$deliverable" == *"::"* ]]; then
         pattern="${deliverable#*::}"
-        if git show "origin/master:$path" 2>/dev/null | grep -qE "$pattern"; then
+        content="$(git show "$base_ref:$path" 2>"$errfile")"
+        git_status=$?
+        stderr_msg="$(cat "$errfile")"
+        rm -f "$errfile"
+        if (( git_status != 0 )); then
+            if [[ "$stderr_msg" == *"does not exist in"* ]]; then
+                echo "MISSING $path (no match for /$pattern/)"
+                return 1
+            fi
+            echo "UNKNOWN $path (git show failed: $stderr_msg)"
+            return 2
+        fi
+        if grep -qE "$pattern" <<<"$content"; then
             echo "PRESENT $path (matches /$pattern/)"
             return 0
         fi
         echo "MISSING $path (no match for /$pattern/)"
         return 1
     fi
-    if git cat-file -e "origin/master:$path" 2>/dev/null; then
+
+    git cat-file -e "$base_ref:$path" 2>"$errfile"
+    git_status=$?
+    stderr_msg="$(cat "$errfile")"
+    rm -f "$errfile"
+    if (( git_status == 0 )); then
         echo "PRESENT $path"
         return 0
     fi
-    echo "MISSING $path"
-    return 1
+    if [[ "$stderr_msg" == *"does not exist in"* ]]; then
+        echo "MISSING $path"
+        return 1
+    fi
+    echo "UNKNOWN $path (git cat-file failed: $stderr_msg)"
+    return 2
 }
 
 shipped_check() {
@@ -62,8 +98,19 @@ shipped_check() {
     SHIPPED_STATUS="UNKNOWN"
     SHIPPED_DETAIL=""
 
-    if ! git rev-parse --verify -q origin/master >/dev/null; then
-        SHIPPED_DETAIL="origin/master not resolvable locally -- fetch it first"
+    # Resolve the repo's actual default branch via the remote-tracking HEAD
+    # symref -- never a hardcoded origin/master, which silently returns
+    # UNKNOWN (fails closed, but uselessly) on a repo whose default is
+    # origin/main, and could inspect a stale/wrong ref if one happened to
+    # exist locally under that name.
+    local base_ref
+    base_ref="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+    if [[ -z "$base_ref" ]]; then
+        SHIPPED_DETAIL="origin/HEAD not resolvable locally -- run 'git remote set-head origin -a' or fetch first"
+        return
+    fi
+    if ! git rev-parse --verify -q "${base_ref}^{commit}" >/dev/null; then
+        SHIPPED_DETAIL="$base_ref not resolvable locally -- fetch it first"
         return
     fi
 
@@ -92,7 +139,7 @@ shipped_check() {
 
     local present=0 missing=0 lines="" d line
     for d in "${deliverables[@]}"; do
-        if line="$(_shipped_probe_one "$d")"; then
+        if line="$(_shipped_probe_one "$base_ref" "$d")"; then
             present=$((present + 1))
         else
             missing=$((missing + 1))

@@ -54,17 +54,22 @@ ref, never a bare local branch or an implicit `HEAD` (dotfiles-dev#229).
    ```bash
    cd <worktree-path> && rtk gh issue view <N> --repo <owner>/<repo>
    ```
-2. **Fetch and content-test each deliverable against `origin/master`.**
+2. **Fetch and content-test each deliverable against the repo's default
+   branch** — resolve it explicitly first (never assume `master` vs. `main`;
+   `shipped_check.sh` below does this for you via `refs/remotes/origin/HEAD`):
+     ```bash
+     cd <worktree-path> && /usr/bin/git fetch origin --quiet && \
+       base_ref="$(/usr/bin/git symbolic-ref --quiet --short refs/remotes/origin/HEAD)"
+     ```
    - A path deliverable: does it exist there at all?
      ```bash
-     cd <worktree-path> && /usr/bin/git fetch origin master --quiet && \
-       /usr/bin/git cat-file -e origin/master:<path> && echo PRESENT || echo MISSING
+     cd <worktree-path> && /usr/bin/git cat-file -e "$base_ref:<path>" && echo PRESENT || echo MISSING
      ```
    - A behavior deliverable (a gate wired into CI, a function actually called,
-     not merely defined): grep the file's `origin/master` content, not just
+     not merely defined): grep the file's content on that branch, not just
      confirm the file exists.
      ```bash
-     cd <worktree-path> && /usr/bin/git show origin/master:<path> | grep -E '<symbol-or-wiring>'
+     cd <worktree-path> && /usr/bin/git show "$base_ref:<path>" | grep -E '<symbol-or-wiring>'
      ```
    - If `ai_clients/claude/hooks/lib/shipped_check.sh` is available (it is, in
      this repo), source it instead of hand-rolling the above — it also folds

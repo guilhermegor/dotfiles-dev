@@ -27,6 +27,8 @@ act -W .github/workflows/tests.yml
 | `branch_requires_issue_guard.bats` | `ai_clients/claude/hooks/branch_requires_issue_guard.sh` — branch-creation → tracked-issue guard (per-segment match; no false positive from a chained `-c` or a heredoc body) |
 | `settings_env_deny.bats` | `ai_clients/claude/settings.json` (`permissions.deny`) — enumerated `.env*` secret-suffix globs deny real secrets while leaving `.env.example`/`.env.sample`/`.env.template`/`.env.dist` readable |
 | `dispatch_free_surface_guard.bats` | `ai_clients/claude/hooks/dispatch_free_surface_guard.sh` — the DISPATCH `Stop` hook: blocks on a non-empty free surface with nothing of this session's own working it, reports a gate failure as UNREADABLE (never silent), and fails open on `stop_hook_active`, no repo, no `s:dev-loop` evidence, or a still-unresolved `Agent` dispatch |
+| `round_dispatch_guard.bats` | `ai_clients/claude/hooks/round_dispatch_guard.sh` — the round-level DISPATCH `Stop` hook: blocks a round with dispatchable candidates and no agent started, passes when every candidate carries a named exclusion reason, announces itself as a no-op while the planner is missing, and treats an unreadable plan as UNREADABLE, never empty |
+| `slot_classify.bats` | `ai_clients/claude/hooks/lib/slot_classify.py` — the review-slot classifier: an unrelated newest notice must not mask a running limit, the wrapper comment carrying no wait must not degrade its sibling's stated wait, and a forge 403 body or garbage is `UNKNOWN`, never free |
 
 ## How the mocking works
 

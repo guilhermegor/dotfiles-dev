@@ -1,0 +1,25 @@
+{
+  "model": {
+    "name": "qwen3.5-plus"
+  },
+  "modelProviders": {
+    "openai": [
+      {
+        "id": "qwen3.5-plus",
+        "capabilities": {"reasoning": {"thinking": true}}
+      },
+      {
+        "id": "qwen3.6-plus",
+        "capabilities": {"reasoning": {"thinking": true}}
+      },
+      {
+        "id": "glm-5",
+        "capabilities": {}
+      },
+      {
+        "id": "kimi-k2.5",
+        "capabilities": {}
+      }
+    ]
+  }
+}

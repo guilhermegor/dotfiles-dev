@@ -80,6 +80,10 @@ jobs:
           # ⚠️ The job exits non-zero ONLY when it cannot publish, never to
           # mirror a failing verdict. An unpublished verdict leaves the PR
           # blocked, which is fail-closed; a wrongly published one is not.
+          # OWNER/REPO come from the env: block, which shellcheck cannot see when it lints
+          # this run: script standalone — same SC2153 exemption the selective-policy call
+          # below already carries, needed here too now that this is their first use.
+          # shellcheck disable=SC2153
           HEAD_SHA="$(gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')"
           report() {
             local conclusion="$1" title="$2" summary="${3:-}"

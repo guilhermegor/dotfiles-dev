@@ -79,3 +79,18 @@ print(sorted((yaml.safe_load(open(sys.argv[1])).get(True) or {}).keys()))
     [[ "$output" == *"pull_request_review"* ]]
     [[ "$output" == *"pull_request_review_comment"* ]]
 }
+
+@test "checkout is pinned to the default branch, never the event's ref" {
+    # The privileged half of #481: `checks: write` makes the sourced gate library worth
+    # attacking. For pull_request_review/pull_request_review_comment GITHUB_REF is the PR
+    # MERGE REF, so a bare checkout would run PR-controlled code with a token that can
+    # publish a passing required check without consulting gate_pr_thread_state at all.
+    run python3 -c "
+import yaml,sys
+d = yaml.safe_load(open(sys.argv[1]))
+step = next(s for s in d['jobs']['gate']['steps'] if 'checkout' in str(s.get('uses','')))
+print((step.get('with') or {}).get('ref',''))
+" "$WORKFLOW"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"default_branch"* ]]
+}

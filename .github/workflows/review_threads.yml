@@ -49,7 +49,20 @@ jobs:
     # outright rather than let PR_NUMBER resolve to a non-PR issue number.
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request != null
     steps:
+      # ⚠️ Pin to the DEFAULT BRANCH, never the event's ref. For
+      # pull_request_review and pull_request_review_comment GITHUB_REF is the
+      # PR merge ref, so a bare checkout hands PR-controlled code to the
+      # `source` below — which now runs with checks: write. That code could
+      # publish a passing required check without ever calling
+      # gate_pr_thread_state. The token is the reason this pin is mandatory:
+      # before it there was nothing to steal.
+      # Trade-off, accepted: a PR that edits review_thread_gate.sh is judged
+      # by master's copy, not its own. That is correct for a required check —
+      # and it also removes the "PR behind base is judged by the old gate"
+      # problem, since every PR is now judged by the current one.
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Check review-thread state
         env:

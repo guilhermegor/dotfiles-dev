@@ -82,6 +82,17 @@ write_existing_comments() {
         > "$TEST_TMP/comments-$number.json"
 }
 
+# write_ref_state REPO NUMBER STATE
+# Registers what `gh issue view NUMBER --repo REPO --json state --jq .state` returns for one
+# prose-referenced issue (dotfiles-dev#416) — STATE is the real API's own casing ("OPEN"/"CLOSED").
+# A bare "FAIL" sentinel leaves no fixture file, so the fake gh's `[ -f "$f" ]` check exits 1 —
+# the fail-closed path for prose-blocker resolution.
+write_ref_state() {
+    local repo="$1" number="$2" state="$3" key
+    key="${repo//\//_}-$number"
+    [ "$state" = "FAIL" ] || printf '%s' "$state" > "$TEST_TMP/refstate-$key.json"
+}
+
 write_fake_gh() {
     cat > "$FAKE_BIN/gh" <<EOF
 #!/bin/bash
@@ -106,9 +117,20 @@ case "\$1 \$2" in
         echo ok
         ;;
     "issue view")
-        f="$TEST_TMP/comments-\$3.json"
-        [ -f "\$f" ] || exit 0
-        jq -r '.comments[].body' "\$f"
+        # Keyed on the --json PROJECTION (state vs comments), never the full query string —
+        # a stub keyed on the whole command silently breaks the moment a flag is added
+        # elsewhere (dotfiles-dev#409).
+        if printf '%s' "\$*" | grep -q -- '--json state'; then
+            repo="\$5"
+            key="\${repo//\//_}-\$3"
+            f="$TEST_TMP/refstate-\$key.json"
+            [ -f "\$f" ] || exit 1
+            cat "\$f"
+        else
+            f="$TEST_TMP/comments-\$3.json"
+            [ -f "\$f" ] || exit 0
+            jq -r '.comments[].body' "\$f"
+        fi
         ;;
     "project item-edit")
         [ -f "$TEST_TMP/fail-item-edit" ] && exit 1
@@ -181,6 +203,64 @@ run_reconcile() {
     run_reconcile
     [[ "$output" == *"unblocked owner/greenfield#12"* ]]
     [[ "$output" == *"owner/blueprintx#482"* ]]
+}
+
+# --- prose blocker resolution (dotfiles-dev#416): native empty, blocker recorded only in prose ---
+# Repro shape measured on dotfiles-dev#405: `gh api .../dependencies/blocked_by` returns [] (no
+# native relation) while the body's own "**Blocked by:**" line names an issue — before this fix
+# the item read "still blocked" forever, blind to whether that named issue ever closed.
+
+@test "prose blocker referencing an open issue, no native blocked_by: still blocked" {
+    write_items "$(item "owner/repo" 405 "Blocked" "" "**Blocked by:** owner/blueprintx#314")"
+    write_blockers 405
+    write_ref_state "owner/blueprintx" 314 "OPEN"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"STATUS=ok"* ]]
+    [[ "$output" == *"still blocked owner/repo#405"* ]]
+    [[ "$output" == *"owner/blueprintx#314"* ]]
+    refute_gh 'issue edit'
+    refute_gh 'item-edit'
+    refute_gh 'issue comment'
+}
+
+@test "prose blocker referencing a closed issue, no native blocked_by: unblocked" {
+    write_items "$(item "owner/repo" 405 "Blocked" "" "**Blocked by:** owner/blueprintx#314")"
+    write_blockers 405
+    write_ref_state "owner/blueprintx" 314 "CLOSED"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"STATUS=ok"* ]]
+    [[ "$output" == *"unblocked owner/repo#405"* ]]
+    [[ "$output" == *"owner/blueprintx#314"* ]]
+    grep -q 'issue edit 405 --repo owner/repo --add-label state:ready --remove-label state:blocked' "$GH_LOG"
+    grep -q 'project item-edit 17 --owner owner --url .*--field Status --value Ready' "$GH_LOG"
+}
+
+@test "a decision: prose blocker naming a closed issue is still never auto-cleared" {
+    write_items "$(item "owner/repo" 405 "Blocked" "" \
+        "**Blocked by:** decision: pick a vendor, see owner/blueprintx#314")"
+    write_blockers 405
+    write_ref_state "owner/blueprintx" 314 "CLOSED"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"decision blocker owner/repo#405"* ]]
+    refute_gh 'issue edit'
+    refute_gh 'item-edit'
+    refute_gh 'issue comment'
+}
+
+@test "prose blocker ref state read failure: reported UNKNOWN, left untouched (fail closed)" {
+    write_items "$(item "owner/repo" 405 "Blocked" "" "**Blocked by:** owner/blueprintx#314")"
+    write_blockers 405
+    write_ref_state "owner/blueprintx" 314 "FAIL"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"STATUS=ok"* ]]
+    [[ "$output" == *"UNKNOWN owner/repo#405"* ]]
+    refute_gh 'issue edit'
+    refute_gh 'item-edit'
+    refute_gh 'issue comment'
 }
 
 # --- decision blocker: never auto-cleared, even alone with no native blocker ---------------------

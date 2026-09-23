@@ -252,10 +252,8 @@ configure_dock() {
         fi
     done
     
-    # 2. SoundCloud (PWA) — only ever one filename, so no candidate loop needed
-    if result=$(find_desktop_file 'soundcloud.desktop'); then
-        favorites+=("'$result'")
-    fi
+    # SoundCloud is deliberately NOT pinned here — it lives in the Media app
+    # folder instead. See DOCK_UNPINNED below.
 
     # 3. Firefox
     for app in 'firefox_firefox.desktop' 'firefox.desktop'; do
@@ -317,6 +315,7 @@ configure_dock() {
         "'postman_postman.desktop'" "'postman.desktop'" "'Postman.desktop'"
         "'docker-desktop.desktop'" "'docker_docker-desktop.desktop'" "'docker.desktop'"
         "'google-chrome.desktop'" "'chrome.desktop'"
+        "'soundcloud.desktop'"
     )
     local current_favorites_str
     current_favorites_str=$(gsettings get org.gnome.shell favorite-apps 2>/dev/null) || current_favorites_str=""
@@ -373,7 +372,16 @@ apply_additional_tweaks() {
     # Other tweaks
     run_or_echo gsettings set org.gnome.desktop.background show-desktop-icons true
     run_or_echo gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'
-    
+
+    # Sloppy focus: scroll/interact with the window under the pointer without
+    # clicking it first (GNOME ships no dedicated "scroll inactive windows"
+    # toggle — sloppy focus is the mechanism). auto-raise must stay false —
+    # sloppy focus plus auto-raise true makes windows jump to front as the
+    # pointer crosses them, the pairing that gives sloppy focus its bad
+    # reputation.
+    run_or_echo gsettings set org.gnome.desktop.wm.preferences focus-mode 'sloppy'
+    run_or_echo gsettings set org.gnome.desktop.wm.preferences auto-raise false
+
     print_status "success" "Additional tweaks applied"
 }
 

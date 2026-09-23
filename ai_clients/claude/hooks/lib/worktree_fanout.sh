@@ -67,7 +67,7 @@ classify_worktree_diff() {
 # pushed but never got a PR. One walk, no per-branch `gh` calls.
 fanout_worktrees() {
 	local cwd="$1" github_ok="$2" json="$3"
-	local pr_branches="" default_branch path="" branch="" name uncommitted ahead has_upstream
+	local pr_branches="" default_branch path="" branch="" name uncommitted ahead pushed
 	local -a interrupted_names=()
 
 	[ "$github_ok" = "1" ] && pr_branches="$(printf '%s' "$json" | jq -r '.[].headRefName' 2>/dev/null)"
@@ -89,11 +89,19 @@ fanout_worktrees() {
 				uncommitted="$(git -C "$path" status --porcelain 2>/dev/null | wc -l | tr -d '[:space:]')"
 				[ -n "$uncommitted" ] || uncommitted=0
 				ahead=0
-				has_upstream=0
+				pushed=0
 				if git -C "$path" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1; then
-					has_upstream=1
 					ahead="$(git -C "$path" rev-list --count '@{upstream}..HEAD' 2>/dev/null)"
 					[ -n "$ahead" ] || ahead=0
+				fi
+				# "Pushed" means the branch has ITS OWN remote ref, never merely that
+				# `@{upstream}` resolves — a worktree created with
+				# `git worktree add -b <name> origin/master` tracks origin/master as its
+				# upstream from birth, with no ref of its own on the remote (dotfiles-dev#457).
+				# Same oracle subagent_stop_sweep.sh already uses for this predicate.
+				if [ -n "$branch" ] \
+					&& git -C "$path" rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null 2>&1; then
+					pushed=1
 				fi
 
 				[ "$ahead" -gt 0 ] && printf '[fan-out] worktree %s: %s commit(s) not pushed\n' "$name" "$ahead"
@@ -114,7 +122,7 @@ fanout_worktrees() {
 					fi
 				fi
 
-				if [ "$github_ok" = "1" ] && [ "$has_upstream" = "1" ] && [ -n "$branch" ] \
+				if [ "$github_ok" = "1" ] && [ "$pushed" = "1" ] && [ -n "$branch" ] \
 					&& [ "$branch" != "$default_branch" ] \
 					&& ! printf '%s\n' "$pr_branches" | grep -qxF "$branch"; then
 					printf '[fan-out] branch %s pushed with NO PR\n' "$branch"

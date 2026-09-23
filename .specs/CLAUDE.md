@@ -85,9 +85,34 @@ mechanically.
   output, or `s:work-breakdown`'s own Large-scope decisions (#306). Never
   `architecture.md` — it records one feature's decisions, not the system's.
 - `plan.md` — the `s:writing-plans` output (a single-agent implementation plan)
-- `tasks.md` — `s:work-breakdown`'s Large-scope per-task breakdown for a
-  decomposed, multi-issue feature (#306) — a different shape than `plan.md`,
-  written only when the feature was split into parallel-dispatchable issues
+- `tasks.md` — the per-feature task tracker; two writers, one file.
+  `s:work-breakdown`'s Large-scope per-task breakdown for a decomposed,
+  multi-issue feature (#306) — a different shape than `plan.md` — writes it
+  up front whenever the feature was split into parallel-dispatchable issues.
+  A multi-step effort carried across sessions and subagents is **expected**
+  to keep one, updated in the same round that ships each slice. ⚠️ This is a
+  convention, not an enforced check: `s:dev-loop` does **not** verify it
+  today (`grep -c 'tasks\.md'` in the skill returns 0), and saying otherwise
+  here would be worse than saying nothing — a session would read as
+  compliant with nothing enforcing it. Enforcement is tracked separately in
+  dotfiles-dev#485, which has to settle what counts as an in-flight effort
+  first: every feature directory in this repo currently has a `plan.md` and
+  none has a `tasks.md`, so the naive predicate fires on all of them at once
+  and gets ignored. Not in `docs/`, and not only in a session-local task
+  tool: an account switch or session limit erases either of those, but not a
+  file in the repo.
+
+  **Status markers** — the same three states as `progress.md` below, plus one
+  addition: `[~]` **must name its owner**, as `[~] <branch-or-agent>`. The
+  branch name is the durable half — an agent id dies with its session — so N
+  concurrent subagents each writing a bare `[~]` recreate the exact collision
+  the tracker exists to prevent.
+
+  ⚠️ **A marker is a claim, not evidence — reconcile it against the forge,
+  never read it as the answer.** A `[x]` with no merged PR behind it is the
+  #509 failure (merged with an empty `closingIssuesReferences`, issue never
+  closed) reproduced in a cheaper file. The shipped-check (sibling issue to
+  #428) takes the tracker as one input among others, never its verdict.
 - `pr.md` — the PR body, written before the PR exists (dotfiles-dev#441
   settled this as `pr.md`'s home). A single PR: `pr.md`. Several PRs from
   one feature: `pr-N-<slug>.md` per PR — the body is written **before** the
@@ -99,7 +124,10 @@ mechanically.
   reconstructing state by inference (#313). Three states, not two:
   `- [ ]` to do, `- [~]` **in progress**, `- [x]` done. `[~]` is the point —
   it is the state git cannot represent. Worth writing for any size of change;
-  a three-file fix can have one, a Large feature can go without.
+  a three-file fix can have one, a Large feature can go without. Distinct
+  from `tasks.md` above: `progress.md` is one session's own resumption
+  state and stays optional; `tasks.md` is the cross-session, cross-agent
+  tracker `s:dev-loop` requires and reconciles against the forge.
 
 ## Lesson mirrors (`_lessons/`) — not a feature directory
 
@@ -158,7 +186,12 @@ defines the shape new ones follow.
 
 - Shipped or reference documentation → `docs/` (see the `_lessons/` exception above
   — a generated mirror is not "documentation" in this sense)
-- Backlog / issue-triage notes → `docs/backlog/`
+- Backlog / issue-triage notes → `docs/backlog/` (dotfiles-dev#428: measured
+  on blueprintx 2026-09-20, `docs/backlog/` had accumulated 44 files despite
+  mkdocs' `exclude_docs` hiding them from the published site — the
+  accumulation was the defect, the hiding was never the fix. A tracked doc
+  outranks memory next session, which is why this routing is written here
+  instead of left as a habit to re-litigate)
 - Anything meant to outlive the feature it was written for (ADRs, README,
   CLAUDE.md changes) — the `_lessons/` mirrors above are the one exception: they
   outlive not a *feature* but the global store they mirror, which is the point

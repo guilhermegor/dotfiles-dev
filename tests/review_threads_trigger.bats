@@ -173,3 +173,19 @@ $LADDER_BODY"
     [ "$status" -ne 0 ]
     [[ "$output" == *"review gate status=problems"* ]]
 }
+
+# --- #455 review: the verdict must not depend on how long the review was ------------------
+# `printf "%s\n" "$COMMENT_BODY" | head -n1` under `set -euo pipefail` takes SIGPIPE once the
+# body no longer fits the pipe buffer: head exits after line 1, printf dies, the assignment
+# returns 141 and the step is killed BEFORE the marker check runs. Measured on this machine:
+# rc=0 at 2 KB, rc=141 from ~50 KB up — and GitHub accepts comment bodies to 65536 chars, so a
+# verbose fallback review reaches it. Parameter expansion has no pipe and no length ceiling.
+
+@test "ladder marker is honoured in a 60 KB body (no broken-pipe kill)" {
+    long_body="Fallback review — runtime: codex, model: codex-auto-review (selected by: review-specialized-slug)"$'\n'"$(printf '%*s' 60000 '')"
+    run_step "issue_comment" "guilhermegor" "$long_body" \
+        0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}' \
+        "OWNER"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"no reviewer has reported"* ]]
+}

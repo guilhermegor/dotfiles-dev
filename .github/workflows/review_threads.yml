@@ -76,7 +76,14 @@ jobs:
           # unforgeable part: author_association (same CWE-345 lesson #446's
           # review thread taught the ladder itself — never key on login).
           if [ "$reviewer_reported" -eq 0 ] && [ "$EVENT_NAME" = "issue_comment" ]; then
-            first_line=$(printf '%s\n' "$COMMENT_BODY" | head -n1)
+            # Parameter expansion, never `printf | head -n1`: with
+            # `set -euo pipefail`, head exits after the first line and printf
+            # takes SIGPIPE, so the assignment returns 141 and the step dies
+            # before the marker check ever runs. Measured: rc=0 at 2 KB, rc=141
+            # from ~50 KB up — and GitHub accepts comment bodies to 65536
+            # chars, so a verbose fallback review reaches it. The verdict must
+            # not depend on how much the reviewer had to say.
+            first_line=${COMMENT_BODY%%$'\n'*}
             ladder_marker_re='^Fallback review — runtime: (qwen|codex), model: .+ \(selected by: .+\)$'
             if [[ "$first_line" =~ $ladder_marker_re ]] \
               && [[ "$COMMENT_AUTHOR_ASSOCIATION" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]]; then

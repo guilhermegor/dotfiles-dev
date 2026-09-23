@@ -70,4 +70,5 @@ install_hooks() {
     copy_hook_file "round_dispatch_guard.sh" "$hooks_dir"
     copy_hook_file "pr_self_assign.sh" "$hooks_dir"
     copy_hook_file "rtk_worktree_passthrough.sh" "$hooks_dir"
+    copy_hook_file "stale_local_ref_guard.sh" "$hooks_dir"
 }

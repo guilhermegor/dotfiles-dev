@@ -1,0 +1,204 @@
+#!/usr/bin/env bats
+#
+# Unit tests for ai_clients/claude/hooks/lib/dispatch_plan.py — the planner
+# round_dispatch_guard.sh reads for its verdict (dotfiles-dev#433 item 2).
+#
+# Strategy (same as dispatch_free_surface_guard.bats): `gh` is stubbed on PATH with a real
+# executable script written per-test — dispatch_plan.py shells out to it directly, and again
+# indirectly through the bash subprocess that sources lib/free_surface.sh, so the stub has to be
+# a real file on PATH, not a shell function (a function in this bats process is invisible to
+# either child process). `git` is the real `/usr/bin/git` against a throwaway local repo, so
+# `git rev-parse --show-toplevel` and glob expansion have a real tree to work against.
+#
+# The gate's own two-halves contract (ai_clients/CLAUDE.md, dotfiles-dev#398) applies here too:
+#   1. success returns a USABLE answer — dispatchable/excluded are the documented shape, and
+#      non-empty content actually reaches them, not just an exit-0 with nothing set;
+#   2. the fail-closed path is exercised with a stub that makes the underlying gh call fail,
+#      asserting every open issue comes back excluded (never a partial "some are free" guess)
+#      and dispatchable stays empty.
+#
+# Run locally: bats tests/dispatch_plan.bats
+
+setup() {
+    PLANNER="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/ai_clients/claude/hooks/lib/dispatch_plan.py"
+    TEST_TMP="$(mktemp -d)"
+    cd "$TEST_TMP" || return 1
+    /usr/bin/git init -q -b main .
+    /usr/bin/git config user.email t@t
+    /usr/bin/git config user.name t
+    /usr/bin/git commit -q --allow-empty -m init
+
+    BIN="$TEST_TMP/bin"
+    mkdir -p "$BIN"
+    PATH="$BIN:$PATH"
+    export PATH
+}
+
+teardown() {
+    cd /
+    rm -rf "$TEST_TMP"
+}
+
+# gh_field NAME -> the .body value of one gh issue-list record: a fenced ```surface block
+# built from the remaining args, one path/glob per line. No args -> no block at all.
+issue_json() {
+    local number="$1"
+    shift
+    if [ "$#" -eq 0 ]; then
+        printf '{"number": %s, "body": "no surface here"}' "$number"
+        return
+    fi
+    local body="\`\`\`surface\\n"
+    local f
+    for f in "$@"; do
+        body="${body}${f}\\n"
+    done
+    body="${body}\`\`\`"
+    printf '{"number": %s, "body": "%s"}' "$number" "$body"
+}
+
+# stub_gh ISSUES_JSON [HELD_FILE] [CLAIMED_ISSUE] [FAIL_BRANCH]
+# ISSUES_JSON is the full `gh issue list --json number,body` array. HELD_FILE, if given, is the
+# one file the "feature" branch's compare reports as held. CLAIMED_ISSUE, if given, is the one
+# issue number closingIssuesReferences reports as already claimed. FAIL_BRANCH=1 makes the
+# default-branch lookup fail, exercising gate_free_surface's own fail-closed path.
+stub_gh() {
+    local issues_json="$1" held="${2:-}" claimed="${3:-}" fail="${4:-0}"
+    local claimed_nodes="[]"
+    [ -n "$claimed" ] && claimed_nodes="[{\"closingIssuesReferences\":{\"nodes\":[{\"number\":$claimed}]}}]"
+    cat >"$BIN/gh" <<STUB
+#!/bin/bash
+case "\$*" in
+"repo view --json nameWithOwner -q .nameWithOwner") echo "acme/widgets" ;;
+"issue list --repo acme/widgets --state open --limit 500 --json number,body")
+    cat <<'JSON'
+$issues_json
+JSON
+    ;;
+"issue list --repo acme/widgets --state open --limit 500 --json number --jq .[].number")
+    printf '%s\n' "$issues_json" | python3 -c 'import json,sys; [print(i["number"]) for i in json.load(sys.stdin)]'
+    ;;
+"api repos/acme/widgets --jq .default_branch")
+    [ "$fail" = 1 ] && exit 1
+    echo main
+    ;;
+"pr list --repo acme/widgets --state open --json number,headRefName --limit 200") echo '[]' ;;
+"api repos/acme/widgets/branches --paginate --jq .[].name") printf 'main\nfeature\n' ;;
+"api repos/acme/widgets/compare/main...feature --jq .files[]?.filename") echo "$held" ;;
+"api graphql -f query="*)
+    echo '{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":$claimed_nodes}}}'
+    ;;
+*) echo "UNSTUBBED: \$*" >&2; exit 1 ;;
+esac
+STUB
+    chmod +x "$BIN/gh"
+}
+
+run_planner() {
+    run python3 "$PLANNER"
+}
+
+field() {
+    # field JQ_EXPR -> evaluate JQ_EXPR against $output.
+    printf '%s' "$output" | jq -r "$1"
+}
+
+# --- shape: the documented contract, both arrays, always ------------------------------------
+
+@test "output is exactly one JSON object with dispatchable and excluded arrays" {
+    stub_gh "[$(issue_json 1 free/a.sh)]"
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '(.dispatchable | type) + "," + (.excluded | type)')" = "array,array" ]
+}
+
+@test "zero open issues is a valid, empty plan" {
+    stub_gh '[]'
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 0 ]
+    [ "$(field '.excluded | length')" -eq 0 ]
+}
+
+# --- the three classify states, kept apart -------------------------------------------------
+
+@test "a fully free surface is dispatchable with its files named" {
+    stub_gh "[$(issue_json 3 free/a.sh)]"
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable[0].issue')" = "3" ]
+    [ "$(field '.dispatchable[0].surface[0]')" = "free/a.sh" ]
+    [ "$(field '.excluded | length')" -eq 0 ]
+}
+
+@test "a fully held surface is excluded, naming the held path" {
+    stub_gh "[$(issue_json 2 held/file.sh)]" held/file.sh
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 0 ]
+    [[ "$(field '.excluded[0].reason')" == *"held/file.sh"* ]]
+}
+
+@test "a partially held surface (would-need-a-held-file) is dispatched anyway" {
+    stub_gh "[$(issue_json 4 free/a.sh held/file.sh)]" held/file.sh
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable[0].issue')" = "4" ]
+    [ "$(field '.dispatchable[0].surface | length')" -eq 2 ]
+    [ "$(field '.excluded | length')" -eq 0 ]
+}
+
+# --- issues that never reach a collision check at all ---------------------------------------
+
+@test "an issue with no declared surface is excluded, never silently dropped" {
+    stub_gh "[$(issue_json 1)]"
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 0 ]
+    [ "$(field '.excluded[0].issue')" = "1" ]
+    [[ "$(field '.excluded[0].reason')" == *"no declared file surface"* ]]
+}
+
+@test "an issue already claimed by a PR is excluded and never blocks its neighbour" {
+    stub_gh "[$(issue_json 5 free/a.sh), $(issue_json 6 free/b.sh)]" "" 5
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable[0].issue')" = "6" ]
+    [ "$(field '.excluded[0].issue')" = "5" ]
+    [[ "$(field '.excluded[0].reason')" == *"already claimed"* ]]
+}
+
+# --- glob expansion against the real tree ----------------------------------------------------
+
+@test "a glob token expands to the concrete files it matches in the tree" {
+    mkdir -p "$TEST_TMP/hooks/lib"
+    : >"$TEST_TMP/hooks/lib/foo_handler.py"
+    : >"$TEST_TMP/hooks/lib/bar_handler.py"
+    stub_gh "[$(issue_json 7 'hooks/lib/*_handler.py')]"
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable[0].surface | length')" -eq 2 ]
+    [[ "$(field '.dispatchable[0].surface | join(",")')" == *"hooks/lib/bar_handler.py"* ]]
+    [[ "$(field '.dispatchable[0].surface | join(",")')" == *"hooks/lib/foo_handler.py"* ]]
+}
+
+# --- fail-closed half of the gate contract (dotfiles-dev#398) --------------------------------
+
+@test "a gate failure excludes every issue as UNKNOWN, never a partial free answer" {
+    stub_gh "[$(issue_json 1 free/a.sh), $(issue_json 2 free/b.sh)]" "" "" 1
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 0 ]
+    [ "$(field '.excluded | length')" -eq 2 ]
+    [[ "$(field '.excluded[0].reason')" == *"UNKNOWN"* ]]
+    [[ "$(field '.excluded[1].reason')" == *"UNKNOWN"* ]]
+}
+
+# --- fails loud, not closed-and-quiet, on a broken read itself -------------------------------
+
+@test "gh missing entirely prints nothing parseable, never a fake empty plan" {
+    rm -f "$BIN/gh"
+    run_planner
+    [ "$status" -ne 0 ]
+    [[ "$output" != *'"dispatchable"'* ]]
+}

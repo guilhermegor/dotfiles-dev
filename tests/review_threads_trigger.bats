@@ -55,20 +55,24 @@ run_step() {
     local event="$1" author="$2" body="$3" review_count="$4" threads_json="$5"
     CHECK_RUN_OUT="$BATS_TEST_TMPDIR/check-run.json"
     : > "$CHECK_RUN_OUT"
+    HISTORY_COMMENTS="${HISTORY_COMMENTS:-[]}"
     run env \
         GH_TOKEN=x OWNER=o REPO=r PR_NUMBER=5 \
         EVENT_NAME="$event" COMMENT_AUTHOR="$author" COMMENT_BODY="$body" \
         REVIEW_COUNT="$review_count" THREADS_JSON="$threads_json" \
         REPO_ROOT="$REPO_ROOT" SCRIPT="$SCRIPT" CHECK_RUN_OUT="$CHECK_RUN_OUT" \
+        HISTORY_COMMENTS="$HISTORY_COMMENTS" \
         bash -c '
             cd "$REPO_ROOT" || exit 1
             gh() {
                 case "$*" in
                     *check-runs*)       cat > "$CHECK_RUN_OUT" ;;
                     *"/pulls/"*)        echo "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" ;;
-                    *"--json files"*)   echo "ai_clients/claude/hooks/lib/foo.sh" ;;
-                    *"--json reviews"*) printf "%s\n" "$REVIEW_COUNT" ;;
-                    "api graphql"*)     printf "%s" "$THREADS_JSON" ;;
+                    *"--json files"*)    echo "ai_clients/claude/hooks/lib/foo.sh" ;;
+                    *"--json reviews"*)  printf "%s\n" "$REVIEW_COUNT" ;;
+                    *"--json commits"*)  printf "2026-01-01T00:00:00Z\n" ;;
+                    *"--json comments"*) printf "%s" "${HISTORY_COMMENTS:-[]}" ;;
+                    "api graphql"*)      printf "%s" "$THREADS_JSON" ;;
                     *) return 1 ;;
                 esac
             }
@@ -179,4 +183,29 @@ run_step() {
     [ "$status" -eq 0 ]
     [ "$(jq -r '.conclusion' < "$CHECK_RUN_OUT")" = "success" ]
     [[ "$output" == *"gate not required"* ]]
+}
+
+# --- #482 review: a clean verdict must survive a later unrelated comment -------------------
+# A clean CodeRabbit review submits no review object, so review_count stays 0 and the only
+# evidence is its completion COMMENT. Reading that from this run's trigger alone meant any
+# later comment republished `failure` over the passing verdict already on the head — latent
+# while the check landed on master, live the moment publishing became authoritative.
+
+@test "a later human comment does not overwrite an earlier clean review" {
+    export HISTORY_COMMENTS='[{"author":{"login":"coderabbitai[bot]"},"createdAt":"2026-06-01T00:00:00Z","body":"✅ Action performed\n\nFull review finished."}]'
+    run_step "issue_comment" "guilhermegor" "thanks, merging tomorrow" \
+        0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "success" ]
+}
+
+@test "a completion marker OLDER than the head push does not count" {
+    # The stub reports the head pushed at 2026-01-01; this marker predates it, so the review
+    # it records was of different code. A push must invalidate a clean verdict.
+    export HISTORY_COMMENTS='[{"author":{"login":"coderabbitai[bot]"},"createdAt":"2025-12-01T00:00:00Z","body":"Full review finished."}]'
+    run_step "issue_comment" "guilhermegor" "ping" \
+        0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+    [[ "$output" == *"no reviewer has reported"* ]]
 }

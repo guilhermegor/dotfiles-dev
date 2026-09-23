@@ -146,6 +146,34 @@ jobs:
           review_count=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
             --json reviews --jq '.reviews | length')
           [ "$review_count" -gt 0 ] && reviewer_reported=1
+
+          # ⚠️ Resolve the completion marker from the PR's HISTORY, not only
+          # from the comment that fired THIS run. A clean review submits no
+          # review object, so review_count stays 0 and the marker is a one-off
+          # comment — any later ordinary comment would re-run this job with
+          # reviewer_reported=0 and publish `failure` over the passing verdict
+          # already on this head. Latent before this PR (the verdict landed on
+          # master and changed nothing); a live regression the moment the
+          # publish became authoritative.
+          # Scoped to the current head push: a push MUST invalidate an earlier
+          # clean verdict, which is why the marker is re-resolved per run
+          # rather than cached.
+          if [ "$reviewer_reported" -eq 0 ]; then
+            head_pushed_at="$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
+              --json commits --jq '.commits[-1].committedDate')"
+            marker_count="$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
+              --json comments --jq '.comments' |
+              jq --arg since "$head_pushed_at" '[
+                .[]
+                | select((.author.login // "") | ascii_downcase | test("coderabbit"))
+                | select(.createdAt > $since)
+                | select((.body // "") | ascii_downcase | test("full review finished"))
+              ] | length')"
+            if [ "${marker_count:-0}" -gt 0 ]; then
+              reviewer_reported=1
+            fi
+          fi
+
           if [ "$reviewer_reported" -eq 0 ]; then
             report failure "no reviewer has reported on this PR yet" \
               "No submitted review, and no verified reviewer completion marker."

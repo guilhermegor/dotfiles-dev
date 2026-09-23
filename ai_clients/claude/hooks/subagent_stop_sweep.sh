@@ -45,6 +45,8 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HOOK_DIR/lib/review_thread_gate.sh"
 # shellcheck source=lib/free_surface.sh
 source "$HOOK_DIR/lib/free_surface.sh"
+# shellcheck source=lib/kanban_reconcile.sh
+source "$HOOK_DIR/lib/kanban_reconcile.sh"
 
 emit() {
 	# $1 = plain-text report body. Wraps it as SubagentStop additionalContext.
@@ -346,6 +348,16 @@ dispatch: free surface empty"
 			echo "dispatch these $#: $free"
 		else
 			echo "dispatch: free surface empty"
+		fi
+		echo "[7] kanban reconcile (open PRs -> In review)"
+		if reconcile_kanban "$owner" "$name"; then
+			if [ -n "$RECONCILE_KANBAN_REPORT" ]; then
+				printf '%s\n' "$RECONCILE_KANBAN_REPORT"
+			else
+				echo "no kanban cards changed"
+			fi
+		else
+			echo "kanban reconcile: UNKNOWN — $RECONCILE_KANBAN_REPORT"
 		fi
 	)"
 

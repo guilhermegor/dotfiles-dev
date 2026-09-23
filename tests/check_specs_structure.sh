@@ -52,6 +52,14 @@
 
 set -euo pipefail
 
+# dotglob: a deny-by-default allowlist that cannot SEE an entry admits it. The
+# default glob skips dotfiles, so `.gitignore` under `.specs/` never reached
+# check_top_level_entry and passed without ever being judged. nullglob is
+# deliberately NOT set -- the `-e || -L` guards below rely on an unmatched glob
+# expanding to a literal that is neither, which is how the empty-dir case
+# short-circuits.
+shopt -s dotglob
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=../lib/common.sh
@@ -125,7 +133,7 @@ check_features_group() {
         return
     fi
     for feature_dir in "$dir"/*; do
-        [[ -e "$feature_dir" ]] || continue
+        [[ -e "$feature_dir" || -L "$feature_dir" ]] || continue
         check_feature_dir "$feature_dir"
     done
 }
@@ -137,7 +145,7 @@ check_backlog_group() {
         return
     fi
     for backlog_file in "$dir"/*; do
-        [[ -e "$backlog_file" ]] || continue
+        [[ -e "$backlog_file" || -L "$backlog_file" ]] || continue
         check_backlog_file "$backlog_file"
     done
 }

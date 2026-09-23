@@ -185,3 +185,44 @@ run_gate() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"aligned"* ]]
 }
+
+# --- the two holes the ladder review found (dotfiles-dev#453) ----------------
+#
+# Both are the same shape as the top-level DANGLING-symlink case above, in
+# places the earlier fix did not reach: an entry the gate cannot SEE is an
+# entry it admits.
+
+@test "a DANGLING symlink inside features/ is judged, not skipped" {
+    write_claude_md
+    mkdir -p "$SPECS_DIR/features"
+    ln -s "$TEST_TMP/nowhere" "$SPECS_DIR/features/Bad_Name"
+    [ ! -e "$SPECS_DIR/features/Bad_Name" ]  # the condition that used to skip it
+    run_gate
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"features/Bad_Name"* ]]
+}
+
+@test "a DANGLING symlink inside backlog/ is judged, not skipped" {
+    write_claude_md
+    mkdir -p "$SPECS_DIR/backlog"
+    ln -s "$TEST_TMP/nowhere" "$SPECS_DIR/backlog/Bad_Name.md"
+    [ ! -e "$SPECS_DIR/backlog/Bad_Name.md" ]
+    run_gate
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"backlog/Bad_Name.md"* ]]
+}
+
+@test "DISALLOWED_TOP_LEVEL: a HIDDEN top-level entry is judged, not skipped" {
+    write_claude_md
+    printf 'x' > "$SPECS_DIR/.gitignore"
+    run_gate
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"DISALLOWED_TOP_LEVEL '.gitignore'"* ]]
+}
+
+@test "an empty features/ dir still short-circuits (nullglob is NOT set)" {
+    write_claude_md
+    mkdir -p "$SPECS_DIR/features" "$SPECS_DIR/backlog"
+    run_gate
+    [ "$status" -eq 0 ]
+}

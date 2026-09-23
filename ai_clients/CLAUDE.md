@@ -182,6 +182,37 @@ It blocks the merge on **either** of two independent findings:
 Both findings share the one escape hatch, since standing aside for either is
 the same deliberate call: `ALLOW_UNRESOLVED_THREADS=1 gh pr merge <n>`.
 
+## Stale-local-ref guard: checkout and worktree add (dotfiles-dev#410)
+
+`hooks/stale_local_ref_guard.sh` (`PreToolUse`, `Bash`) blocks `git
+checkout`/`git switch`/`git worktree add` when the target is a bare **local**
+branch name that is behind its `origin/<branch>` counterpart. The decision
+lives in `hooks/lib/stale_local_ref_gate.sh`'s `gate_stale_local_ref()`,
+which sets `STALE_REF_STATUS` (`fresh | ahead | stale | no_remote | no_local
+| unreadable`) from a plain `git rev-parse` comparison — no network call, so
+it never needs the `gh`-stub test pattern the other gates use.
+
+Measured 2026-09-18 (blueprintx#512): `git worktree add <path>
+fix/precommit-ci-parity-384` checked out a ref 3 commits behind the real PR
+head. The file under review did not exist at that revision, and a review
+pass publicly refuted three real CodeRabbit findings (two Major) as "not in
+this PR", resolving all three threads on that false premise — caught only
+incidentally, when an unrelated `git merge` later surfaced the very files
+the replies said did not exist.
+
+Only **behind** blocks; **ahead** (ordinary unpushed work) is always
+allowed — the same asymmetry `push_pr_head_guard.sh` and
+`uncommitted_worktree_guard.sh` protect from the other direction. Branch
+**creation** (`checkout -b`/`switch -c`/`worktree add -b`) is a different
+case, already owned by `branch_requires_issue_guard.sh`, and is skipped
+here. Escape hatch: `ALLOW_STALE_LOCAL_REF=1 <command>`.
+
+⚠️ **Not yet registered in `settings.json`'s `PreToolUse` `Bash` array** —
+that file was held by a concurrent PR when this guard was written. It IS
+installed by `install_hooks()` (so `make ai_clients` already ships it to
+`~/.claude/hooks/`); wiring the one `settings.json` entry is the remaining
+step, same shape as every other row in that array.
+
 ## Worktree rescue fan-out: two callers, one implementation
 
 `hooks/lib/worktree_fanout.sh` (`fanout_worktrees()` + `classify_worktree_diff()`,

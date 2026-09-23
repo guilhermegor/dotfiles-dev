@@ -11,6 +11,10 @@ setup() {
     SCRIPT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/ai_clients/claude/hooks/pr_body_orphan_check.sh"
     REPO="$(mktemp -d)"
     git init -q "$REPO"
+    # An origin remote is now a PRECONDITION, not decoration: the script derives the repo to
+    # query from $root's own remote so it cannot ask one checkout about another's PRs. A repo
+    # without one is genuinely unscannable and reports UNKNOWN (asserted below).
+    git -C "$REPO" remote add origin https://github.com/example/repo.git
 }
 
 teardown() {
@@ -72,4 +76,42 @@ gh_fail() { return 1; }
     [[ "$output" == *"NO MATCHING PR FOUND"* ]]
     [[ "$output" == *".git-pr-d.md"* ]]
     [ -f "$REPO/.git-pr-d.md" ]
+}
+
+@test "no origin remote: cannot resolve the repo, so UNKNOWN — never orphaned" {
+    printf '## Summary\nx\n' > "$REPO/.git-pr-e.md"
+    git -C "$REPO" remote remove origin
+    gh() { printf '[{"body":"## Summary\\nsomething else\\n"}]'; }
+    export -f gh
+    run "$SCRIPT" "$REPO"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"UNKNOWN"* ]]
+    [[ "$output" != *"NO MATCHING PR FOUND"* ]]
+}
+
+@test "PR history saturates the ceiling: UNKNOWN, never a false orphan" {
+    printf '## Summary\nnever opened\n' > "$REPO/.git-pr-f.md"
+    # One MORE body than the ceiling — the script asks for ceiling+1 precisely so a saturated
+    # page is detectable. Without the check this file reads as an orphan because the PR that
+    # owns it fell off the end of the page.
+    export PR_BODY_SCAN_CEILING=2
+    gh() { printf '[{"body":"a"},{"body":"b"},{"body":"c"}]'; }
+    export -f gh
+    run "$SCRIPT" "$REPO"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"UNKNOWN"* ]]
+    [[ "$output" != *"NO MATCHING PR FOUND"* ]]
+}
+
+@test "queries the repo from \$root's remote, not the caller's cwd" {
+    printf '## Summary\nx\n' > "$REPO/.git-pr-g.md"
+    # REPO must be exported: the stub runs in the script's own subprocess, where an
+    # unexported REPO expands to empty and the redirect lands outside the temp dir.
+    export REPO
+    gh() { printf '%s\n' "$@" > "$REPO/gh-args"; printf '[{"body":"x"}]'; }
+    export -f gh
+    run "$SCRIPT" "$REPO"
+    [ "$status" -eq 0 ]
+    grep -q -- '--repo' "$REPO/gh-args"
+    grep -q 'example/repo' "$REPO/gh-args"
 }

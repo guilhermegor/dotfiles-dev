@@ -15,6 +15,10 @@
 # Usage: pr_body_orphan_check.sh [repo-root]     (default: git toplevel of the cwd)
 set -uo pipefail
 
+# Above this many PRs the scan cannot see the whole history, so it reports UNKNOWN rather
+# than calling an unseen PR's scratch file an orphan.
+PR_BODY_SCAN_CEILING="${PR_BODY_SCAN_CEILING:-1000}"
+
 main() {
     local root="${1:-}"
     [[ -n "$root" ]] || root="$(git rev-parse --show-toplevel 2>/dev/null)"
@@ -32,9 +36,32 @@ main() {
         return 0
     fi
 
+    # --repo, derived from $root's OWN remote: the scratch files come from $root, so the PR
+    # bodies must come from $root's repository. Without it `gh` resolves the repo from the
+    # CALLER's cwd, and a run with an explicit repo-root from elsewhere compares one
+    # checkout's files against another repository's PRs.
+    local slug
+    slug="$(git -C "$root" remote get-url origin 2>/dev/null |
+        sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')"
+    if [[ -z "$slug" ]]; then
+        report_unknown "${files[@]}"
+        return 0
+    fi
+
+    # Ask for one MORE than the ceiling so a saturated result is detectable: at the cap,
+    # older PRs are silently absent and their scratch files would read as orphans. Same
+    # fail-closed ceiling shape as orphaned_issues.sh. Measured 2026-09-23: this repo had
+    # 476 PRs against the previous hardcoded --limit 200.
     local pr_bodies
-    pr_bodies="$(gh pr list --state all --limit 200 --json body 2>/dev/null)"
+    pr_bodies="$(gh pr list --repo "$slug" --state all \
+        --limit "$((PR_BODY_SCAN_CEILING + 1))" --json body 2>/dev/null)"
     if [[ $? -ne 0 || -z "$pr_bodies" ]]; then
+        report_unknown "${files[@]}"
+        return 0
+    fi
+    local pr_count
+    pr_count="$(printf '%s' "$pr_bodies" | jq -r 'length' 2>/dev/null)" || pr_count=""
+    if [[ -z "$pr_count" || "$pr_count" -gt "$PR_BODY_SCAN_CEILING" ]]; then
         report_unknown "${files[@]}"
         return 0
     fi

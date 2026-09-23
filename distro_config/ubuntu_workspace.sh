@@ -373,7 +373,16 @@ apply_additional_tweaks() {
     # Other tweaks
     run_or_echo gsettings set org.gnome.desktop.background show-desktop-icons true
     run_or_echo gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'
-    
+
+    # Sloppy focus: scroll/interact with the window under the pointer without
+    # clicking it first (GNOME ships no dedicated "scroll inactive windows"
+    # toggle — sloppy focus is the mechanism). auto-raise must stay false —
+    # sloppy focus plus auto-raise true makes windows jump to front as the
+    # pointer crosses them, the pairing that gives sloppy focus its bad
+    # reputation.
+    run_or_echo gsettings set org.gnome.desktop.wm.preferences focus-mode 'sloppy'
+    run_or_echo gsettings set org.gnome.desktop.wm.preferences auto-raise false
+
     print_status "success" "Additional tweaks applied"
 }
 

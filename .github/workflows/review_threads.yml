@@ -183,18 +183,37 @@ jobs:
           # clean verdict, which is why the marker is re-resolved per run
           # rather than cached.
           if [ "$reviewer_reported" -eq 0 ]; then
-            head_pushed_at="$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
-              --json commits --jq '.commits[-1].committedDate')"
-            marker_count="$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
-              --json comments --jq '.comments' |
-              jq --arg since "$head_pushed_at" '[
-                .[]
-                | select((.author.login // "") | ascii_downcase | test("coderabbit"))
-                | select(.createdAt > $since)
-                | select((.body // "") | ascii_downcase | test("full review finished"))
-              ] | length')"
-            if [ "${marker_count:-0}" -gt 0 ]; then
-              reviewer_reported=1
+            # ⚠️ Server-assigned arrival time, NEVER the commit's own
+            # committedDate. A commit carries whatever date its author chose,
+            # so a backdated push would make the head look OLDER than an
+            # existing clean-review marker and let that stale marker validate
+            # new code (CWE-367). The earliest check-suite for the head SHA is
+            # stamped by GitHub and cannot be authored. Measured on #455:
+            # committedDate 16:53:54Z vs earliest check-suite 16:53:55Z.
+            # Fails closed — no check suite means no trusted clock, so no
+            # marker credit, rather than falling back to the forgeable one.
+            head_seen_at="$(gh api "repos/$OWNER/$REPO/commits/$HEAD_SHA/check-suites" \
+              --jq '[.check_suites[].created_at] | min // empty' 2>/dev/null || true)"
+            if [ -n "$head_seen_at" ]; then
+              # ⚠️ Identity from REST, never from the GraphQL comment shape.
+              # `gh pr view --json comments` reports author.login as
+              # "coderabbitai" with NO type field at all, so the old substring
+              # test matched ANY login containing "coderabbit" and could not
+              # tell a Bot from a User (CWE-345) — a forgeable reviewer report
+              # on a deny-by-default gate. REST carries the exact login and
+              # the account type; both are required.
+              marker_count="$(gh api --paginate \
+                "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments" --jq '.' |
+                jq -s --arg since "$head_seen_at" 'add // [] | [
+                  .[]
+                  | select(.user.login == "coderabbitai[bot]")
+                  | select(.user.type == "Bot")
+                  | select(.created_at > $since)
+                  | select((.body // "") | ascii_downcase | test("full review finished"))
+                ] | length')"
+              if [ "${marker_count:-0}" -gt 0 ]; then
+                reviewer_reported=1
+              fi
             fi
           fi
 

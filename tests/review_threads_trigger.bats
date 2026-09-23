@@ -63,7 +63,7 @@ run_step() {
         COMMENT_AUTHOR_ASSOCIATION="$association" \
         REVIEW_COUNT="$review_count" THREADS_JSON="$threads_json" \
         REPO_ROOT="$REPO_ROOT" SCRIPT="$SCRIPT" CHECK_RUN_OUT="$CHECK_RUN_OUT" \
-        HISTORY_COMMENTS="$HISTORY_COMMENTS" \
+        HISTORY_COMMENTS="$HISTORY_COMMENTS" NO_CHECK_SUITES="${NO_CHECK_SUITES:-}" \
         bash -c '
             cd "$REPO_ROOT" || exit 1
             gh() {
@@ -72,8 +72,9 @@ run_step() {
                     *"/pulls/"*)        echo "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" ;;
                     *"--json files"*)    echo "ai_clients/claude/hooks/lib/foo.sh" ;;
                     *"--json reviews"*)  printf "%s\n" "$REVIEW_COUNT" ;;
+                    *check-suites*)      [ -n "${NO_CHECK_SUITES:-}" ] || printf "2026-01-01T00:00:00Z\n" ;;
+                    *issues/*/comments*) printf "%s" "${HISTORY_COMMENTS:-[]}" ;;
                     *"--json commits"*)  printf "2026-01-01T00:00:00Z\n" ;;
-                    *"--json comments"*) printf "%s" "${HISTORY_COMMENTS:-[]}" ;;
                     "api graphql"*)      printf "%s" "$THREADS_JSON" ;;
                     *) return 1 ;;
                 esac
@@ -207,7 +208,7 @@ ONE_OPEN_THREAD='{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCo
 # while the check landed on master, live the moment publishing became authoritative.
 
 @test "a later human comment does not overwrite an earlier clean review" {
-    export HISTORY_COMMENTS='[{"author":{"login":"coderabbitai[bot]"},"createdAt":"2026-06-01T00:00:00Z","body":"✅ Action performed\n\nFull review finished."}]'
+    export HISTORY_COMMENTS='[{"user":{"login":"coderabbitai[bot]","type":"Bot"},"created_at":"2026-06-01T00:00:00Z","body":"✅ Action performed\n\nFull review finished."}]'
     run_step "issue_comment" "guilhermegor" "thanks, merging tomorrow" \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
     [ "$status" -eq 0 ]
@@ -217,7 +218,7 @@ ONE_OPEN_THREAD='{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCo
 @test "a completion marker OLDER than the head push does not count" {
     # The stub reports the head pushed at 2026-01-01; this marker predates it, so the review
     # it records was of different code. A push must invalidate a clean verdict.
-    export HISTORY_COMMENTS='[{"author":{"login":"coderabbitai[bot]"},"createdAt":"2025-12-01T00:00:00Z","body":"Full review finished."}]'
+    export HISTORY_COMMENTS='[{"user":{"login":"coderabbitai[bot]","type":"Bot"},"created_at":"2025-12-01T00:00:00Z","body":"Full review finished."}]'
     run_step "issue_comment" "guilhermegor" "ping" \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
     [ "$status" -eq 0 ]
@@ -278,4 +279,40 @@ $LADDER_BODY"
     [ "$status" -eq 0 ]
     [ "$(published_conclusion)" = "success" ]
     [[ "$output" != *"no reviewer has reported"* ]]
+}
+
+# --- #455 local review (coderabbit CLI): the marker must not be forgeable ------------------
+# The old filter was `select(.author.login | ascii_downcase | test("coderabbit"))` over the
+# GraphQL comment shape, which reports login "coderabbitai" and carries NO account type at
+# all. Any login CONTAINING "coderabbit" satisfied it, and a human could not be told from a
+# Bot — a forgeable reviewer report on a deny-by-default gate (CWE-345). REST carries the
+# exact login and the type; both are now required.
+
+@test "a look-alike login cannot forge the completion marker" {
+    export HISTORY_COMMENTS='[{"user":{"login":"coderabbitai-fan","type":"User"},"created_at":"2026-06-01T00:00:00Z","body":"Full review finished."}]'
+    run_step "issue_comment" "guilhermegor" "ping" \
+        0 "$ZERO_THREADS"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+    [[ "$output" == *"no reviewer has reported"* ]]
+}
+
+@test "a human posting the exact marker text cannot forge it either" {
+    export HISTORY_COMMENTS='[{"user":{"login":"guilhermegor","type":"User"},"created_at":"2026-06-01T00:00:00Z","body":"Full review finished."}]'
+    run_step "issue_comment" "guilhermegor" "ping" \
+        0 "$ZERO_THREADS"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+}
+
+@test "no check suite on the head means no trusted clock, so no marker credit" {
+    # CWE-367: committedDate is author-controlled, so the head's arrival time comes from the
+    # earliest check-suite instead. With none, the gate must fail closed rather than fall
+    # back to the forgeable timestamp.
+    export HISTORY_COMMENTS='[{"user":{"login":"coderabbitai[bot]","type":"Bot"},"created_at":"2026-06-01T00:00:00Z","body":"Full review finished."}]'
+    export NO_CHECK_SUITES=1
+    run_step "issue_comment" "guilhermegor" "ping" \
+        0 "$ZERO_THREADS"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
 }

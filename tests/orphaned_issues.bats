@@ -80,7 +80,7 @@ JSON
     gh() {
         case "$*" in
             "api repos/o/r --jq .default_branch") echo master ;;
-            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number")
+            "issue list --repo o/r --state open --limit 501 --json number --jq .[].number")
                 printf '355\n999\n' ;;
             "api graphql -f query="*)
                 cat <<'JSON'
@@ -106,7 +106,7 @@ JSON
         case "$*" in
             "api repos/o/r --jq .default_branch") echo master ;;
             # 355 already closed elsewhere -- not in the open-issue set.
-            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number")
+            "issue list --repo o/r --state open --limit 501 --json number --jq .[].number")
                 printf '999\n' ;;
             "api graphql -f query="*)
                 cat <<'JSON'
@@ -131,9 +131,88 @@ JSON
     gh() {
         case "$*" in
             "api repos/o/r --jq .default_branch") echo master ;;
-            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number")
+            "issue list --repo o/r --state open --limit 501 --json number --jq .[].number")
                 printf '355\n' ;;
             "api graphql -f query="*) echo "gh: API rate limit exceeded (HTTP 403)" >&2; return 1 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    local rc=0
+    gate_orphaned_issues o r || rc=$?
+
+    [ "$rc" -eq 1 ]
+    [ "$ORPHAN_STATUS" = "unknown" ]
+    [ -z "$ORPHAN_REPORT" ]
+}
+
+# --- truncation and pagination fail closed (PR #471 review) -------------------------------------
+#
+# All three assert the SAME contract from different angles: a set this gate cannot fully
+# enumerate must answer unknown, never a partial `ok`. A partial `ok` is the worse failure
+# because nothing downstream distinguishes "no orphans" from "did not look at all of them".
+
+@test "a merged-PR set past the search ceiling is unknown, never a partial answer" {
+    ORPHAN_SEARCH_CEILING=2
+    gh() {
+        case "$*" in
+            "api graphql -f query="*)
+                # issueCount is the TOTAL matches, not this page: 3 > the ceiling of 2, so the
+                # tail is unreachable however far we paginate, even though page 1 parses fine
+                # and carries a real candidate.
+                cat <<'JSON'
+{"data":{"search":{"issueCount":3,"pageInfo":{"hasNextPage":false,"endCursor":null},
+"nodes":[{"number":509,"title":"masks #355","body":"",
+"headRefName":"feat/509","closingIssuesReferences":{"nodes":[]}}]}}}
+JSON
+                ;;
+            *) return 1 ;;
+        esac
+    }
+    run _orphan_merged_pr_mentions o/r
+    [ "$status" -eq 1 ]
+    [ -z "$output" ]
+}
+
+@test "hasNextPage true with an unreadable cursor fails closed, never loops on page one" {
+    gh() {
+        case "$*" in
+            "api graphql -f query="*)
+                # The server says there is more but gives no cursor to reach it. Without the
+                # guard the next iteration re-requests page 1 with the same empty cursor --
+                # forever. With it, the gate says unknown.
+                cat <<'JSON'
+{"data":{"search":{"issueCount":1,"pageInfo":{"hasNextPage":true,"endCursor":null},
+"nodes":[{"number":509,"title":"masks #355","body":"",
+"headRefName":"feat/509","closingIssuesReferences":{"nodes":[]}}]}}}
+JSON
+                ;;
+            *) return 1 ;;
+        esac
+    }
+    run timeout 10 bash -c '
+        source "'"$BATS_TEST_DIRNAME"'/../ai_clients/claude/hooks/lib/orphaned_issues.sh"
+        gh() {
+            cat <<'\''JSON'\''
+{"data":{"search":{"issueCount":1,"pageInfo":{"hasNextPage":true,"endCursor":null},
+"nodes":[{"number":509,"title":"masks #355","body":"",
+"headRefName":"feat/509","closingIssuesReferences":{"nodes":[]}}]}}}
+JSON
+        }
+        _orphan_merged_pr_mentions o/r
+    '
+    [ "$status" -eq 1 ]
+}
+
+@test "gate_orphaned_issues: an open-issue set at the ceiling is unknown, both globals empty" {
+    ORPHAN_OPEN_ISSUE_CEILING=2
+    gh() {
+        case "$*" in
+            "api repos/o/r --jq .default_branch") echo master ;;
+            # Three come back for a ceiling of two: the real set is larger than we can read,
+            # so issue 355 might be open and simply past the cut -- unknowable, not absent.
+            "issue list --repo o/r --state open --limit 3 --json number --jq .[].number")
+                printf '111\n222\n333\n' ;;
             *) return 1 ;;
         esac
     }

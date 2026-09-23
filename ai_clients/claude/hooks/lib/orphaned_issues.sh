@@ -42,6 +42,13 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	exit 1
 fi
 
+# Two ceilings this gate cannot page past. Both are DETECTION thresholds, not request
+# sizes: crossing either means the real set is larger than can be enumerated, and the
+# only honest answer is ORPHAN_STATUS=unknown. Raising one without also moving the
+# detection re-opens the silent-truncation hole it closes.
+ORPHAN_SEARCH_CEILING="${ORPHAN_SEARCH_CEILING:-1000}"      # GraphQL `search` hard cap
+ORPHAN_OPEN_ISSUE_CEILING="${ORPHAN_OPEN_ISSUE_CEILING:-500}" # `gh issue list --limit`
+
 # _orphan_merged_pr_mentions SLUG
 # Prints "issue_number<TAB>pr_number<TAB>closing_list" one line per (mentioned issue, PR) pair
 # where a MERGED pull request's title, body, or branch name mentions the issue number while its
@@ -53,9 +60,15 @@ _orphan_merged_pr_mentions() {
 	while [ "$has_next" = "true" ]; do
 		after=""
 		[ -n "$cursor" ] && after=",after:\"$cursor\""
-		query="{search(query:\"repo:$slug is:pr is:merged\",type:ISSUE,first:50$after){pageInfo{hasNextPage endCursor} nodes{... on PullRequest{number title body headRefName closingIssuesReferences(first:20){nodes{number}}}}}}"
+		query="{search(query:\"repo:$slug is:pr is:merged\",type:ISSUE,first:50$after){issueCount pageInfo{hasNextPage endCursor} nodes{... on PullRequest{number title body headRefName closingIssuesReferences(first:20){nodes{number}}}}}}"
 		result="$(gh api graphql -f query="$query" 2>/dev/null)" || return 1
 		printf '%s' "$result" | jq -e '.errors' >/dev/null 2>&1 && return 1
+		# GraphQL `search` stops yielding at 1000 results however far you paginate, so a
+		# repo past that ceiling silently drops the merged PR that mentions an open issue
+		# and the gate would answer `ok` having never seen it. `issueCount` is the TOTAL
+		# match count, not the page size, so it detects the ceiling before it truncates.
+		printf '%s' "$result" \
+			| jq -e ".data.search.issueCount > $ORPHAN_SEARCH_CEILING" >/dev/null 2>&1 && return 1
 		page="$(printf '%s' "$result" | jq -c '.data.search.nodes[]?' 2>/dev/null)" || return 1
 		while IFS= read -r node; do
 			[ -n "$node" ] || continue
@@ -73,8 +86,16 @@ _orphan_merged_pr_mentions() {
 				| "\($m)\t\($pr)\t\($closed | join(","))"
 			' 2>/dev/null || return 1
 		done <<<"$page"
-		has_next="$(printf '%s' "$result" | jq -r '.data.search.pageInfo.hasNextPage // "false"' 2>/dev/null)"
-		cursor="$(printf '%s' "$result" | jq -r '.data.search.pageInfo.endCursor // empty' 2>/dev/null)"
+		# Both reads fail closed. A failed `hasNextPage` read leaves has_next empty, which
+		# ends the loop exactly like a genuine "false" -- the caller would then publish the
+		# pages gathered so far as a complete answer. An unread cursor is the same defect
+		# one step later: the next iteration would re-request page 1 forever.
+		has_next="$(printf '%s' "$result" | jq -r '.data.search.pageInfo.hasNextPage // "false"' 2>/dev/null)" || return 1
+		[ -n "$has_next" ] || return 1
+		if [ "$has_next" = "true" ]; then
+			cursor="$(printf '%s' "$result" | jq -r '.data.search.pageInfo.endCursor // empty' 2>/dev/null)" || return 1
+			[ -n "$cursor" ] || return 1
+		fi
 	done
 }
 
@@ -88,8 +109,15 @@ gate_orphaned_issues() {
 	db="$(gh api "repos/$slug" --jq '.default_branch' 2>/dev/null)" || return 1
 	[ -n "$db" ] || return 1
 
-	local open_issues
-	open_issues="$(gh issue list --repo "$slug" --state open --limit 500 --json number --jq '.[].number' 2>/dev/null)" || return 1
+	# `--limit` is a ceiling, not an exhaustive query: a repo past it drops the tail
+	# silently, and a dropped issue is discarded by the membership test below as though
+	# no PR ever mentioned it. Ask for one MORE than the ceiling -- getting that many
+	# back proves the real set is larger than we can enumerate, so answer unknown.
+	local open_issues open_count
+	open_issues="$(gh issue list --repo "$slug" --state open \
+		--limit "$((ORPHAN_OPEN_ISSUE_CEILING + 1))" --json number --jq '.[].number' 2>/dev/null)" || return 1
+	open_count="$(printf '%s\n' "$open_issues" | sed '/^$/d' | wc -l)"
+	[ "$open_count" -le "$ORPHAN_OPEN_ISSUE_CEILING" ] || return 1
 
 	local mentions
 	mentions="$(_orphan_merged_pr_mentions "$slug")" || return 1

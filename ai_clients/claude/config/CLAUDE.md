@@ -48,7 +48,15 @@ live here:
   the release gate would have diffed against the wrong tag and cut the
   wrong version with nothing red. `git -C <path>` does not fix this: it
   resolves the directory but not the implicit-HEAD half of the bug
-  (dotfiles-dev#229).
+  (dotfiles-dev#229). A second, costlier recurrence: `git worktree add
+  <path> <branch>` naming a **bare local branch** checked out a ref 3
+  commits behind the real PR head, and a review pass publicly refuted three
+  real CodeRabbit findings (two Major) as "not in this PR", resolving all
+  three threads on that false premise (blueprintx#512). Reviewing a PR
+  means reading it at `origin/<head-ref>` after an explicit fetch, never at
+  a local branch of the same name — `stale_local_ref_guard.sh` /
+  `hooks/lib/stale_local_ref_gate.sh` now refuse a checkout/worktree-add
+  whose local ref is behind `origin/<branch>` (dotfiles-dev#410).
 
 ## Superpowers spec/plan output — redirect to `.specs/`
 

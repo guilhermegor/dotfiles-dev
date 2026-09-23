@@ -21,13 +21,15 @@ setup() {
     export PATH="$BIN:$PATH"
 
     # Functions only — main() is never invoked by sourcing this. HOOK_DIR resolves relative to
-    # wherever this gets sourced from, so its `source "$HOOK_DIR/lib/review_thread_gate.sh"` and
-    # `source "$HOOK_DIR/lib/free_surface.sh"` lines each need a real copy sitting next to it.
+    # wherever this gets sourced from, so its `source "$HOOK_DIR/lib/review_thread_gate.sh"`,
+    # `source "$HOOK_DIR/lib/free_surface.sh"`, and `source "$HOOK_DIR/lib/kanban_reconcile.sh"`
+    # lines each need a real copy sitting next to it.
     FUNCS="$REPO/sweep_funcs.sh"
     head -n -1 "$SWEEP_SRC" > "$FUNCS"
     mkdir -p "$REPO/lib"
     cp "$(dirname "$SWEEP_SRC")/lib/review_thread_gate.sh" "$REPO/lib/"
     cp "$(dirname "$SWEEP_SRC")/lib/free_surface.sh" "$REPO/lib/"
+    cp "$(dirname "$SWEEP_SRC")/lib/kanban_reconcile.sh" "$REPO/lib/"
     source "$FUNCS"
 
     cd "$REPO" || return 1

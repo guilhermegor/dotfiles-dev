@@ -34,6 +34,13 @@ on:
   issue_comment:
     types: [created]
 
+permissions:
+  contents: read
+  pull-requests: read
+  # checks: write is what lets this job publish its verdict onto the PR head —
+  # see the report() helper below for why that has to be explicit.
+  checks: write
+
 jobs:
   gate:
     name: Review threads answered
@@ -42,7 +49,20 @@ jobs:
     # outright rather than let PR_NUMBER resolve to a non-PR issue number.
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request != null
     steps:
+      # ⚠️ Pin to the DEFAULT BRANCH, never the event's ref. For
+      # pull_request_review and pull_request_review_comment GITHUB_REF is the
+      # PR merge ref, so a bare checkout hands PR-controlled code to the
+      # `source` below — which now runs with checks: write. That code could
+      # publish a passing required check without ever calling
+      # gate_pr_thread_state. The token is the reason this pin is mandatory:
+      # before it there was nothing to steal.
+      # Trade-off, accepted: a PR that edits review_thread_gate.sh is judged
+      # by master's copy, not its own. That is correct for a required check —
+      # and it also removes the "PR behind base is judged by the old gate"
+      # problem, since every PR is now judged by the current one.
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Check review-thread state
         env:
@@ -57,6 +77,42 @@ jobs:
           set -euo pipefail
           # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
           source ai_clients/claude/hooks/lib/review_thread_gate.sh
+
+          # ⚠️ Publish the verdict onto the PR HEAD explicitly — this job's OWN
+          # check-run does not land there. For issue_comment (and
+          # pull_request_review) GitHub runs the workflow in the DEFAULT
+          # BRANCH's context, so Actions attaches the check-run to master's
+          # SHA. Measured 2026-09-23 (dotfiles-dev#481): every issue_comment
+          # run reported head_sha 5491893e = master, the required context was
+          # absent from all 22 open PR heads, and every one read BLOCKED —
+          # including two carrying three submitted reviews each, with
+          # required_approving_review_count at 0.
+          # ⚠️ EVERY exit path reports, including the selective skip below: a
+          # required context has no "not applicable" state, and a PR with no
+          # check-run at all is blocked exactly as hard as a failing one.
+          # ⚠️ The job exits non-zero ONLY when it cannot publish, never to
+          # mirror a failing verdict. An unpublished verdict leaves the PR
+          # blocked, which is fail-closed; a wrongly published one is not.
+          # OWNER/REPO come from the env: block, which shellcheck cannot see when it lints
+          # this run: script standalone — same SC2153 exemption the selective-policy call
+          # below already carries, needed here too now that this is their first use.
+          # shellcheck disable=SC2153
+          HEAD_SHA="$(gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')"
+          report() {
+            local conclusion="$1" title="$2" summary="${3:-}"
+            if ! jq -n --arg s "$HEAD_SHA" --arg c "$conclusion" \
+                       --arg t "$title" --arg b "$summary" \
+                  '{name:"Review threads answered", head_sha:$s,
+                    status:"completed", conclusion:$c,
+                    output:{title:$t, summary:$b}}' \
+                 | gh api -X POST "repos/$OWNER/$REPO/check-runs" \
+                     --input - >/dev/null; then
+              echo "::error::could not publish the check-run to $HEAD_SHA"
+              exit 1
+            fi
+            echo "$conclusion: $title"
+            exit 0
+          }
 
           # CodeRabbit's own completion marker is a positive signal only —
           # see the header comment for why this never becomes an early exit.
@@ -76,8 +132,8 @@ jobs:
           changed=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
             --json files --jq '.files[].path')
           if ! printf '%s\n' "$changed" | grep -qE '^ai_clients/claude/hooks/|(^|/)settings\.json$'; then
-            echo "no hooks/ or settings.json changes — gate not required (selective policy)"
-            exit 0
+            report success "gate not required (selective policy)" \
+              "No ai_clients/claude/hooks/ or settings.json changes in this PR."
           fi
 
           # No review at all is a distinct failure from "thread left open" —
@@ -90,14 +146,42 @@ jobs:
           review_count=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
             --json reviews --jq '.reviews | length')
           [ "$review_count" -gt 0 ] && reviewer_reported=1
+
+          # ⚠️ Resolve the completion marker from the PR's HISTORY, not only
+          # from the comment that fired THIS run. A clean review submits no
+          # review object, so review_count stays 0 and the marker is a one-off
+          # comment — any later ordinary comment would re-run this job with
+          # reviewer_reported=0 and publish `failure` over the passing verdict
+          # already on this head. Latent before this PR (the verdict landed on
+          # master and changed nothing); a live regression the moment the
+          # publish became authoritative.
+          # Scoped to the current head push: a push MUST invalidate an earlier
+          # clean verdict, which is why the marker is re-resolved per run
+          # rather than cached.
           if [ "$reviewer_reported" -eq 0 ]; then
-            echo "::error::no reviewer has reported on this PR yet"
-            exit 1
+            head_pushed_at="$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
+              --json commits --jq '.commits[-1].committedDate')"
+            marker_count="$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
+              --json comments --jq '.comments' |
+              jq --arg since "$head_pushed_at" '[
+                .[]
+                | select((.author.login // "") | ascii_downcase | test("coderabbit"))
+                | select(.createdAt > $since)
+                | select((.body // "") | ascii_downcase | test("full review finished"))
+              ] | length')"
+            if [ "${marker_count:-0}" -gt 0 ]; then
+              reviewer_reported=1
+            fi
+          fi
+
+          if [ "$reviewer_reported" -eq 0 ]; then
+            report failure "no reviewer has reported on this PR yet" \
+              "No submitted review, and no verified reviewer completion marker."
           fi
 
           gate_pr_thread_state "$OWNER" "$REPO" "$PR_NUMBER" ".review-bots.yaml"
           echo "$GATE_DETAIL"
           if [ "$GATE_STATUS" != "clean" ]; then
-            echo "::error::review gate status=$GATE_STATUS"
-            exit 1
+            report failure "review gate status=$GATE_STATUS" "$GATE_DETAIL"
           fi
+          report success "review threads answered" "$GATE_DETAIL"

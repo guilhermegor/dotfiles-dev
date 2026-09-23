@@ -20,12 +20,18 @@ Per feature, one directory: `.specs/features/<feature-name>/`
   `s:work-breakdown`'s Large-scope per-task breakdown for a decomposed,
   multi-issue feature (#306) — a different shape than `plan.md` — writes it
   up front whenever the feature was split into parallel-dispatchable issues.
-  `s:dev-loop` (dotfiles-dev#428) then **requires** it for the lifetime of
-  any multi-step effort it tracks across sessions and subagents, and updates
-  it after each slice, in the same round that ships the slice — a multi-step
-  effort with no tracker is a finding `s:dev-loop` reports, never a silent
-  gap. Not in `docs/`, and not only in a session-local task tool: an account
-  switch or session limit erases either of those, but not a file in the repo.
+  A multi-step effort carried across sessions and subagents is **expected**
+  to keep one, updated in the same round that ships each slice. ⚠️ This is a
+  convention, not an enforced check: `s:dev-loop` does **not** verify it
+  today (`grep -c 'tasks\.md'` in the skill returns 0), and saying otherwise
+  here would be worse than saying nothing — a session would read as
+  compliant with nothing enforcing it. Enforcement is tracked separately in
+  dotfiles-dev#485, which has to settle what counts as an in-flight effort
+  first: every feature directory in this repo currently has a `plan.md` and
+  none has a `tasks.md`, so the naive predicate fires on all of them at once
+  and gets ignored. Not in `docs/`, and not only in a session-local task
+  tool: an account switch or session limit erases either of those, but not a
+  file in the repo.
 
   **Status markers** — the same three states as `progress.md` below, plus one
   addition: `[~]` **must name its owner**, as `[~] <branch-or-agent>`. The

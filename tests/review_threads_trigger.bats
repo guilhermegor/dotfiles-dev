@@ -42,20 +42,40 @@ teardown() {
 # `pr view --json reviews`) plus the GraphQL call review_thread_gate.sh makes,
 # then runs the extracted script from the repo root so its relative `source`
 # resolves.
+# The step publishes its verdict as a check-run POST instead of encoding it in its own exit
+# status (dotfiles-dev#481) — Actions attaches THIS job's check-run to the default branch for
+# an issue_comment event, so the exit status never reaches the PR. The stub therefore captures
+# the POSTed body, and the assertions below read the published `conclusion`. Exit status alone
+# would now pass for both verdicts, which is exactly the false pass these tests exist to catch.
+published_conclusion() {
+    jq -r '.conclusion' < "$CHECK_RUN_OUT"
+}
+
 run_step() {
     local event="$1" author="$2" body="$3" review_count="$4" threads_json="$5"
+    local association="${6:-}"
+    CHECK_RUN_OUT="$BATS_TEST_TMPDIR/check-run.json"
+    : > "$CHECK_RUN_OUT"
+    HISTORY_COMMENTS="${HISTORY_COMMENTS:-[]}"
     run env \
         GH_TOKEN=x OWNER=o REPO=r PR_NUMBER=5 \
         EVENT_NAME="$event" COMMENT_AUTHOR="$author" COMMENT_BODY="$body" \
+        COMMENT_AUTHOR_ASSOCIATION="$association" \
         REVIEW_COUNT="$review_count" THREADS_JSON="$threads_json" \
-        REPO_ROOT="$REPO_ROOT" SCRIPT="$SCRIPT" \
+        REPO_ROOT="$REPO_ROOT" SCRIPT="$SCRIPT" CHECK_RUN_OUT="$CHECK_RUN_OUT" \
+        HISTORY_COMMENTS="$HISTORY_COMMENTS" NO_CHECK_SUITES="${NO_CHECK_SUITES:-}" \
         bash -c '
             cd "$REPO_ROOT" || exit 1
             gh() {
                 case "$*" in
-                    *"--json files"*)   echo "ai_clients/claude/hooks/lib/foo.sh" ;;
-                    *"--json reviews"*) printf "%s\n" "$REVIEW_COUNT" ;;
-                    "api graphql"*)     printf "%s" "$THREADS_JSON" ;;
+                    *check-runs*)       cat > "$CHECK_RUN_OUT" ;;
+                    *"/pulls/"*)        echo "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" ;;
+                    *"--json files"*)    echo "ai_clients/claude/hooks/lib/foo.sh" ;;
+                    *"--json reviews"*)  printf "%s\n" "$REVIEW_COUNT" ;;
+                    *check-suites*)      [ -n "${NO_CHECK_SUITES:-}" ] || printf "2026-01-01T00:00:00Z\n" ;;
+                    *issues/*/comments*) printf "%s" "${HISTORY_COMMENTS:-[]}" ;;
+                    *"--json commits"*)  printf "2026-01-01T00:00:00Z\n" ;;
+                    "api graphql"*)      printf "%s" "$THREADS_JSON" ;;
                     *) return 1 ;;
                 esac
             }
@@ -71,7 +91,8 @@ run_step() {
 
 @test "zero reviews, zero comments, non-marker trigger: fails decided, not absent" {
     run_step "pull_request_review" "" "" 0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
     [[ "$output" == *"no reviewer has reported"* ]]
 }
 
@@ -81,7 +102,8 @@ run_step() {
     run_step "issue_comment" "coderabbitai[bot]" \
         "your next included review will be available in 34 minutes" \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
     [[ "$output" == *"no reviewer has reported"* ]]
 }
 
@@ -90,7 +112,8 @@ run_step() {
 @test "issue_comment from a human, unrelated text: still fails" {
     run_step "issue_comment" "guilhermegor" "LGTM, nice work" \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
     [[ "$output" == *"no reviewer has reported"* ]]
 }
 
@@ -104,6 +127,7 @@ run_step() {
         "✅ Action performed — Full review finished." \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
     [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "success" ]
     [[ "$output" != *"no reviewer has reported"* ]]
 }
 
@@ -115,7 +139,8 @@ run_step() {
     run_step "issue_comment" "coderabbitai[bot]" \
         "✅ Action performed — Full review finished." \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":1,"nodes":[{"isResolved":false,"path":"a.sh","comments":{"totalCount":0,"nodes":[]}}]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
     [[ "$output" == *"review gate status=problems"* ]]
 }
 
@@ -124,5 +149,170 @@ run_step() {
 @test "a real submitted review (review_count > 0): proceeds past the reported check" {
     run_step "pull_request_review" "" "" 1 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
     [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "success" ]
     [[ "$output" != *"no reviewer has reported"* ]]
+}
+
+# --- #481: the verdict must land on the PR HEAD, not on whatever SHA fired the run ----------
+
+@test "the published check-run targets the PR head commit" {
+    run_step "issue_comment" "coderabbitai[bot]" \
+        "✅ Action performed — Full review finished." \
+        0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.head_sha' < "$CHECK_RUN_OUT")" = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" ]
+    [ "$(jq -r '.name' < "$CHECK_RUN_OUT")" = "Review threads answered" ]
+}
+
+@test "a PR outside the selective scope still publishes, or it stays blocked forever" {
+    CHECK_RUN_OUT="$BATS_TEST_TMPDIR/check-run.json"
+    : > "$CHECK_RUN_OUT"
+    run env GH_TOKEN=x OWNER=o REPO=r PR_NUMBER=5 EVENT_NAME=issue_comment \
+        COMMENT_AUTHOR=x COMMENT_BODY=x REPO_ROOT="$REPO_ROOT" SCRIPT="$SCRIPT" \
+        CHECK_RUN_OUT="$CHECK_RUN_OUT" \
+        bash -c '
+            cd "$REPO_ROOT" || exit 1
+            gh() {
+                case "$*" in
+                    *check-runs*)     cat > "$CHECK_RUN_OUT" ;;
+                    *"/pulls/"*)      echo "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" ;;
+                    *"--json files"*) echo "README.md" ;;
+                    *) return 1 ;;
+                esac
+            }
+            export -f gh
+            bash "$SCRIPT"
+        '
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.conclusion' < "$CHECK_RUN_OUT")" = "success" ]
+    [[ "$output" == *"gate not required"* ]]
+}
+
+
+# --- dotfiles-dev#451: the reviewer ladder's fallback review is a report ----
+# The ladder (#444/#446/#449) posts its fallback review as an issue_comment
+# from the operator's own account — never a review object — so review_count
+# stays 0 and only the marker + author_association can tell "reviewed via
+# the ladder" apart from "nobody has reported yet".
+
+LADDER_BODY="Fallback review — runtime: codex, model: codex-auto-review (selected by: review-specialized-slug)
+
+No findings."
+ZERO_THREADS='{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+ONE_OPEN_THREAD='{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":1,"nodes":[{"isResolved":false,"path":"a.sh","comments":{"totalCount":0,"nodes":[]}}]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+
+# --- #482 review: a clean verdict must survive a later unrelated comment -------------------
+# A clean CodeRabbit review submits no review object, so review_count stays 0 and the only
+# evidence is its completion COMMENT. Reading that from this run's trigger alone meant any
+# later comment republished `failure` over the passing verdict already on the head — latent
+# while the check landed on master, live the moment publishing became authoritative.
+
+@test "a later human comment does not overwrite an earlier clean review" {
+    export HISTORY_COMMENTS='[{"user":{"login":"coderabbitai[bot]","type":"Bot"},"created_at":"2026-06-01T00:00:00Z","body":"✅ Action performed\n\nFull review finished."}]'
+    run_step "issue_comment" "guilhermegor" "thanks, merging tomorrow" \
+        0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "success" ]
+}
+
+@test "a completion marker OLDER than the head push does not count" {
+    # The stub reports the head pushed at 2026-01-01; this marker predates it, so the review
+    # it records was of different code. A push must invalidate a clean verdict.
+    export HISTORY_COMMENTS='[{"user":{"login":"coderabbitai[bot]","type":"Bot"},"created_at":"2025-12-01T00:00:00Z","body":"Full review finished."}]'
+    run_step "issue_comment" "guilhermegor" "ping" \
+        0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+    [[ "$output" == *"no reviewer has reported"* ]]
+}
+
+@test "ladder marker from OWNER, zero reviews, zero threads: passes" {
+    run_step "issue_comment" "guilhermegor" "$LADDER_BODY" 0 "$ZERO_THREADS" "OWNER"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "success" ]
+    [[ "$output" != *"no reviewer has reported"* ]]
+}
+
+@test "ladder marker from author_association=NONE: fails" {
+    run_step "issue_comment" "guilhermegor" "$LADDER_BODY" 0 "$ZERO_THREADS" "NONE"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+    [[ "$output" == *"no reviewer has reported"* ]]
+}
+
+@test "ladder marker from author_association=CONTRIBUTOR: fails" {
+    run_step "issue_comment" "guilhermegor" "$LADDER_BODY" 0 "$ZERO_THREADS" "CONTRIBUTOR"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+    [[ "$output" == *"no reviewer has reported"* ]]
+}
+
+@test "ladder marker quoted on a non-first line: fails" {
+    local quoted="Re-posting for visibility:
+
+$LADDER_BODY"
+    run_step "issue_comment" "guilhermegor" "$quoted" 0 "$ZERO_THREADS" "OWNER"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+    [[ "$output" == *"no reviewer has reported"* ]]
+}
+
+@test "ladder marker present but a thread is still open: fails" {
+    run_step "issue_comment" "guilhermegor" "$LADDER_BODY" 0 "$ONE_OPEN_THREAD" "OWNER"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+    [[ "$output" == *"review gate status=problems"* ]]
+}
+
+# --- #455 review: the verdict must not depend on how long the review was ------------------
+# `printf "%s\n" "$COMMENT_BODY" | head -n1` under `set -euo pipefail` takes SIGPIPE once the
+# body no longer fits the pipe buffer: head exits after line 1, printf dies, the assignment
+# returns 141 and the step is killed BEFORE the marker check runs. Measured on this machine:
+# rc=0 at 2 KB, rc=141 from ~50 KB up — and GitHub accepts comment bodies to 65536 chars, so a
+# verbose fallback review reaches it. Parameter expansion has no pipe and no length ceiling.
+
+@test "ladder marker is honoured in a 60 KB body (no broken-pipe kill)" {
+    long_body="Fallback review — runtime: codex, model: codex-auto-review (selected by: review-specialized-slug)"$'\n'"$(printf '%*s' 60000 '')"
+    run_step "issue_comment" "guilhermegor" "$long_body" \
+        0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}' \
+        "OWNER"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "success" ]
+    [[ "$output" != *"no reviewer has reported"* ]]
+}
+
+# --- #455 local review (coderabbit CLI): the marker must not be forgeable ------------------
+# The old filter was `select(.author.login | ascii_downcase | test("coderabbit"))` over the
+# GraphQL comment shape, which reports login "coderabbitai" and carries NO account type at
+# all. Any login CONTAINING "coderabbit" satisfied it, and a human could not be told from a
+# Bot — a forgeable reviewer report on a deny-by-default gate (CWE-345). REST carries the
+# exact login and the type; both are now required.
+
+@test "a look-alike login cannot forge the completion marker" {
+    export HISTORY_COMMENTS='[{"user":{"login":"coderabbitai-fan","type":"User"},"created_at":"2026-06-01T00:00:00Z","body":"Full review finished."}]'
+    run_step "issue_comment" "guilhermegor" "ping" \
+        0 "$ZERO_THREADS"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+    [[ "$output" == *"no reviewer has reported"* ]]
+}
+
+@test "a human posting the exact marker text cannot forge it either" {
+    export HISTORY_COMMENTS='[{"user":{"login":"guilhermegor","type":"User"},"created_at":"2026-06-01T00:00:00Z","body":"Full review finished."}]'
+    run_step "issue_comment" "guilhermegor" "ping" \
+        0 "$ZERO_THREADS"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
+}
+
+@test "no check suite on the head means no trusted clock, so no marker credit" {
+    # CWE-367: committedDate is author-controlled, so the head's arrival time comes from the
+    # earliest check-suite instead. With none, the gate must fail closed rather than fall
+    # back to the forgeable timestamp.
+    export HISTORY_COMMENTS='[{"user":{"login":"coderabbitai[bot]","type":"Bot"},"created_at":"2026-06-01T00:00:00Z","body":"Full review finished."}]'
+    export NO_CHECK_SUITES=1
+    run_step "issue_comment" "guilhermegor" "ping" \
+        0 "$ZERO_THREADS"
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
 }

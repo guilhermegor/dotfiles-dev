@@ -36,10 +36,15 @@
 
 set -u
 
-CACHE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kanban-boards"
-
 command -v jq >/dev/null 2>&1 || exit 0
 command -v gh >/dev/null 2>&1 || exit 0
+
+# owner_repo/cache_file/discover_board/board_config/move_card live in the shared lib
+# (dotfiles-dev#448) so this event hook and the reconcile that covers its misses
+# (subagent_stop_sweep.sh) share one implementation instead of two copies drifting apart.
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/kanban_reconcile.sh
+source "$HOOK_DIR/lib/kanban_reconcile.sh"
 
 main() {
     local payload tool command target owner repo issue
@@ -97,10 +102,6 @@ target_column() {
     return 1
 }
 
-owner_repo() {
-    gh repo view --json owner,name -q '.owner.login + " " + .name' 2>/dev/null
-}
-
 issue_from_head() {
     # Leftmost number run in the current branch name (feat/46-slug → 46), matching issue.md's
     # `<type>/<N>-<slug>` convention.
@@ -117,78 +118,6 @@ issue_state() {
     gh issue view "$issue" --repo "$owner/$repo" --json state -q '.state' 2>/dev/null
 }
 
-cache_file() {
-    printf '%s/%s-%s.json' "$CACHE_DIR" "$1" "$2"
-}
-
-board_config() {
-    # Emit "<project_number> <project_node> <status_field_id> <option_id_for_target>". Reads the
-    # per-repo cache, discovering + writing it on a miss. Returns 1 if there is no `<repo> kanban`
-    # board or the target column does not exist.
-    local owner="$1" repo="$2" target="$3" file line num node field opt
-    file="$(cache_file "$owner" "$repo")"
-
-    if [[ -r "$file" ]]; then
-        opt="$(jq -r --arg t "$target" '.options[$t] // empty' "$file" 2>/dev/null)"
-        if [[ -n "$opt" ]]; then
-            num="$(jq -r '.project_number' "$file")"
-            node="$(jq -r '.project_node_id' "$file")"
-            field="$(jq -r '.status_field_id' "$file")"
-            # Trailing newline is required: the caller uses `read`, which returns non-zero on EOF
-            # before a delimiter and would trip its `|| exit 0` despite assigning the vars.
-            printf '%s %s %s %s\n' "$num" "$node" "$field" "$opt"
-            return 0
-        fi
-    fi
-
-    local rc
-    line="$(discover_board "$owner" "$repo")"; rc=$?   # writes the cache as a side effect
-    (( rc == 2 )) && { printf 'AMBIGUOUS\n'; return 0; }   # >1 same-named board — let main warn
-    (( rc == 0 )) || return 1
-    opt="$(printf '%s' "$line" | jq -r --arg t "$target" '.options[$t] // empty' 2>/dev/null)"
-    [[ -n "$opt" ]] || return 1
-    printf '%s %s %s %s\n' \
-        "$(printf '%s' "$line" | jq -r '.project_number')" \
-        "$(printf '%s' "$line" | jq -r '.project_node_id')" \
-        "$(printf '%s' "$line" | jq -r '.status_field_id')" \
-        "$opt"
-}
-
-discover_board() {
-    # Find the `<repo> kanban` project, resolve its Status field + option ids, cache the result, and
-    # echo it as one JSON object. Returns: 0 + config on success, 1 when no such board exists, and
-    # 2 when MORE THAN ONE board carries that title (refuse to guess — the caller surfaces this).
-    local owner="$1" repo="$2" projects matches count num node fields field_id options config
-    projects="$(gh project list --owner "$owner" --format json 2>/dev/null)" || return 1
-
-    matches="$(printf '%s' "$projects" \
-        | jq -r --arg t "$repo kanban" '.projects[] | select(.title==$t) | "\(.number) \(.id)"')"
-    count="$(printf '%s\n' "$matches" | grep -c .)"
-    (( count == 0 )) && return 1
-    if (( count > 1 )); then
-        # A silent head -n1 pick here would move a random board's card. Refuse instead — issue.md
-        # now prevents duplicate-titled boards, so this is the safety net for one already out there.
-        return 2
-    fi
-
-    read -r num node <<< "$matches"
-    [[ -n "$num" && -n "$node" ]] || return 1
-
-    fields="$(gh project field-list "$num" --owner "$owner" --format json 2>/dev/null)" || return 1
-    field_id="$(printf '%s' "$fields" | jq -r '.fields[] | select(.name=="Status") | .id' | head -n1)"
-    [[ -n "$field_id" ]] || return 1
-    options="$(printf '%s' "$fields" \
-        | jq -c '[.fields[] | select(.name=="Status") | .options[]] | map({(.name): .id}) | add')"
-    [[ -n "$options" && "$options" != "null" ]] || return 1
-
-    config="$(jq -n --argjson num "$num" --arg node "$node" --arg field "$field_id" \
-        --argjson options "$options" \
-        '{project_number:$num, project_node_id:$node, status_field_id:$field, options:$options}')"
-
-    mkdir -p "$CACHE_DIR" 2>/dev/null && printf '%s\n' "$config" > "$(cache_file "$owner" "$repo")" 2>/dev/null
-    printf '%s' "$config"
-}
-
 card_item_id() {
     # Item id of the card whose content is issue <issue> on this board, or nothing.
     local num="$1" owner="$2" issue="$3"
@@ -196,12 +125,6 @@ card_item_id() {
         | jq -r --argjson n "$issue" \
             'first(.items[] | select(.content.type=="Issue" and .content.number==$n) | .id) // empty' \
             2>/dev/null
-}
-
-move_card() {
-    local node="$1" item="$2" field="$3" option="$4"
-    gh project item-edit --project-id "$node" --id "$item" \
-        --field-id "$field" --single-select-option-id "$option" >/dev/null 2>&1
 }
 
 announce() {

@@ -211,6 +211,29 @@ is empty, say "no roadmap items changed" and move on.
 on read errors**: an item whose native-blocker read fails is reported UNKNOWN and left untouched,
 never assumed clear.
 
+### Orphaned issues (dotfiles-dev#418)
+
+Step 6's own `closingIssuesReferences` query only runs when an issue is already a dispatch
+candidate — an orphan that keeps failing the collision check is never selected, so it is never
+examined. This asks the question directly, over every open issue, instead of waiting for
+dispatch to stumble onto it by accident (three orphans this week were found only because the
+owner asked). Call the gate — never re-derive the query by hand:
+
+```bash
+source ai_clients/claude/hooks/lib/orphaned_issues.sh
+gate_orphaned_issues <owner> <repo> || echo "orphaned-issues gate UNKNOWN — nothing reported"
+printf '%s\n' "$ORPHAN_REPORT"
+```
+
+Report **one line per candidate** — a merged PR whose title, body, or branch name mentions the
+issue while its own `closingIssuesReferences` omits it (the blueprintx#381/#355 shape). If
+`$ORPHAN_REPORT` is empty, say "no orphaned issues found" and move on.
+
+⚠️ **Report only, never auto-close.** A mention is not proof — verify by reading the code on the
+named default branch before closing, the same rule step 6 already applies to a dispatch
+candidate. A partly-shipped issue (blueprintx#381: only one of two slices landed) would lose real
+remaining work if closed on the mention alone.
+
 ## 3. THREADS — read, verify, fix, reply, resolve
 
 ⚠️ **Ask the gate; never eyeball the PR list.** A thread arrives *after* the moment work feels

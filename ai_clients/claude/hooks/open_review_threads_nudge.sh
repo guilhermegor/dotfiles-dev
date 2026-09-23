@@ -36,6 +36,17 @@
 #     `$CLAUDE_CONFIG_DIR/open-threads-nudge/`, for $OPEN_THREADS_NUDGE_CACHE_TTL seconds
 #     (default 300), so a long session's many Stops don't re-run a full scan on every turn.
 #
+# ⚠️ A cached verdict names a PR whose STATE can change inside the TTL window (dotfiles-dev#423).
+# Measured on blueprintx 2026-09-20: PR #566 merged 61s after the scan that cached "CodeRabbit
+# still running" against it, and the hook replayed that stale verdict on three more Stops over the
+# next four minutes — a snapshot that was true when taken and false every time it was printed
+# again. Do NOT fix this by shortening the TTL (trades a benign false positive for the rate-limit
+# pressure the TTL exists to absorb — this account already hit the GitHub quota four times that
+# day). Instead, a cache hit that is ABOUT TO PRODUCE A NUDGE spends exactly one extra `gh pr view`
+# call re-confirming the named PR is still OPEN before printing — cost bounded by the number of
+# PRs actually flagged (0-1), not by the scan size. A PR that has merged/closed since is dropped
+# silently, the same fail-open shape the rest of this scan already uses.
+#
 # ⚠️ `stop_hook_active` MUST be honoured. Claude Code sets it when the stop was itself triggered
 # by a hook; ignoring it means blocking the stop that this very hook caused, forever. The model
 # gets one nudge per turn, not an inescapable loop.
@@ -131,7 +142,7 @@ _scan_cache_path() {
 # a same-session cache when it is still fresh. Returns 1 only when the PR list itself could not
 # be read — the caller's fail-open case.
 _repo_wide_scan() {
-	local owner="$1" name="$2" session_id="$3" cache now ts age cached prs n
+	local owner="$1" name="$2" session_id="$3" cache now ts age cached prs n state
 
 	cache="$(_scan_cache_path "$session_id" "$owner" "$name" 2>/dev/null)" || cache=""
 	if [ -n "$cache" ] && [ -r "$cache" ]; then
@@ -144,6 +155,19 @@ _repo_wide_scan() {
 			REPORT_NUMBER="$(printf '%s' "$cached" | jq -r '.number // empty' 2>/dev/null)"
 			GATE_STATUS="$(printf '%s' "$cached" | jq -r '.status // "clean"' 2>/dev/null)"
 			GATE_DETAIL="$(printf '%s' "$cached" | jq -r '.detail // empty' 2>/dev/null)"
+
+			# The cache can outlive the PR's own state (dotfiles-dev#423) -- a merge inside the
+			# TTL leaves a verdict naming a PR that is no longer open. Pay for exactly one live
+			# re-check, and only when the cache is about to produce a nudge (REPORT_NUMBER set).
+			if [ -n "$REPORT_NUMBER" ]; then
+				state="$(gh pr view "$REPORT_NUMBER" --repo "$owner/$name" \
+					--json state --jq .state 2>/dev/null)"
+				if [ "$state" != "OPEN" ]; then
+					REPORT_NUMBER=""
+					GATE_STATUS="clean"
+					GATE_DETAIL=""
+				fi
+			fi
 			return 0
 		fi
 	fi

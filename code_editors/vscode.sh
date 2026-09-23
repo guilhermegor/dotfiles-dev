@@ -329,7 +329,12 @@ configure_settings() {
     "window.menuBarVisibility": "default",
     "zenMode.hideLineNumbers": false,
     "zenMode.centerLayout": false,
-    "terminal.integrated.fontSize": 14
+    "terminal.integrated.fontSize": 14,
+    "[python]": {
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false,
+        "editor.tabSize": 4
+    }
 }'
     
     # Your existing settings that should ALWAYS be preserved

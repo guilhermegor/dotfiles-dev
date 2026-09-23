@@ -65,7 +65,9 @@ _orphan_merged_pr_mentions() {
 				| ([$text | scan("#[0-9]+")] | map(ltrimstr("#"))) as $hash_mentions
 				| ((.headRefName // "") | [splits("[^0-9]+")] | map(select(length > 0))) as $branch_mentions
 				| ([.closingIssuesReferences.nodes[]?.number | tostring]) as $closed
-				| (($hash_mentions + $branch_mentions) | unique) as $mentioned
+				# A branch embedding this same PR number (e.g. "feat/509-masking" on PR
+				# 509) would otherwise self-report as "PR #509 mentions #509" -- exclude.
+				| (($hash_mentions + $branch_mentions) | unique | map(select(. != ($pr | tostring)))) as $mentioned
 				| $mentioned[] as $m
 				| select(($closed | index($m)) == null)
 				| "\($m)\t\($pr)\t\($closed | join(","))"

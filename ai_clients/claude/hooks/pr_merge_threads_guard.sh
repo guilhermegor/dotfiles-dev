@@ -40,6 +40,15 @@
 # maintainer and a structurally empty Reviewers panel (#268), and a guard that demanded a
 # reviewer's presence would brick every merge here.
 #
+# A fifth question, dotfiles-dev#462: `--auto` does not merge anything — it tells GitHub to
+# merge only once every REQUIRED check goes green, which includes the very reviewer check this
+# guard is waiting for. So the guard was blocking the one form of the command that already
+# honours its own rule, and the state it protects against (merging past an unfinished review)
+# cannot occur through `--auto`. Detected off the real argv via `hooks/lib/gh_cmd_match.py`
+# (never a regex over the raw command text — a `--auto` inside a quoted `--title`/`--body`
+# value must not count, same reasoning as the body-template guards). An unparseable command is
+# "unknown", not "has --auto", and keeps today's blocking behaviour.
+#
 # Hook I/O contract: PreToolUse exit 2 BLOCKS the call and feeds stderr back to the model.
 # It fails OPEN on anything it cannot resolve (no gh, no jq, no network, no PR, a PR in another
 # repo) — a guard that blocks on its own blindness gets disabled, and then protects nothing.
@@ -144,6 +153,21 @@ main() {
 
 	# Explicit opt-out.
 	printf '%s' "$command" | grep -q "$ESCAPE_HATCH" && exit 0
+
+	# `--auto` off the REAL argv (dotfiles-dev#462, see the header). Stand aside only when the
+	# matcher positively reports both `matched` and `auto`; every other outcome -- no python3,
+	# an untokenizable command, a `--auto` that lives inside a quoted value -- leaves the checks
+	# below running, so uncertainty keeps today's blocking behaviour rather than waving a merge
+	# through on a guess.
+	if command -v python3 >/dev/null 2>&1; then
+		local match_json
+		if match_json="$(printf '%s' "$command" \
+			| python3 "$(dirname "${BASH_SOURCE[0]}")/lib/gh_cmd_match.py" pr 2>/dev/null)" \
+			&& [[ -n "$match_json" ]] \
+			&& [[ "$(printf '%s' "$match_json" | jq -r '.matched and .auto' 2>/dev/null)" == "true" ]]; then
+			exit 0
+		fi
+	fi
 
 	# The MERGE TARGET, not "whatever PR this branch happens to be on".
 	#

@@ -34,6 +34,13 @@ on:
   issue_comment:
     types: [created]
 
+permissions:
+  contents: read
+  pull-requests: read
+  # checks: write is what lets this job publish its verdict onto the PR head —
+  # see the report() helper below for why that has to be explicit.
+  checks: write
+
 jobs:
   gate:
     name: Review threads answered
@@ -58,6 +65,38 @@ jobs:
           # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
           source ai_clients/claude/hooks/lib/review_thread_gate.sh
 
+          # ⚠️ Publish the verdict onto the PR HEAD explicitly — this job's OWN
+          # check-run does not land there. For issue_comment (and
+          # pull_request_review) GitHub runs the workflow in the DEFAULT
+          # BRANCH's context, so Actions attaches the check-run to master's
+          # SHA. Measured 2026-09-23 (dotfiles-dev#481): every issue_comment
+          # run reported head_sha 5491893e = master, the required context was
+          # absent from all 22 open PR heads, and every one read BLOCKED —
+          # including two carrying three submitted reviews each, with
+          # required_approving_review_count at 0.
+          # ⚠️ EVERY exit path reports, including the selective skip below: a
+          # required context has no "not applicable" state, and a PR with no
+          # check-run at all is blocked exactly as hard as a failing one.
+          # ⚠️ The job exits non-zero ONLY when it cannot publish, never to
+          # mirror a failing verdict. An unpublished verdict leaves the PR
+          # blocked, which is fail-closed; a wrongly published one is not.
+          HEAD_SHA="$(gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')"
+          report() {
+            local conclusion="$1" title="$2" summary="${3:-}"
+            if ! jq -n --arg s "$HEAD_SHA" --arg c "$conclusion" \
+                       --arg t "$title" --arg b "$summary" \
+                  '{name:"Review threads answered", head_sha:$s,
+                    status:"completed", conclusion:$c,
+                    output:{title:$t, summary:$b}}' \
+                 | gh api -X POST "repos/$OWNER/$REPO/check-runs" \
+                     --input - >/dev/null; then
+              echo "::error::could not publish the check-run to $HEAD_SHA"
+              exit 1
+            fi
+            echo "$conclusion: $title"
+            exit 0
+          }
+
           # CodeRabbit's own completion marker is a positive signal only —
           # see the header comment for why this never becomes an early exit.
           reviewer_reported=0
@@ -76,8 +115,8 @@ jobs:
           changed=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
             --json files --jq '.files[].path')
           if ! printf '%s\n' "$changed" | grep -qE '^ai_clients/claude/hooks/|(^|/)settings\.json$'; then
-            echo "no hooks/ or settings.json changes — gate not required (selective policy)"
-            exit 0
+            report success "gate not required (selective policy)" \
+              "No ai_clients/claude/hooks/ or settings.json changes in this PR."
           fi
 
           # No review at all is a distinct failure from "thread left open" —
@@ -91,13 +130,13 @@ jobs:
             --json reviews --jq '.reviews | length')
           [ "$review_count" -gt 0 ] && reviewer_reported=1
           if [ "$reviewer_reported" -eq 0 ]; then
-            echo "::error::no reviewer has reported on this PR yet"
-            exit 1
+            report failure "no reviewer has reported on this PR yet" \
+              "No submitted review, and no verified reviewer completion marker."
           fi
 
           gate_pr_thread_state "$OWNER" "$REPO" "$PR_NUMBER" ".review-bots.yaml"
           echo "$GATE_DETAIL"
           if [ "$GATE_STATUS" != "clean" ]; then
-            echo "::error::review gate status=$GATE_STATUS"
-            exit 1
+            report failure "review gate status=$GATE_STATUS" "$GATE_DETAIL"
           fi
+          report success "review threads answered" "$GATE_DETAIL"

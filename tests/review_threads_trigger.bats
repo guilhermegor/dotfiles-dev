@@ -42,17 +42,30 @@ teardown() {
 # `pr view --json reviews`) plus the GraphQL call review_thread_gate.sh makes,
 # then runs the extracted script from the repo root so its relative `source`
 # resolves.
+# The step publishes its verdict as a check-run POST instead of encoding it in its own exit
+# status (dotfiles-dev#481) — Actions attaches THIS job's check-run to the default branch for
+# an issue_comment event, so the exit status never reaches the PR. The stub therefore captures
+# the POSTed body, and the assertions below read the published `conclusion`. Exit status alone
+# would now pass for both verdicts, which is exactly the false pass these tests exist to catch.
+published_conclusion() {
+    jq -r '.conclusion' < "$CHECK_RUN_OUT"
+}
+
 run_step() {
     local event="$1" author="$2" body="$3" review_count="$4" threads_json="$5"
+    CHECK_RUN_OUT="$BATS_TEST_TMPDIR/check-run.json"
+    : > "$CHECK_RUN_OUT"
     run env \
         GH_TOKEN=x OWNER=o REPO=r PR_NUMBER=5 \
         EVENT_NAME="$event" COMMENT_AUTHOR="$author" COMMENT_BODY="$body" \
         REVIEW_COUNT="$review_count" THREADS_JSON="$threads_json" \
-        REPO_ROOT="$REPO_ROOT" SCRIPT="$SCRIPT" \
+        REPO_ROOT="$REPO_ROOT" SCRIPT="$SCRIPT" CHECK_RUN_OUT="$CHECK_RUN_OUT" \
         bash -c '
             cd "$REPO_ROOT" || exit 1
             gh() {
                 case "$*" in
+                    *check-runs*)       cat > "$CHECK_RUN_OUT" ;;
+                    *"/pulls/"*)        echo "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" ;;
                     *"--json files"*)   echo "ai_clients/claude/hooks/lib/foo.sh" ;;
                     *"--json reviews"*) printf "%s\n" "$REVIEW_COUNT" ;;
                     "api graphql"*)     printf "%s" "$THREADS_JSON" ;;
@@ -71,7 +84,8 @@ run_step() {
 
 @test "zero reviews, zero comments, non-marker trigger: fails decided, not absent" {
     run_step "pull_request_review" "" "" 0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
     [[ "$output" == *"no reviewer has reported"* ]]
 }
 
@@ -81,7 +95,8 @@ run_step() {
     run_step "issue_comment" "coderabbitai[bot]" \
         "your next included review will be available in 34 minutes" \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
     [[ "$output" == *"no reviewer has reported"* ]]
 }
 
@@ -90,7 +105,8 @@ run_step() {
 @test "issue_comment from a human, unrelated text: still fails" {
     run_step "issue_comment" "guilhermegor" "LGTM, nice work" \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
     [[ "$output" == *"no reviewer has reported"* ]]
 }
 
@@ -104,6 +120,7 @@ run_step() {
         "✅ Action performed — Full review finished." \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
     [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "success" ]
     [[ "$output" != *"no reviewer has reported"* ]]
 }
 
@@ -115,7 +132,8 @@ run_step() {
     run_step "issue_comment" "coderabbitai[bot]" \
         "✅ Action performed — Full review finished." \
         0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":1,"nodes":[{"isResolved":false,"path":"a.sh","comments":{"totalCount":0,"nodes":[]}}]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "failure" ]
     [[ "$output" == *"review gate status=problems"* ]]
 }
 
@@ -124,5 +142,41 @@ run_step() {
 @test "a real submitted review (review_count > 0): proceeds past the reported check" {
     run_step "pull_request_review" "" "" 1 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
     [ "$status" -eq 0 ]
+    [ "$(published_conclusion)" = "success" ]
     [[ "$output" != *"no reviewer has reported"* ]]
+}
+
+# --- #481: the verdict must land on the PR HEAD, not on whatever SHA fired the run ----------
+
+@test "the published check-run targets the PR head commit" {
+    run_step "issue_comment" "coderabbitai[bot]" \
+        "✅ Action performed — Full review finished." \
+        0 '{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}'
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.head_sha' < "$CHECK_RUN_OUT")" = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" ]
+    [ "$(jq -r '.name' < "$CHECK_RUN_OUT")" = "Review threads answered" ]
+}
+
+@test "a PR outside the selective scope still publishes, or it stays blocked forever" {
+    CHECK_RUN_OUT="$BATS_TEST_TMPDIR/check-run.json"
+    : > "$CHECK_RUN_OUT"
+    run env GH_TOKEN=x OWNER=o REPO=r PR_NUMBER=5 EVENT_NAME=issue_comment \
+        COMMENT_AUTHOR=x COMMENT_BODY=x REPO_ROOT="$REPO_ROOT" SCRIPT="$SCRIPT" \
+        CHECK_RUN_OUT="$CHECK_RUN_OUT" \
+        bash -c '
+            cd "$REPO_ROOT" || exit 1
+            gh() {
+                case "$*" in
+                    *check-runs*)     cat > "$CHECK_RUN_OUT" ;;
+                    *"/pulls/"*)      echo "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" ;;
+                    *"--json files"*) echo "README.md" ;;
+                    *) return 1 ;;
+                esac
+            }
+            export -f gh
+            bash "$SCRIPT"
+        '
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.conclusion' < "$CHECK_RUN_OUT")" = "success" ]
+    [[ "$output" == *"gate not required"* ]]
 }

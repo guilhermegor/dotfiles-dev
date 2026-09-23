@@ -68,6 +68,15 @@ run_gate() {
     [[ "$output" == *"$SPECS_DIR/bugfix"* ]]
 }
 
+@test "DISALLOWED_TOP_LEVEL: a DANGLING symlink is still judged, not skipped" {
+    write_claude_md
+    ln -s "$TEST_TMP/nowhere" "$SPECS_DIR/bugfix"
+    [ ! -e "$SPECS_DIR/bugfix" ]  # the condition that used to skip it
+    run_gate
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"DISALLOWED_TOP_LEVEL 'bugfix'"* ]]
+}
+
 @test "DISALLOWED_TOP_LEVEL: does not fire for the four allowed entries" {
     write_claude_md
     mkdir -p "$SPECS_DIR/features" "$SPECS_DIR/backlog" "$SPECS_DIR/_lessons"

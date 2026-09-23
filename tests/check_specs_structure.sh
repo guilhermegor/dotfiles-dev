@@ -171,7 +171,10 @@ check_specs_dir() {
     local specs_dir="$1" entry
 
     for entry in "$specs_dir"/*; do
-        [[ -e "$entry" ]] || continue
+        # -L as well as -e: a DANGLING symlink fails -e, and skipping it would
+        # walk a deny-by-default allowlist straight past an arbitrary name. An
+        # unmatched glob is neither, so the empty-dir case still short-circuits.
+        [[ -e "$entry" || -L "$entry" ]] || continue
         check_top_level_entry "$entry"
     done
 

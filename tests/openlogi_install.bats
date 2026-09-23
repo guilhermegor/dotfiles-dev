@@ -62,6 +62,23 @@ refute_repo_grep() {
     [ -f "$REPO_ROOT/distro_config/dotfiles/openlogi/config.toml" ]
 }
 
+# --- download arch mapping (issue #430: vendor route is linux-x64, not linux-amd64) --
+
+@test "_openlogi_download_arch maps amd64/x86_64 to the vendor's x64 route" {
+    [ "$(_openlogi_download_arch amd64)" = "x64" ]
+    [ "$(_openlogi_download_arch x86_64)" = "x64" ]
+}
+
+@test "_openlogi_download_arch maps arm64/aarch64 to arm64" {
+    [ "$(_openlogi_download_arch arm64)" = "arm64" ]
+    [ "$(_openlogi_download_arch aarch64)" = "arm64" ]
+}
+
+@test "_openlogi_download_arch fails on an unsupported architecture" {
+    run _openlogi_download_arch riscv64
+    [ "$status" -ne 0 ]
+}
+
 @test "_link_openlogi_config symlinks the tracked config.toml into place" {
     _link_openlogi_config
     [ -L "$HOME/.config/openlogi/config.toml" ]

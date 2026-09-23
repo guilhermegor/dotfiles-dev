@@ -140,16 +140,27 @@ _kr_status_names() {
 }
 
 # _kr_closing_issues OWNER REPO NUMBER
-# Prints the numbers of every OPEN issue this PR's closingIssuesReferences names, one per line,
-# or nothing if it names none. Returns 1 on any GraphQL error — the caller's per-PR fail-closed
-# signal, so one bad PR read never aborts the whole round.
+# Prints every OPEN issue this PR's closingIssuesReferences names, one per line, as
+# "<nameWithOwner>\t<number>", or nothing if it names none. Returns 1 on any GraphQL error —
+# the caller's per-PR fail-closed signal, so one bad PR read never aborts the whole round.
+#
+# The repository is carried, not discarded: closingIssuesReferences can name an issue in a
+# DIFFERENT repository, and a project board can hold cards from several repositories, so
+# matching a card on the issue number alone can select the wrong card and move it.
 _kr_closing_issues() {
 	local owner="$1" repo="$2" number="$3" query result
-	query="{repository(owner:\"$owner\",name:\"$repo\"){pullRequest(number:$number){closingIssuesReferences(first:20){nodes{number state}}}}}"
+	query="{repository(owner:\"$owner\",name:\"$repo\"){pullRequest(number:$number){closingIssuesReferences(first:100){pageInfo{hasNextPage}nodes{number state repository{nameWithOwner}}}}}}"
 	result="$(gh api graphql -f query="$query" 2>/dev/null)" || return 1
 	printf '%s' "$result" | jq -e '.errors' >/dev/null 2>&1 && return 1
+	# A truncated page would drop linked issues while the round still reported ok. Treat it as
+	# this PR's own unknown rather than silently reconciling a subset.
 	printf '%s' "$result" \
-		| jq -r '.data.repository.pullRequest.closingIssuesReferences.nodes[] | select(.state=="OPEN") | .number' \
+		| jq -e '.data.repository.pullRequest.closingIssuesReferences.pageInfo.hasNextPage == true' \
+		>/dev/null 2>&1 && return 1
+	printf '%s' "$result" \
+		| jq -r '.data.repository.pullRequest.closingIssuesReferences.nodes[]
+			| select(.state=="OPEN")
+			| "\(.repository.nameWithOwner)\t\(.number)"' \
 		2>/dev/null
 }
 
@@ -185,15 +196,26 @@ reconcile_kanban() {
 		return 1
 	fi
 
-	local pr_numbers
-	pr_numbers="$(gh pr list --repo "$owner/$repo" --state open --json number --limit 200 \
+	# Both listings below are capped. A cap that is REACHED means the answer may be partial, and a
+	# partial reconcile reported as `ok` is the failure this gate exists to avoid (the same
+	# "usable answer, not just a clean exit" contract ai_clients/CLAUDE.md states) — so a
+	# truncated read is reported as unknown instead of silently reconciling a subset.
+	local pr_limit=200 item_limit=500
+
+	local pr_numbers pr_count
+	pr_numbers="$(gh pr list --repo "$owner/$repo" --state open --json number --limit "$pr_limit" \
 		--jq '.[].number' 2>/dev/null)" || {
 		RECONCILE_KANBAN_REPORT="UNKNOWN: could not list open PRs for $owner/$repo"
 		return 1
 	}
+	pr_count="$(printf '%s\n' "$pr_numbers" | grep -c .)"
+	if (( pr_count >= pr_limit )); then
+		RECONCILE_KANBAN_REPORT="UNKNOWN: open-PR list hit the $pr_limit cap for $owner/$repo — result may be truncated"
+		return 1
+	fi
 
-	local items_json
-	items_json="$(gh project item-list "$project_number" --owner "$owner" --format json --limit 500 2>/dev/null)" || {
+	local items_json item_count
+	items_json="$(gh project item-list "$project_number" --owner "$owner" --format json --limit "$item_limit" 2>/dev/null)" || {
 		RECONCILE_KANBAN_REPORT="UNKNOWN: could not read project items for $owner/$repo"
 		return 1
 	}
@@ -205,6 +227,11 @@ reconcile_kanban() {
 		RECONCILE_KANBAN_REPORT="UNKNOWN: could not parse project items for $owner/$repo"
 		return 1
 	}
+	item_count="$(printf '%s' "$items_json" | jq '.items | length' 2>/dev/null)"
+	if [[ -n "$item_count" ]] && (( item_count >= item_limit )); then
+		RECONCILE_KANBAN_REPORT="UNKNOWN: project item list hit the $item_limit cap for $owner/$repo — result may be truncated"
+		return 1
+	fi
 
 	local report="" n processed=""
 	while IFS= read -r n; do
@@ -214,20 +241,26 @@ reconcile_kanban() {
 			report="$(printf '%s\nUNKNOWN PR #%s: could not resolve closing issues' "$report" "$n")"
 			continue
 		fi
-		local issue
-		while IFS= read -r issue; do
+		local issue issue_repo issue_label
+		while IFS=$'\t' read -r issue_repo issue; do
 			[[ -n "$issue" ]] || continue
-			# Several open PRs can close the same issue — process it once.
-			printf '%s\n' "$processed" | grep -qxF "$issue" && continue
-			processed="$(printf '%s\n%s' "$processed" "$issue")"
+			# Several open PRs can close the same issue — process it once. The key carries the
+			# repository, so issue #42 of another repo is never mistaken for this repo's #42.
+			printf '%s\n' "$processed" | grep -qxF "$issue_repo#$issue" && continue
+			processed="$(printf '%s\n%s' "$processed" "$issue_repo#$issue")"
+
+			# Report same-repo issues as plain "#N" (what every caller and test expects) and
+			# qualify only a cross-repo one, where the bare number would be ambiguous.
+			issue_label="#$issue"
+			[[ "$issue_repo" == "$owner/$repo" ]] || issue_label="$issue_repo#$issue"
 
 			local item_id current_status rank
-			item_id="$(printf '%s' "$items_json" | jq -r --argjson num "$issue" \
-				'first(.items[] | select(.content.type=="Issue" and .content.number==$num)) | .id // empty' 2>/dev/null)"
+			item_id="$(printf '%s' "$items_json" | jq -r --argjson num "$issue" --arg nwo "$issue_repo" \
+				'first(.items[] | select(.content.type=="Issue" and .content.number==$num and .content.repository==$nwo)) | .id // empty' 2>/dev/null)"
 			[[ -n "$item_id" ]] || continue   # issue not on this board -> nothing to move
 
-			current_status="$(printf '%s' "$items_json" | jq -r --argjson num "$issue" \
-				'first(.items[] | select(.content.type=="Issue" and .content.number==$num)) | .status // empty' 2>/dev/null)"
+			current_status="$(printf '%s' "$items_json" | jq -r --argjson num "$issue" --arg nwo "$issue_repo" \
+				'first(.items[] | select(.content.type=="Issue" and .content.number==$num and .content.repository==$nwo)) | .status // empty' 2>/dev/null)"
 
 			[[ "$current_status" == "In review" ]] && continue
 
@@ -237,11 +270,23 @@ reconcile_kanban() {
 			fi
 
 			if move_card "$project_node" "$item_id" "$status_field" "$target_option"; then
-				report="$(printf '%s\nmoved issue #%s to In review (was: %s, via PR #%s)' \
-					"$report" "$issue" "${current_status:-none}" "$n")"
+				report="$(printf '%s\nmoved issue %s to In review (was: %s, via PR #%s)' \
+					"$report" "$issue_label" "${current_status:-none}" "$n")"
 			else
-				report="$(printf '%s\nFAILED to move issue #%s to In review (PR #%s) — verify by hand' \
-					"$report" "$issue" "$n")"
+				# A stale cached Status field / option id is the likely cause, and keeping it makes
+				# every later round repeat the same failure. Refresh the board once and retry,
+				# exactly as kanban_lifecycle.sh does on the event path.
+				rm -f "$(cache_file "$owner" "$repo")"
+				read -r project_number project_node status_field target_option \
+					< <(board_config "$owner" "$repo" "In review") || true
+				if [[ "$project_number" != "AMBIGUOUS" && -n "$project_node" && -n "$target_option" ]] \
+					&& move_card "$project_node" "$item_id" "$status_field" "$target_option"; then
+					report="$(printf '%s\nmoved issue %s to In review after a board-cache refresh (was: %s, via PR #%s)' \
+						"$report" "$issue_label" "${current_status:-none}" "$n")"
+				else
+					report="$(printf '%s\nFAILED to move issue %s to In review (PR #%s) — verify by hand' \
+						"$report" "$issue_label" "$n")"
+				fi
 			fi
 		done <<<"$issues"
 	done <<<"$pr_numbers"

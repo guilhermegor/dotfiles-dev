@@ -43,34 +43,48 @@ write_prs() {
     printf '%s\n' "$@" > "$TEST_TMP/prs.txt"
 }
 
-# item ID STATUS NUMBER
+# item ID STATUS NUMBER [REPO_NAME_WITH_OWNER]
+# `gh project item-list --format json` carries `.content.repository` (verified live against a
+# real board), and a project can hold cards from several repositories — so the fixture models
+# it too, defaulting to this suite's own owner/repo.
 item() {
-    jq -nc --arg id "$1" --arg status "$2" --argjson number "$3" \
-        '{id: $id, status: $status, content: {type: "Issue", number: $number}}'
+    jq -nc --arg id "$1" --arg status "$2" --argjson number "$3" --arg repo "${4:-owner/repo}" \
+        '{id: $id, status: $status, content: {type: "Issue", number: $number, repository: $repo}}'
 }
 
 write_items() {
     printf '%s\n' "$@" | jq -sc '{items: .}' > "$TEST_TMP/items.json"
 }
 
-# write_closing PR_NUMBER ISSUE_NUMBER:STATE...
-# Registers the closingIssuesReferences GraphQL response for one PR, or a bare "FAIL" to make
-# that PR's read fail (simulating a 403/network error).
+# write_closing PR_NUMBER ISSUE_NUMBER:STATE[:REPO]...
+# Registers the closingIssuesReferences GraphQL response for one PR. A bare "FAIL" makes that
+# PR's read fail (simulating a 403/network error); a bare "TRUNCATED" returns a page with
+# hasNextPage=true, which the reader must treat as that PR's own unknown rather than a subset.
+# Each node carries `repository.nameWithOwner` because closingIssuesReferences can name an
+# issue in another repository; the third field defaults to this suite's own owner/repo.
 write_closing() {
     local pr="$1"; shift
     if [ "$1" = "FAIL" ]; then
         echo FAIL > "$TEST_TMP/closing-$pr.json"
         return
     fi
-    local nodes="[]" pair number state
+    local has_next=false
+    if [ "$1" = "TRUNCATED" ]; then
+        has_next=true
+        shift
+    fi
+    local nodes="[]" pair number state repo rest
     for pair in "$@"; do
         number="${pair%%:*}"
-        state="${pair##*:}"
-        nodes="$(printf '%s' "$nodes" | jq -c --argjson n "$number" --arg s "$state" \
-            '. + [{number: $n, state: $s}]')"
+        rest="${pair#*:}"
+        state="${rest%%:*}"
+        if [ "$rest" = "$state" ]; then repo="owner/repo"; else repo="${rest#*:}"; fi
+        nodes="$(printf '%s' "$nodes" | jq -c --argjson n "$number" --arg s "$state" --arg r "$repo" \
+            '. + [{number: $n, state: $s, repository: {nameWithOwner: $r}}]')"
     done
-    jq -nc --argjson nodes "$nodes" \
-        '{data: {repository: {pullRequest: {closingIssuesReferences: {nodes: $nodes}}}}}' \
+    jq -nc --argjson nodes "$nodes" --argjson hasNext "$has_next" \
+        '{data: {repository: {pullRequest: {closingIssuesReferences:
+            {pageInfo: {hasNextPage: $hasNext}, nodes: $nodes}}}}}' \
         > "$TEST_TMP/closing-$pr.json"
 }
 
@@ -96,6 +110,12 @@ case "\$1 \$2" in
         ;;
     "project item-edit")
         [ -f "$TEST_TMP/fail-item-edit" ] && exit 1
+        # Fails the FIRST edit only, then succeeds — the stale-cache shape, where the retry
+        # after a board refresh is what must rescue the move.
+        if [ -f "$TEST_TMP/fail-item-edit-once" ]; then
+            rm -f "$TEST_TMP/fail-item-edit-once"
+            exit 1
+        fi
         echo ok
         ;;
     "api graphql")
@@ -236,4 +256,85 @@ run_reconcile() {
     local edits
     edits="$(grep -c -- '--single-select-option-id OPT_REVIEW' "$GH_LOG")"
     [ "$edits" -eq 1 ]
+}
+
+# --- (i) cross-repository issue identity --------------------------------------------------------
+
+@test "a card is matched on repository AND number, never the number alone" {
+    write_prs 10
+    write_closing 10 "42:OPEN:other/repo"
+    write_items "$(item ITEM_MINE Backlog 42)" "$(item ITEM_OTHER Backlog 42 other/repo)"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"STATUS=ok"* ]]
+    [[ "$output" == *"moved issue other/repo#42 to In review"* ]]
+    grep -q -- '--id ITEM_OTHER ' "$GH_LOG"
+    refute_gh '--id ITEM_MINE '
+}
+
+# --- (ii) a truncated closingIssuesReferences page is this PR's unknown, not a subset -----------
+
+@test "closingIssuesReferences with hasNextPage is UNKNOWN for that PR, and moves nothing" {
+    write_prs 10
+    write_closing 10 TRUNCATED "42:OPEN"
+    write_items "$(item ITEM_42 Backlog 42)"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"UNKNOWN PR #10"* ]]
+    refute_gh 'item-edit'
+}
+
+# --- (iii)+(iv) a listing that HIT its cap may be partial: unknown, never a partial ok ----------
+
+@test "open-PR list hitting its cap: STATUS=unknown, nothing touched" {
+    # shellcheck disable=SC2046 # deliberate word-splitting: one argument per PR number
+    write_prs $(seq 1 200)
+    write_items "$(item ITEM_42 Backlog 42)"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"rc=1"* ]]
+    [[ "$output" == *"STATUS=unknown"* ]]
+    [[ "$output" == *"truncated"* ]]
+    refute_gh 'item-edit'
+}
+
+@test "project item list hitting its cap: STATUS=unknown, nothing touched" {
+    write_prs 10
+    write_closing 10 "42:OPEN"
+    local many=() i
+    for (( i = 1; i <= 500; i++ )); do many+=("$(item "ITEM_$i" Backlog "$i")"); done
+    write_items "${many[@]}"
+    write_fake_gh
+    run_reconcile
+    [[ "$output" == *"rc=1"* ]]
+    [[ "$output" == *"STATUS=unknown"* ]]
+    [[ "$output" == *"truncated"* ]]
+    refute_gh 'item-edit'
+}
+
+# --- (v) a failed edit invalidates the board cache and retries once ------------------------------
+
+@test "a failed move refreshes the board cache and retries once" {
+    write_prs 10
+    write_closing 10 "42:OPEN"
+    write_items "$(item ITEM_42 Backlog 42)"
+    write_fake_gh
+    touch "$TEST_TMP/fail-item-edit-once"
+    run_reconcile
+    [[ "$output" == *"STATUS=ok"* ]]
+    [[ "$output" == *"moved issue #42 to In review after a board-cache refresh"* ]]
+    [[ "$output" != *"FAILED to move issue #42"* ]]
+    # The refresh is real: the board was re-discovered rather than re-read from the stale cache.
+    run grep -c 'project field-list' "$GH_LOG"
+    [ "$output" -ge 2 ]
+}
+
+@test "a move that keeps failing after the refresh is reported FAILED, not ok-and-silent" {
+    write_prs 10
+    write_closing 10 "42:OPEN"
+    write_items "$(item ITEM_42 Backlog 42)"
+    write_fake_gh
+    touch "$TEST_TMP/fail-item-edit"
+    run_reconcile
+    [[ "$output" == *"FAILED to move issue #42 to In review"* ]]
 }

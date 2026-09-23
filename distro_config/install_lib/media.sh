@@ -189,5 +189,5 @@ INSTALL_REGISTRY+=(
     "install_asunder:Asunder CD Ripper:Media:asunder.desktop"
     "install_handbrake:HandBrake DVD Ripper:Media:fr.handbrake.ghb.desktop"
     "install_obs:OBS Studio:Media:com.obsproject.Studio.desktop"
-    "install_soundcloud:SoundCloud::soundcloud.desktop"
+    "install_soundcloud:SoundCloud:Media:soundcloud.desktop"
 )

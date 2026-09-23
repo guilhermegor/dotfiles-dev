@@ -158,3 +158,53 @@ PY
     run grep -q '_merge_unpinned\[\*\]' "$mutant"
     [ "$status" -ne 0 ]
 }
+
+# --- #429: SoundCloud moves from the dock to the Media app folder ----------
+#
+# Two independent things have to hold at once, or the app is either lost
+# (placed nowhere) or duplicated (dock AND folder): the registry entry must
+# now declare Media, and DOCK_UNPINNED must actually stop the live dock
+# value from re-pinning it (see the ⚠️ block in distro_config/CLAUDE.md —
+# deleting the declared dock block alone does NOT unpin an app).
+
+@test "INSTALL_REGISTRY places soundcloud.desktop in the Media folder (#429)" {
+    HOME="$(mktemp -d)"
+    export HOME
+    trap 'rm -rf "$HOME"' RETURN
+    mkdir -p "$HOME/.local/share/applications"
+    : > "$HOME/.local/share/applications/soundcloud.desktop"
+    export DRY_RUN=1
+
+    gsettings() { [ "$1" = "get" ] && { echo "''"; return 0; }; return 0; }
+    export -f gsettings
+    dconf() { return 0; }
+    export -f dconf
+
+    run organize_app_folders
+    [ "$status" -eq 0 ]
+
+    local media_line
+    media_line=$(printf '%s\n' "$output" | grep -oE "folders/Media/ apps \[[^]]*\]")
+    [[ "$media_line" == *"'soundcloud.desktop'"* ]]
+}
+
+@test "_merge_dock_favorites drops soundcloud.desktop via the real DOCK_UNPINNED list (#429)" {
+    # Parse the production DOCK_UNPINNED array straight out of the source file
+    # instead of hand-copying it here — a hand-copy would keep passing even if
+    # the real edit to DOCK_UNPINNED were reverted or never made.
+    local -a real_unpinned
+    mapfile -t real_unpinned < <(
+        sed -n '/local -a DOCK_UNPINNED=(/,/^    )/p' \
+            "$REPO_ROOT/distro_config/ubuntu_workspace.sh" \
+        | grep -oE "'[A-Za-z0-9_.-]+\.desktop'"
+    )
+    [ "${#real_unpinned[@]}" -ge 1 ]
+
+    local -a declared=("'spotify.desktop'" "'firefox.desktop'")
+    local existing_str="['spotify.desktop', 'firefox.desktop', 'soundcloud.desktop']"
+
+    _merge_dock_favorites declared "$existing_str" real_unpinned
+
+    [ "${#declared[@]}" -eq 2 ]
+    [[ "${declared[*]}" != *"soundcloud.desktop"* ]]
+}

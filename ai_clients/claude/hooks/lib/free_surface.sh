@@ -28,7 +28,10 @@
 #
 #   free_classify_files FILE...
 #     Pure, no network — classifies a candidate file list against the FREE_HELD_PATHS already
-#     set by a prior gate_free_surface call. Prints one of:
+#     set by a prior gate_free_surface call. Fails closed on FREE_STATUS != ok (prints UNKNOWN,
+#     returns 1) instead of trusting FREE_HELD_PATHS being unset or empty — the two look
+#     identical to a plain emptiness check, but only one of them means "really nothing is held".
+#     Otherwise prints one of:
 #       free                              — no candidate file is held
 #       held:<colliding paths>            — every candidate file is held
 #       would-need-a-held-file:<paths>    — some but not all candidate files are held (usually
@@ -147,9 +150,20 @@ gate_free_surface() {
 }
 
 # free_classify_files FILE...
-# Requires FREE_HELD_PATHS from a prior gate_free_surface call. Exact-path membership only —
-# never a prefix/substring test, which is the whole defect this gate exists to avoid.
+# Fails closed (prints UNKNOWN, returns 1) unless a prior gate_free_surface call left
+# FREE_STATUS=ok. Gating on that explicit sentinel — never on FREE_HELD_PATHS being
+# non-empty — is what tells "unset/unprimed" apart from "primed with a legitimately
+# empty held set" (a repo with zero open PRs, where every file really is free).
+# Under `set -u`, an unprimed call used to hit an unbound-variable error inside the loop,
+# fall through the untouched held_count=0, and print "free" for a fully held file list
+# (dotfiles-dev#414) — the exact input that causes a duplicate PR. Exact-path membership
+# only — never a prefix/substring test, which is the whole defect this gate exists to avoid.
 free_classify_files() {
+	if [ "${FREE_STATUS:-}" != "ok" ]; then
+		echo "UNKNOWN"
+		return 1
+	fi
+
 	local total=0 held_count=0 f collided=""
 	for f in "$@"; do
 		total=$((total + 1))

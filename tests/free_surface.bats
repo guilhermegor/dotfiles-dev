@@ -6,6 +6,7 @@
 
 setup() {
     source "$BATS_TEST_DIRNAME/../ai_clients/claude/hooks/lib/free_surface.sh"
+    FREE_STATUS="ok"
     FREE_HELD_PATHS='a/held.sh
 b/other.sh'
 }
@@ -27,6 +28,35 @@ b/other.sh'
 
 @test "a shared directory prefix is not a collision — exact path only" {
     run free_classify_files a/held.sh.bak a/
+    [[ "$output" == "free" ]]
+}
+
+# --- fail-closed on an unprimed/unset precondition (dotfiles-dev#414) ----------------------------
+# Called without a prior gate_free_surface, FREE_STATUS is unset, so free_classify_files must
+# refuse rather than fall through to "free" — the exact input that caused a duplicate PR.
+
+@test "unset FREE_STATUS (no prior gate_free_surface) fails closed, never free" {
+    unset FREE_STATUS
+    unset FREE_HELD_PATHS
+    run free_classify_files a/held.sh b/other.sh
+    [ "$status" -eq 1 ]
+    [[ "$output" == "UNKNOWN" ]]
+    [[ ! "$output" == *free* ]]
+}
+
+@test "FREE_STATUS=unknown (a failed prior gate) fails closed, never free" {
+    FREE_STATUS="unknown"
+    unset FREE_HELD_PATHS
+    run free_classify_files a/held.sh
+    [ "$status" -eq 1 ]
+    [[ "$output" == "UNKNOWN" ]]
+}
+
+@test "FREE_STATUS=ok with a legitimately empty held set (zero open PRs) is free" {
+    FREE_STATUS="ok"
+    FREE_HELD_PATHS=""
+    run free_classify_files a/free.sh b/other.sh
+    [ "$status" -eq 0 ]
     [[ "$output" == "free" ]]
 }
 

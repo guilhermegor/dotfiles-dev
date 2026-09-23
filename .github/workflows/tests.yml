@@ -82,6 +82,19 @@ jobs:
         # feature dirs exist yet) but goes live the moment one lands.
         run: bash tests/spec_audit_gate.sh
 
+  specs_structure:
+    name: specs structure gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run specs structure gate
+        # Enforces the .specs/ top-level allowlist and features/backlog
+        # naming dotfiles-dev#442 settled in .specs/CLAUDE.md
+        # (dotfiles-dev#443: this repo owns the convention and, until now,
+        # had no validator for its own tree).
+        run: bash tests/check_specs_structure.sh
+
   actionlint:
     name: actionlint (workflow lint)
     runs-on: ubuntu-latest

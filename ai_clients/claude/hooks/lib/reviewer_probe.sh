@@ -46,7 +46,17 @@ _reviewer_probe_wired() {
 		printf 'unknown\n'
 		return 0
 	fi
-	if grep -q -- "$bin" "$ladder" 2>/dev/null; then
+	# ⚠️ Matches the ladder's SELECTION PATH, not the runtime's NAME. The name
+	# appears throughout reviewer_ladder.sh in prose, so a bare substring grep
+	# answered "is this runtime mentioned?" while claiming to answer "is it
+	# wired?". Measured: appending the single comment line
+	#   `# kimi was evaluated as a rung and deliberately NOT wired here.`
+	# flipped kimi from no to yes -- a comment SAYING a rung is unwired
+	# suppressed the installed-but-unwired report about it. The `case "$runtime"`
+	# label in _run_runtime_review is what actually dispatches a rung; comments
+	# are stripped first so prose can never reach the match.
+	if grep -v '^[[:space:]]*#' "$ladder" 2>/dev/null |
+		grep -Eq "^[[:space:]]*${bin}\)"; then
 		printf 'yes\n'
 	else
 		printf 'no\n'

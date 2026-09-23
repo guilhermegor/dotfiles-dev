@@ -48,7 +48,9 @@ stub_bin() {
 
 @test "an installed-and-wired-but-unauthenticated rung produces the warning" {
 	stub_bin coderabbit
-	printf 'coderabbit is mentioned right here\n' >"$LADDER"
+	# A real `case` label, not a prose mention -- a mention is what the old
+	# substring grep accepted, and accepting it is the defect test 3 below pins.
+	printf 'case "$runtime" in\ncoderabbit)\n\t:\n\t;;\nesac\n' >"$LADDER"
 	fake_signed_out() { printf 'Status : signed out\n'; }
 	REVIEWER_PROBE_LADDER_FILE="$LADDER"
 	REVIEWER_PROBE_CODERABBIT_AUTH_CMD=fake_signed_out
@@ -66,7 +68,9 @@ stub_bin() {
 	stub_bin qwen
 	stub_bin kimi
 	stub_bin coderabbit
-	printf 'codex qwen kimi coderabbit all mentioned here\n' >"$LADDER"
+	# A real `case` block with a label per rung -- listing the names in prose is
+	# what the old substring grep accepted, and no longer counts as wiring.
+	printf 'case "$runtime" in\ncodex)\n\t:\n\t;;\nqwen)\n\t:\n\t;;\nkimi)\n\t:\n\t;;\ncoderabbit)\n\t:\n\t;;\nesac\n' >"$LADDER"
 	fake_logged_in() { printf 'Status : logged in\n'; }
 	REVIEWER_PROBE_LADDER_FILE="$LADDER"
 	REVIEWER_PROBE_CODERABBIT_AUTH_CMD=fake_logged_in
@@ -101,4 +105,30 @@ stub_bin() {
 	# coderabbit's own column still resolves despite the ladder being unreadable —
 	# one column's failure doesn't blank out another column on the same line.
 	[[ "$output" == *"coderabbit: on PATH, wiring state unknown (ladder file unreadable), NOT authenticated"* ]]
+}
+
+# --- wiring is the SELECTION PATH, never a text mention (dotfiles-dev#486) -----
+#
+# Measured on the real ladder: appending one comment line naming kimi flipped
+# _reviewer_probe_wired from no to yes, so a comment saying a rung is NOT wired
+# suppressed the installed-but-unwired report about it.
+
+@test "a runtime named only in a COMMENT is not wired" {
+	stub_bin kimi
+	printf 'case "$runtime" in\ncodex)\n\t:\n\t;;\nesac\n# kimi was evaluated and deliberately NOT wired here.\n' >"$LADDER"
+	REVIEWER_PROBE_LADDER_FILE="$LADDER"
+
+	run emit_reviewer_probe_status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"kimi: on PATH, not wired into the ladder"* ]]
+}
+
+@test "a runtime named only in an unrelated string is not wired" {
+	stub_bin kimi
+	printf 'case "$runtime" in\ncodex)\n\t:\n\t;;\nesac\nmsg="no kimi rung is available"\n' >"$LADDER"
+	REVIEWER_PROBE_LADDER_FILE="$LADDER"
+
+	run emit_reviewer_probe_status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"kimi: on PATH, not wired into the ladder"* ]]
 }

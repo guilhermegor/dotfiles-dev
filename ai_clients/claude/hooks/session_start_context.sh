@@ -20,6 +20,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/deploy_drift.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/lesson_mirrors.sh"
 # shellcheck source=lib/worktree_fanout.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/worktree_fanout.sh"
+# shellcheck source=lib/reviewer_probe.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/reviewer_probe.sh"
 
 emit_cross_project_context() {
 	local claude_dir lessons_store proving_mem cwd
@@ -150,6 +152,7 @@ main() {
 	emit_cross_project_context
 	emit_deploy_drift_status
 	emit_fanout_status
+	emit_reviewer_probe_status
 	exit 0
 }
 

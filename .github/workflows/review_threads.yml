@@ -73,6 +73,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
           COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
         run: |
           set -euo pipefail
           # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
@@ -123,6 +124,29 @@ jobs:
             reviewer_reported=1
           fi
 
+          # The reviewer ladder (#444/#446/#449) posts its fallback review as
+          # an issue_comment from the OPERATOR'S OWN account — never a review
+          # object, so review_count can't see it either (dotfiles-dev#451).
+          # The attribution marker is PUBLIC TEXT anyone could paste into a
+          # comment, so it is a positive signal only paired with the ONE
+          # unforgeable part: author_association (same CWE-345 lesson #446's
+          # review thread taught the ladder itself — never key on login).
+          if [ "$reviewer_reported" -eq 0 ] && [ "$EVENT_NAME" = "issue_comment" ]; then
+            # Parameter expansion, never `printf | head -n1`: with
+            # `set -euo pipefail`, head exits after the first line and printf
+            # takes SIGPIPE, so the assignment returns 141 and the step dies
+            # before the marker check ever runs. Measured: rc=0 at 2 KB, rc=141
+            # from ~50 KB up — and GitHub accepts comment bodies to 65536
+            # chars, so a verbose fallback review reaches it. The verdict must
+            # not depend on how much the reviewer had to say.
+            first_line=${COMMENT_BODY%%$'\n'*}
+            ladder_marker_re='^Fallback review — runtime: (qwen|codex), model: .+ \(selected by: .+\)$'
+            if [[ "$first_line" =~ $ladder_marker_re ]] \
+              && [[ "$COMMENT_AUTHOR_ASSOCIATION" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]]; then
+              reviewer_reported=1
+            fi
+          fi
+
           # Selective, not full-parity (dotfiles-dev#157): none of the three
           # trigger events above carry a `paths:` filter, so the scope
           # decision is re-checked here at runtime instead. OWNER and REPO
@@ -159,18 +183,37 @@ jobs:
           # clean verdict, which is why the marker is re-resolved per run
           # rather than cached.
           if [ "$reviewer_reported" -eq 0 ]; then
-            head_pushed_at="$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
-              --json commits --jq '.commits[-1].committedDate')"
-            marker_count="$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
-              --json comments --jq '.comments' |
-              jq --arg since "$head_pushed_at" '[
-                .[]
-                | select((.author.login // "") | ascii_downcase | test("coderabbit"))
-                | select(.createdAt > $since)
-                | select((.body // "") | ascii_downcase | test("full review finished"))
-              ] | length')"
-            if [ "${marker_count:-0}" -gt 0 ]; then
-              reviewer_reported=1
+            # ⚠️ Server-assigned arrival time, NEVER the commit's own
+            # committedDate. A commit carries whatever date its author chose,
+            # so a backdated push would make the head look OLDER than an
+            # existing clean-review marker and let that stale marker validate
+            # new code (CWE-367). The earliest check-suite for the head SHA is
+            # stamped by GitHub and cannot be authored. Measured on #455:
+            # committedDate 16:53:54Z vs earliest check-suite 16:53:55Z.
+            # Fails closed — no check suite means no trusted clock, so no
+            # marker credit, rather than falling back to the forgeable one.
+            head_seen_at="$(gh api "repos/$OWNER/$REPO/commits/$HEAD_SHA/check-suites" \
+              --jq '[.check_suites[].created_at] | min // empty' 2>/dev/null || true)"
+            if [ -n "$head_seen_at" ]; then
+              # ⚠️ Identity from REST, never from the GraphQL comment shape.
+              # `gh pr view --json comments` reports author.login as
+              # "coderabbitai" with NO type field at all, so the old substring
+              # test matched ANY login containing "coderabbit" and could not
+              # tell a Bot from a User (CWE-345) — a forgeable reviewer report
+              # on a deny-by-default gate. REST carries the exact login and
+              # the account type; both are required.
+              marker_count="$(gh api --paginate \
+                "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments" --jq '.' |
+                jq -s --arg since "$head_seen_at" 'add // [] | [
+                  .[]
+                  | select(.user.login == "coderabbitai[bot]")
+                  | select(.user.type == "Bot")
+                  | select(.created_at > $since)
+                  | select((.body // "") | ascii_downcase | test("full review finished"))
+                ] | length')"
+              if [ "${marker_count:-0}" -gt 0 ]; then
+                reviewer_reported=1
+              fi
             fi
           fi
 

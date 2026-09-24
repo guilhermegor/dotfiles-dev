@@ -23,6 +23,9 @@ setup() {
     GATE="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/ai_clients/claude/hooks/lib/review_thread_gate.sh"
     # A body long enough to count as substantive (the filter's --argjson min is 100 chars).
     LONG_BODY="$(printf 'x%.0s' {1..150})"
+    # shellcheck source=ai_clients/claude/hooks/lib/review_thread_gate.sh
+    source "$GATE"
+    MARKER="$_gate_ladder_marker_re"
 }
 
 # thread_fixture <isResolved> <human-reply-body>
@@ -44,6 +47,31 @@ thread_fixture() {
 run_filter() {
     run bash -c "source '$GATE'; printf '%s' '$1' \
         | jq -r --argjson min 100 --arg roster '$2' \"\$(_gate_problems_filter)\""
+}
+
+# ladder_comment_fixture <authorAssociation> <body> [reply_author] [reply_body]
+# One PR-level (issue) comment carrying the ladder's attribution line, plus an optional later
+# reply from a different author -- the shape gate_pr_thread_state's COMMENT channel reads
+# (dotfiles-dev#490). Zero review threads, on purpose: the whole point is that the ladder's
+# finding lives ONLY here.
+ladder_comment_fixture() {
+    jq -nc --arg assoc "$1" --arg body "$2" --arg reply_author "${3:-}" --arg reply_body "${4:-}" '
+      ({author:{login:"ci-bot"}, authorAssociation:$assoc, body:$body,
+        createdAt:"2026-09-21T20:12:22Z"}) as $lc
+      | ([$lc] + (if $reply_author != "" then
+          [{author:{login:$reply_author}, authorAssociation:"MEMBER", body:$reply_body,
+            createdAt:"2026-09-23T00:00:00Z"}]
+        else [] end)) as $nodes
+      | { data: { repository: { pullRequest: {
+          reviewThreads: { totalCount: 0, nodes: [] },
+          comments: { totalCount: ($nodes | length), nodes: $nodes } } } } }
+    '
+}
+
+# run_comment_filter <fixture-json>
+run_comment_filter() {
+    run bash -c "source '$GATE'; printf '%s' '$1' \
+        | jq -r --argjson min 100 --arg marker '$MARKER' \"\$(_gate_comment_findings_filter)\""
 }
 
 # --- the regression: a roster + a thread used to abort the whole program ------------------------
@@ -187,6 +215,61 @@ run_filter() {
     [[ "$output" == *"9 comments, only 0 read"* ]]
 }
 
+@test "truncated filter: also names a dropped page of the COMMENT channel" {
+    fixture='{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"comments":{"totalCount":150,"nodes":[]}}}}}'
+    run bash -c "source '$GATE'; printf '%s' '$fixture' | jq -r \"\$(_gate_truncated_filter)\""
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"150 PR comments exist, only 0"*"(comment channel)"* ]]
+}
+
+# --- the comment channel (dotfiles-dev#490): the reviewer ladder's fallback review posts as a
+# plain PR comment, never a review thread -- run_fallback_review ends in _post_pr_comment, an
+# ordinary issue comment. reviewThreads-only tests above cannot see it by construction: this is
+# the exact blind spot that reported #453 "clean" while it carried an unanswered [P2] finding.
+
+@test "comment channel: an unanswered ladder finding is not clean, and names the channel" {
+    body=$'Fallback review — runtime: codex, model: gpt-5 (selected by: probe)\n\n## Findings\n\n- [P2] unhandled error path'
+    run_comment_filter "$(ladder_comment_fixture MEMBER "$body")"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"unanswered ladder finding (comment channel)"* ]]
+}
+
+@test "comment channel: a substantive later reply from someone else clears it" {
+    body=$'Fallback review — runtime: codex, model: gpt-5 (selected by: probe)\n\n## Findings\n\n- [P2] unhandled error path'
+    run_comment_filter "$(ladder_comment_fixture MEMBER "$body" guilhermegor "$LONG_BODY")"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "comment channel: a short, non-substantive reply does not count as answered" {
+    body=$'Fallback review — runtime: codex, model: gpt-5 (selected by: probe)\n\n## Findings\n\n- [P2] unhandled error path'
+    run_comment_filter "$(ladder_comment_fixture MEMBER "$body" guilhermegor "ok")"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"unanswered ladder finding (comment channel)"* ]]
+}
+
+@test "comment channel: a ladder review carrying no findings is clean" {
+    body=$'Fallback review — runtime: codex, model: gpt-5 (selected by: probe)\n\nNo issues found in this diff.'
+    run_comment_filter "$(ladder_comment_fixture MEMBER "$body")"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "comment channel: a forged marker from a NONE-association commenter is ignored (CWE-345)" {
+    # Any PR commenter can type the marker line -- this is the exact hole #455 closed for the
+    # merge gate, lifted here. Only OWNER/MEMBER/COLLABORATOR is trusted.
+    body=$'Fallback review — runtime: codex, model: gpt-5 (selected by: probe)\n\n## Findings\n\n- [P2] unhandled error path'
+    run_comment_filter "$(ladder_comment_fixture NONE "$body")"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "comment channel: an ordinary comment (no marker) is ignored" {
+    run_comment_filter "$(ladder_comment_fixture MEMBER "just a normal comment, nothing to see")"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
 # --- gate_pr_thread_state: the top-level contract, not just the filters it runs -------------------
 # Every test above exercises one jq filter directly; none call gate_pr_thread_state() itself, so a
 # regression in the retry loop, the roster-file wiring, or the final status assignment could ship
@@ -197,7 +280,7 @@ run_filter() {
     local fixture
     fixture="$(mktemp)"
     cat > "$fixture" <<'JSON'
-{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":1,"nodes":[{"isResolved":false,"path":"b.sh","comments":{"totalCount":0,"nodes":[]}}]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}
+{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":1,"nodes":[{"isResolved":false,"path":"b.sh","comments":{"totalCount":0,"nodes":[]}}]},"comments":{"totalCount":0,"nodes":[]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}
 JSON
 
     run env GH_FIXTURE="$fixture" GATE_LIB="$GATE" bash -c '
@@ -233,4 +316,39 @@ JSON
     [[ "$output" == *"status=unreadable"* ]]
     [[ "$output" != *"status=clean"* ]]
     [[ "$output" == *"after 3 attempts"* ]]
+}
+
+# --- dotfiles-dev#490: the exact defect, end to end -----------------------------------------------
+#
+# Measured 2026-09-23: the gate reported `clean` for every one of 16 open PRs while #440 carried
+# an unanswered [P2] ladder finding, POSTED AS A PLAIN PR COMMENT -- zero review threads, so every
+# filter above saw nothing to report. This fixture reproduces that exact shape: reviewThreads is
+# empty (the "clean" shape by the OLD reading) and the ladder's unanswered finding lives only in
+# the comment channel. Run against the pre-fix gate (no `comments` in _gate_query, no
+# _gate_comment_findings_filter call) this reports `status=clean` -- the bug. Post-fix it must
+# report `status=problems` and name the channel, never silently swallow the finding.
+@test "gate_pr_thread_state: #490 regression -- ladder finding only in comments is not clean" {
+    local fixture
+    fixture="$(mktemp)"
+    cat > "$fixture" <<'JSON'
+{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"comments":{"totalCount":1,"nodes":[{"author":{"login":"ci-bot"},"authorAssociation":"MEMBER","body":"Fallback review — runtime: codex, model: gpt-5 (selected by: probe)\n\n## Findings\n\n- [P2] unhandled error path","createdAt":"2026-09-21T20:12:22Z"}]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}
+JSON
+
+    run env GH_FIXTURE="$fixture" GATE_LIB="$GATE" bash -c '
+        gh() {
+            case "$*" in
+                *"-F owner=o -F repo=r -F number=440") cat "$GH_FIXTURE" ;;
+                *) return 1 ;;
+            esac
+        }
+        source "$GATE_LIB"
+        gate_pr_thread_state o r 440
+        echo "status=$GATE_STATUS"
+        echo "detail=$GATE_DETAIL"
+    '
+    rm -f "$fixture"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"status=problems"* ]]
+    [[ "$output" == *"unanswered ladder finding (comment channel)"* ]]
 }

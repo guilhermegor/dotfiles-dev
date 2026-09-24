@@ -27,6 +27,12 @@ fi
 
 _gate_min_reply_chars=100
 
+# The reviewer ladder's attribution marker (#455's exact regex, lifted verbatim from
+# review_threads.yml's `ladder_marker_re` -- dotfiles-dev#490). A text match on this line ALONE
+# is the CWE-345 hole #455 closed for the merge gate: any PR commenter can paste this line into a
+# comment they wrote themselves. It is only ever trusted paired with authorAssociation below.
+_gate_ladder_marker_re='^Fallback review — runtime: (qwen|codex), model: .+ \(selected by: .+\)$'
+
 _gate_query() {
 	cat <<'GRAPHQL'
 query($owner:String!, $repo:String!, $number:Int!) {
@@ -39,6 +45,10 @@ query($owner:String!, $repo:String!, $number:Int!) {
           path
           comments(first:50) { totalCount nodes { author { login __typename } body } }
         }
+      }
+      comments(last:100) {
+        totalCount
+        nodes { author { login } authorAssociation body createdAt }
       }
       commits(last:1) {
         nodes {
@@ -126,13 +136,55 @@ JQ
 _gate_truncated_filter() {
 	cat <<'JQ'
 .data.repository.pullRequest.reviewThreads as $rt
+| .data.repository.pullRequest.comments as $pc
 | [ (if ($rt.totalCount // 0) > ($rt.nodes | length) then
        "  UNREADABLE: \($rt.totalCount) review threads exist, only \($rt.nodes | length) fit one page"
      else empty end),
     ($rt.nodes[]
      | select((.comments.totalCount // 0) > (.comments.nodes | length))
-     | "  UNREADABLE: \(.path // "?"): \(.comments.totalCount) comments, only \(.comments.nodes | length) read") ]
+     | "  UNREADABLE: \(.path // "?"): \(.comments.totalCount) comments, only \(.comments.nodes | length) read"),
+    (if ($pc.totalCount // 0) > ($pc.nodes | length) then
+       "  UNREADABLE: \($pc.totalCount) PR comments exist, only \($pc.nodes | length) fit one page (comment channel)"
+     else empty end) ]
 | join("\n")
+JQ
+}
+
+# The jq program behind the COMMENT-channel half of `problems` (dotfiles-dev#490): the reviewer
+# ladder's fallback review posts as a plain PR comment, never a review thread, so it was invisible
+# to every filter above by construction -- the gate read one channel and called it "clean" for both.
+#
+# A ladder comment is identified by its first line matching the attribution marker AND an
+# unforgeable authorAssociation (OWNER/MEMBER/COLLABORATOR) -- see _gate_ladder_marker_re's own
+# comment for why the text match alone is not enough (CWE-345, lifted from #455).
+#
+# "Carried findings" is read from the body's STRUCTURE -- a "finding" heading or a `[Pn]` severity
+# marker -- never from one runtime's severity vocabulary alone (the issue's own warning: codex and
+# qwen's output shapes differ, and the rung resolved at run time is not fixed). A ladder review
+# with neither is a clean report (dotfiles-dev#490's #438 fixture) and must not fire.
+#
+# "Answered" mirrors the thread path's own rule: a later comment from a DIFFERENT author, at least
+# $min chars, i.e. a substantive reply -- not merely a reply existing.
+_gate_comment_findings_filter() {
+	cat <<'JQ'
+(.data.repository.pullRequest.comments.nodes // []) as $cs
+| ($cs | map(select(
+    (((.body // "") | split("\n")[0]) | test($marker))
+    and ((.authorAssociation // "") | test("^(OWNER|MEMBER|COLLABORATOR)$"))
+  ))) as $ladder
+| $ladder[]
+| . as $lc
+| select(
+    (($lc.body // "") | test("finding"; "i"))
+    or (($lc.body // "") | test("\\[P[0-9]+\\]"))
+  )
+| ($cs
+   | map(select(
+       ((.author.login // "") != ($lc.author.login // ""))
+       and ((.createdAt // "") > ($lc.createdAt // ""))
+       and (((.body // "") | length) >= $min)))
+   | length) as $answers
+| if $answers == 0 then "  unanswered ladder finding (comment channel)" else empty end
 JQ
 }
 
@@ -189,7 +241,7 @@ _gate_filter_aborted() {
 
 gate_pr_thread_state() {
 	local owner="$1" repo="$2" number="$3" roster_file="${4:-.review-bots.yaml}"
-	local threads roster problems truncated running
+	local threads roster problems truncated running comment_problems
 	GATE_STATUS="unreadable"
 	GATE_DETAIL="could not reach the GitHub API"
 
@@ -201,7 +253,9 @@ gate_pr_thread_state() {
 		# GraphQL answers 200 with a PARTIAL body: `errors` alongside a half-filled `data`.
 		# Accepting that reads a truncated thread list as the whole truth.
 		if printf '%s' "$threads" | jq -e '
-			(.errors | not) and (.data.repository.pullRequest.reviewThreads != null)
+			(.errors | not)
+			and (.data.repository.pullRequest.reviewThreads != null)
+			and (.data.repository.pullRequest.comments != null)
 		' >/dev/null 2>&1; then
 			break
 		fi
@@ -231,6 +285,16 @@ gate_pr_thread_state() {
 		return 0
 	}
 	[ -n "$truncated" ] && problems="$(printf '%s\n%s' "$truncated" "$problems")"
+
+	# The COMMENT channel (dotfiles-dev#490) -- the ladder's fallback review lives here, never in
+	# reviewThreads above. Run and merged exactly like the thread-problems filter, so an unanswered
+	# ladder finding turns the same GATE_STATUS=problems, naming its own channel in GATE_DETAIL.
+	comment_problems="$(_gate_run_jq "$threads" "$(_gate_comment_findings_filter)" "$jq_err" \
+		--argjson min "$_gate_min_reply_chars" --arg marker "$_gate_ladder_marker_re")" || {
+		_gate_filter_aborted "$jq_err" "comment"
+		return 0
+	}
+	[ -n "$comment_problems" ] && problems="$(printf '%s\n%s' "$problems" "$comment_problems")"
 
 	# Reviewer checks (CheckRun or StatusContext) still running, minus the repo's own CI app.
 	running="$(_gate_run_jq "$threads" "$(_gate_running_filter)" "$jq_err" --arg roster "$roster")" || {

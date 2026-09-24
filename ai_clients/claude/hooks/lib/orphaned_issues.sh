@@ -35,12 +35,31 @@
 #     a stale/partial ORPHAN_REPORT on a failure -- a report is a *candidate*, never a verdict
 #     (see #418's own scope: report, never auto-close), so a caller that treats a failure as "no
 #     candidates" would silently stop re-offering issues that already merged.
+#
+#   gate_orphaned_surface OWNER REPO  (dotfiles-dev#419)
+#     The complementary signal named-but-deferred in the #418 header above: an issue with
+#     NO PR mention at all (blueprintx#438's shape -- both seams already existed on `main`,
+#     and nobody ever opened a PR that named the issue). Reuses free_surface.sh's
+#     FREE_UNCLAIMED_ISSUES (open issues no PR, open or merged, claims via
+#     closingIssuesReferences -- never re-derived here) and content-tests each one's
+#     declared ` ```surface ` block (the format s:intake-plan already parses) against the
+#     default branch. Sets two globals (never partial):
+#       ORPHAN_SURFACE_STATUS = ok | unknown
+#       ORPHAN_SURFACE_REPORT = newline-separated candidate lines -- fully or partially
+#                               present surface paths on the default branch, with no PR
+#                               claiming the issue. An issue with no ` ```surface ` block is
+#                               silently skipped (not a candidate for this cheap pass, not a
+#                               failure) -- s:intake-plan already reports a missing/unparsable
+#                               block back to the issue for its own purposes.
+#     Returns 1 and sets ORPHAN_SURFACE_STATUS=unknown on any gate/gh/git read failure.
 set -u
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	echo "orphaned_issues.sh is meant to be sourced, not executed." >&2
 	exit 1
 fi
+
+source "$(dirname "${BASH_SOURCE[0]}")/free_surface.sh"
 
 # Two ceilings this gate cannot page past. Both are DETECTION thresholds, not request
 # sizes: crossing either means the real set is larger than can be enumerated, and the
@@ -134,5 +153,85 @@ gate_orphaned_issues() {
 	ORPHAN_REPORT="$(printf '%s\n' "$report" | sed '/^$/d' | sort -u)"
 	# shellcheck disable=SC2034 # read by callers after this returns, not within this file
 	ORPHAN_STATUS="ok"
+	return 0
+}
+
+# --- gate_orphaned_surface: the zero-PR-mention direction (dotfiles-dev#419) ---------------------
+
+# _orphan_surface_lines BODY
+# Extracts the fenced ` ```surface ` block's non-empty lines from an issue body -- the exact
+# format s:intake-plan already parses (one glob/path per line). Empty output means no declared
+# surface: the caller's job, not this function's, to decide that is "skip", not "fail".
+_orphan_surface_lines() {
+	printf '%s\n' "$1" | sed -n '/^```surface/,/^```/p' | sed '1d;$d' | sed '/^[[:space:]]*$/d'
+}
+
+# _orphan_surface_present_count TREE LINE...
+# Pure glob match, no network (mirrors free_classify_files's own "pure, no network" shape):
+# counts how many of the given surface lines match at least one path in TREE (a newline-
+# separated tracked-path listing from `git ls-tree`). Prints "present total".
+_orphan_surface_present_count() {
+	local tree="$1"
+	shift
+	local total=0 present=0 line f matched
+	for line in "$@"; do
+		[ -n "$line" ] || continue
+		total=$((total + 1))
+		matched=0
+		while IFS= read -r f; do
+			[ -n "$f" ] || continue
+			# shellcheck disable=SC2053 # deliberate glob match -- surface lines may carry '*'
+			if [[ "$f" == $line ]]; then
+				matched=1
+				break
+			fi
+		done <<<"$tree"
+		[ "$matched" -eq 1 ] && present=$((present + 1))
+	done
+	echo "$present $total"
+}
+
+gate_orphaned_surface() {
+	local owner="$1" repo="$2"
+	local slug="$owner/$repo"
+	ORPHAN_SURFACE_STATUS="unknown"
+	ORPHAN_SURFACE_REPORT=""
+
+	# Never re-derive "which open issues no PR claims" -- free_surface.sh already answers it.
+	gate_free_surface "$owner" "$repo" || return 1
+
+	local base_ref
+	base_ref="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+	[ -n "$base_ref" ] || return 1
+
+	local tree
+	tree="$(git ls-tree -r --name-only "$base_ref" 2>/dev/null)" || return 1
+
+	local issue body lines_str present_total present total report=""
+	local -a lines
+	while IFS= read -r issue; do
+		[ -n "$issue" ] || continue
+		body="$(gh issue view "$issue" --repo "$slug" --json body --jq '.body' 2>/dev/null)" || return 1
+		lines_str="$(_orphan_surface_lines "$body")"
+		[ -n "$lines_str" ] || continue # no declared surface -- not a candidate for this pass
+
+		mapfile -t lines <<<"$lines_str"
+		present_total="$(_orphan_surface_present_count "$tree" "${lines[@]}")"
+		present="${present_total%% *}"
+		total="${present_total##* }"
+
+		if [ "$total" -gt 0 ] && [ "$present" -eq "$total" ]; then
+			report="$(printf '%s\n%s' "$report" \
+				"#$issue may already be shipped -- declared surface fully present on $base_ref, no PR claims it -- verify before closing")"
+		elif [ "$present" -gt 0 ]; then
+			report="$(printf '%s\n%s' "$report" \
+				"#$issue partially shipped ($present of $total surface paths present on $base_ref) -- verify before closing")"
+		fi
+	done <<<"$FREE_UNCLAIMED_ISSUES"
+
+	# shellcheck disable=SC2034 # read by callers after this returns, not within this file
+	ORPHAN_SURFACE_REPORT="$(printf '%s\n' "$report" | sed '/^$/d' | sort -u)"
+	# shellcheck disable=SC2034 # read by callers after this returns, not within this file
+	ORPHAN_SURFACE_STATUS="ok"
 	return 0
 }

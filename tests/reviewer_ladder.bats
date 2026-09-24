@@ -351,3 +351,160 @@ ATTRIBUTION='Fallback review — runtime: codex, model: codex-auto-review (selec
     [ "$status" -eq 1 ]
     [[ "$output" != *"RUNTIME CALLED"* ]]
 }
+
+# --- PR-head resolution & assertion (dotfiles-dev#487) ----------------------
+#
+# codex review diffs the AMBIENT WORKING TREE, never a PR by number. Measured
+# live 2026-09-23: invoked for PR #474 from the repo root on master, it
+# posted "No changes are present relative to the specified merge base" as a
+# forged clean review — re-run from a detached worktree at #474's real head,
+# same function, same args, 3 findings (two P1). These tests prove both
+# halves the fix must hold: a checkout AT the PR's head is accepted, and a
+# checkout AT the base (the exact measured bug) is refused with nothing
+# posted.
+
+_make_two_commit_repo() {
+    local dir="$1"
+    mkdir -p "$dir"
+    git -C "$dir" init --quiet
+    git -C "$dir" config user.email t@example.com
+    git -C "$dir" config user.name t
+    echo base >"$dir/f.txt"
+    git -C "$dir" add f.txt
+    git -C "$dir" commit --quiet -m base
+    BASE_SHA="$(git -C "$dir" rev-parse HEAD)"
+    echo pr-change >"$dir/f.txt"
+    git -C "$dir" add f.txt
+    git -C "$dir" commit --quiet -m "pr change"
+    HEAD_SHA="$(git -C "$dir" rev-parse HEAD)"
+}
+
+@test "assert_worktree_matches_pr: a checkout AT the PR's head passes" {
+    local repo="$BATS_TEST_TMPDIR/repo-match"
+    _make_two_commit_repo "$repo"
+    fake_head_sha() { printf '%s\n' "$HEAD_SHA"; }
+    export -f fake_head_sha
+    export REVIEWER_LADDER_HEAD_SHA_CMD=fake_head_sha
+
+    run assert_worktree_matches_pr "$repo" o r 487
+    [ "$status" -eq 0 ]
+}
+
+@test "assert_worktree_matches_pr: a checkout AT the base — the measured #487 bug — is refused" {
+    local repo="$BATS_TEST_TMPDIR/repo-base"
+    _make_two_commit_repo "$repo"
+    git -C "$repo" checkout --quiet "$BASE_SHA"
+    fake_head_sha() { printf '%s\n' "$HEAD_SHA"; }
+    export -f fake_head_sha
+    export REVIEWER_LADDER_HEAD_SHA_CMD=fake_head_sha
+
+    run assert_worktree_matches_pr "$repo" o r 487
+    [ "$status" -eq 1 ]
+}
+
+@test "assert_worktree_matches_pr: fails closed when the forge reports no head at all" {
+    local repo="$BATS_TEST_TMPDIR/repo-noanswer"
+    _make_two_commit_repo "$repo"
+    fake_head_sha() { :; }
+    export -f fake_head_sha
+    export REVIEWER_LADDER_HEAD_SHA_CMD=fake_head_sha
+
+    run assert_worktree_matches_pr "$repo" o r 487
+    [ "$status" -eq 1 ]
+}
+
+@test "assert_worktree_matches_pr: fails closed on an unreadable dir" {
+    fake_head_sha() { echo deadbeef; }
+    export -f fake_head_sha
+    export REVIEWER_LADDER_HEAD_SHA_CMD=fake_head_sha
+
+    run assert_worktree_matches_pr "$BATS_TEST_TMPDIR/does-not-exist" o r 487
+    [ "$status" -eq 1 ]
+}
+
+@test "_pr_head_sha: override receives owner, repo, and PR number" {
+    fake() { printf '%s/%s#%s\n' "$1" "$2" "$3"; }
+    export -f fake
+    export REVIEWER_LADDER_HEAD_SHA_CMD=fake
+    run _pr_head_sha o r 487
+    [ "$output" = "o/r#487" ]
+}
+
+# --- _run_runtime_review: an empty diff is an error, never a finding --------
+
+@test "codex review: an empty diff is an ERROR that posts nothing — never a finding" {
+    git() { [ "$1" = rev-parse ] && return 0; command git "$@"; }
+    codex() {
+        printf 'No changes are present relative to the specified merge base; HEAD is exactly the merge base commit.\n'
+    }
+    export -f git codex
+    export REVIEWER_LADDER_BASE=origin/master
+    run _run_runtime_review codex codex-auto-review "" 474
+    [ "$status" -eq 1 ]
+}
+
+@test "codex review: a literally empty stdout is also an ERROR, never a finding" {
+    git() { [ "$1" = rev-parse ] && return 0; command git "$@"; }
+    codex() { :; }
+    export -f git codex
+    export REVIEWER_LADDER_BASE=origin/master
+    run _run_runtime_review codex codex-auto-review "" 474
+    [ "$status" -eq 1 ]
+}
+
+@test "codex review: runs in WORKDIR and strips its absolute path from findings" {
+    git() { [ "$1" = rev-parse ] && return 0; command git "$@"; }
+    codex() { printf 'issue at %s/ai_clients/claude/hooks/lib/x.sh:12\n' "$PWD"; }
+    export -f git codex
+    export REVIEWER_LADDER_BASE=origin/master
+    local workdir="$BATS_TEST_TMPDIR/wt-474"
+    mkdir -p "$workdir"
+
+    run _run_runtime_review codex codex-auto-review "" 474 "$workdir"
+    [ "$status" -eq 0 ]
+    [ "$output" = "issue at ai_clients/claude/hooks/lib/x.sh:12" ]
+}
+
+# --- run_fallback_review: end to end, the PR's own worked example -----------
+
+@test "run_fallback_review: codex posts when the resolved checkout is verified" {
+    export REVIEWER_LADDER_QWEN_SETTINGS="$FIXTURES/qwen_malformed.json"
+    export REVIEWER_LADDER_CODEX_CACHE="$FIXTURES/codex_full.json"
+    fake_codex_probe() { [ "$1" = "codex-auto-review" ]; }
+    export REVIEWER_LADDER_CODEX_PROBE=fake_codex_probe
+    fake_checkout() { echo "$BATS_TEST_TMPDIR"; }
+    export -f fake_checkout
+    export REVIEWER_LADDER_CHECKOUT_CMD=fake_checkout
+    fake_run() { echo "3 findings, two P1"; }
+    export -f fake_run
+    export REVIEWER_LADDER_RUN_CMD=fake_run
+    fake_post() { printf 'POSTED:%s\n' "$4"; }
+    export -f fake_post
+    export REVIEWER_LADDER_POST_CMD=fake_post
+
+    run run_fallback_review o r 474 BLOCKED "" 5000 "[]"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"POSTED:"* ]]
+    [[ "$output" == *"3 findings, two P1"* ]]
+}
+
+@test "run_fallback_review: refuses and posts nothing when the checkout can't be verified (the base-checkout case)" {
+    export REVIEWER_LADDER_QWEN_SETTINGS="$FIXTURES/qwen_malformed.json"
+    export REVIEWER_LADDER_CODEX_CACHE="$FIXTURES/codex_full.json"
+    fake_codex_probe() { [ "$1" = "codex-auto-review" ]; }
+    export REVIEWER_LADDER_CODEX_PROBE=fake_codex_probe
+    fake_checkout() { :; } # empty output == assert_worktree_matches_pr failed
+    export -f fake_checkout
+    export REVIEWER_LADDER_CHECKOUT_CMD=fake_checkout
+    fake_run() { echo "SHOULD NOT RUN" >&2; }
+    export -f fake_run
+    export REVIEWER_LADDER_RUN_CMD=fake_run
+    fake_post() { echo "SHOULD NOT POST" >&2; }
+    export -f fake_post
+    export REVIEWER_LADDER_POST_CMD=fake_post
+
+    run run_fallback_review o r 474 BLOCKED "" 5000 "[]"
+    [ "$status" -eq 1 ]
+    [[ "$output" != *"SHOULD NOT RUN"* ]]
+    [[ "$output" != *"SHOULD NOT POST"* ]]
+}

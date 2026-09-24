@@ -76,7 +76,14 @@ $issues_json
 JSON
     ;;
 "issue list --repo acme/widgets --state open --limit 500 --json number --jq .[].number")
-    printf '%s\n' "$issues_json" | python3 -c 'import json,sys; [print(i["number"]) for i in json.load(sys.stdin)]'
+    # A QUOTED heredoc, exactly like the --json number,body branch above. Interpolating
+    # \$issues_json into a double-quoted printf argument instead breaks the generated stub:
+    # the JSON's own double quotes end the quoting and its \`\`\`surface fence becomes command
+    # substitution, so this branch exited non-zero and gate_free_surface's third
+    # \`|| return 1\` fired -- every issue came back UNKNOWN and tests 3-8 failed.
+    python3 -c 'import json,sys; [print(i["number"]) for i in json.load(sys.stdin)]' <<'JSON'
+$issues_json
+JSON
     ;;
 "api repos/acme/widgets --jq .default_branch")
     [ "$fail" = 1 ] && exit 1

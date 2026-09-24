@@ -377,10 +377,37 @@ skip; a session-owned `CronCreate` poll is not.
    merges directly and may be worth more than one ask. Keep the current order until that trade-off
    has a number behind it.
 2. **Pick the candidate — blast radius first, age second.**
-   - **Filter to PRs whose ONLY blocker is the review gate** (`BLOCKED`, and the review check is
-     the sole red). ⚠️ A `DIRTY` PR is not a candidate: a review cannot resolve a merge conflict,
-     so the ask is spent for nothing. Measured — of the five PRs holding the contended wiring
-     files, **three were `DIRTY`**; asking for any of them would have burned the window.
+   - **Filter to PRs whose ONLY blocker is the review gate: `red ∩ required == {the review
+     check}`, never "the review check is the sole red."** Those are different sets, and treating
+     them as the same one is the defect (dotfiles-dev#411). Read the required set **once per
+     round** and reuse it — re-deriving it per PR is the per-item API loop the budget work exists
+     to remove:
+
+     ```bash
+     gh api repos/<owner>/<repo>/branches/<base>/protection \
+       --jq '.required_status_checks.contexts'
+     ```
+
+     🔴 **Fail loudly if that read fails — report UNKNOWN, never "nothing is required" (every red
+     check would then look harmless) and never "everything is required" (that reinstates the
+     bug).** Same rule `gate_free_surface` already applies to its own read failures.
+
+     | filter | eligible candidates, measured 2026-09-24 (dotfiles-dev, 5 open PRs) |
+     |---|---|
+     | "the review check is the sole red" (the old, wrong filter) | **0** — matches nothing |
+     | `red ∩ required == {"Review threads answered"}` | **5** — all five |
+
+     `Review threads answered` had **zero check-runs**, not a red one, on every open PR head
+     that day — absent, not failing. "Sole red" can never match an absent check, so the filter
+     found no candidates while the reviewer slot sat entirely unspent. Every other required
+     check was green on all five. **"Required but not reported" is a first-class state, not a
+     variant of red** — treat a missing required check the same as a red one for this filter.
+     Report any red check that is **not** in the required set separately, as debt worth its own
+     issue, never as a blocker. This correction applies everywhere else the loop reasons about
+     "blocked" — a PR's mergeability is the required set, never the rollup's colour.
+   - ⚠️ A `DIRTY` PR is not a candidate: a review cannot resolve a merge conflict, so the ask is
+     spent for nothing. Measured — of the five PRs holding the contended wiring files, **three
+     were `DIRTY`**; asking for any of them would have burned the window.
    - ⚠️ **Skip any PR whose head was pushed in the last ~10 minutes.** A push already triggers a
      re-review (the item-1 note above), so an ask on top of it spends the window on a review that
      was already coming — `gh pr view <n> --json commits --jq '.commits[-1].committedDate'` against

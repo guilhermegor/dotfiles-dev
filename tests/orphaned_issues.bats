@@ -229,7 +229,7 @@ JSON
 
 @test "_orphan_surface_lines extracts a fenced surface block, dropping the fences" {
     local body
-    body="$(printf 'intro text\n\`\`\`surface\nai_clients/claude/hooks/lib/*.sh\ntests/*.bats\n\`\`\`\n\nmore text\n')"
+    body="$(printf 'intro text\n```surface\nai_clients/claude/hooks/lib/*.sh\ntests/*.bats\n```\n\nmore text\n')"
     run _orphan_surface_lines "$body"
     [ "$status" -eq 0 ]
     [[ "$output" == $'ai_clients/claude/hooks/lib/*.sh\ntests/*.bats' ]]
@@ -284,7 +284,7 @@ JSON
             "api graphql -f query="*) echo '{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}' ;;
             "issue list --repo o/r --state open --limit 500 --json number --jq .[].number") echo 438 ;;
             "issue view 438 --repo o/r --json body --jq .body")
-                printf 'shipped both seams\n\`\`\`surface\nseams/otel_logging.py\n\`\`\`\n' ;;
+                printf 'shipped both seams\n```surface\nseams/otel_logging.py\n```\n' ;;
             *) return 1 ;;
         esac
     }
@@ -313,7 +313,7 @@ JSON
             "api graphql -f query="*) echo '{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}' ;;
             "issue list --repo o/r --state open --limit 500 --json number --jq .[].number") echo 355 ;;
             "issue view 355 --repo o/r --json body --jq .body")
-                printf '\`\`\`surface\nseams/one.py\nseams/two.py\n\`\`\`\n' ;;
+                printf '```surface\nseams/one.py\nseams/two.py\n```\n' ;;
             *) return 1 ;;
         esac
     }

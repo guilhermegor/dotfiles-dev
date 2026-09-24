@@ -118,49 +118,29 @@ installed_hooks() {
 
 # --- registration is a hook COMMAND, never a text mention (#467) ------------------
 #
-# Measured 2026-09-24 on the real settings.json: stripping the one hook entry that invokes
+# Measured 2026-09-24 on the real settings.json: dropping the one hook entry that invoked
 # stale_local_ref_guard.sh and adding `Bash(bash ~/.claude/hooks/stale_local_ref_guard.sh)`
-# to permissions.allow left the old extractor reporting it as REGISTERED, so the
-# installed=>registered test above passed for a hook nothing invokes.
+# to permissions.allow left the old bare-grep extractor reporting it REGISTERED, so the
+# installed=>registered test above passed for a hook nothing invoked. The fixture below
+# uses a synthetic name instead of that real one, so this test asserts the extractor's
+# contract and cannot fail because some unrelated hook entry was renamed.
 
 @test "a hook named only outside .hooks is not counted as registered" {
 	local decoy="$BATS_TEST_TMPDIR/decoy-settings.json"
-	python3 - "$SETTINGS" "$decoy" <<'PYEOF'
-import json, sys
+	jq '.permissions.allow += ["Bash(bash ~/.claude/hooks/zz_mentioned_never_wired.sh)"]' \
+		"$SETTINGS" >"$decoy"
 
-src, dest = sys.argv[1], sys.argv[2]
-TARGET = "stale_local_ref_guard"
-
-
-def drop_entries(node):
-    """Remove every hook command entry invoking TARGET, at any depth."""
-    if isinstance(node, list):
-        return [drop_entries(item) for item in node
-                if not (isinstance(item, dict)
-                        and TARGET in str(item.get("command", "")))]
-    if isinstance(node, dict):
-        return {key: drop_entries(value) for key, value in node.items()}
-    return node
-
-
-data = json.load(open(src))
-data["hooks"] = drop_entries(data["hooks"])
-data.setdefault("permissions", {}).setdefault("allow", []).append(
-    "Bash(bash ~/.claude/hooks/stale_local_ref_guard.sh)")
-json.dump(data, open(dest, "w"), indent=2)
-PYEOF
-
-	# The fixture must be the intended shape: nothing invokes it, the name is still in the file.
+	# The fixture must be the intended shape: the name is in the file, no entry invokes it.
+	run grep -c zz_mentioned_never_wired "$decoy"
+	[ "$output" -ge 1 ]
 	run jq -r '.hooks | .. | objects | select(.type == "command") | .command' "$decoy"
 	[ "$status" -eq 0 ]
-	[[ "$output" != *stale_local_ref_guard* ]]
-	run grep -c stale_local_ref_guard "$decoy"
-	[ "$output" -ge 1 ]
+	[[ "$output" != *zz_mentioned_never_wired* ]]
 
 	SETTINGS="$decoy"
 	run registered_hooks
 	[ "$status" -eq 0 ]
-	[[ "$output" != *stale_local_ref_guard* ]]
+	[[ "$output" != *zz_mentioned_never_wired* ]]
 }
 
 # Every lib/ file a hook SOURCES must land in the installed tree. The registered=>installed

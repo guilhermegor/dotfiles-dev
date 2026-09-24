@@ -207,11 +207,15 @@ allowed — the same asymmetry `push_pr_head_guard.sh` and
 case, already owned by `branch_requires_issue_guard.sh`, and is skipped
 here. Escape hatch: `ALLOW_STALE_LOCAL_REF=1 <command>`.
 
-⚠️ **Not yet registered in `settings.json`'s `PreToolUse` `Bash` array** —
-that file was held by a concurrent PR when this guard was written. It IS
-installed by `install_hooks()` (so `make ai_clients` already ships it to
-`~/.claude/hooks/`); wiring the one `settings.json` entry is the remaining
-step, same shape as every other row in that array.
+Registered in `settings.json`'s `PreToolUse` `Bash` array, next to
+`branch_requires_issue_guard.sh` — the two are siblings on the same command
+family, one owning branch **creation** and this one owning **checkout** of an
+existing branch. The entry was missing for a while because `settings.json` was
+held by a concurrent PR when the guard was written, and `install_hooks()` shipped
+the file the whole time: a guard present on disk and absent from the array is
+installed, inert, and indistinguishable from a working one by any check that only
+looks for the file. `tests/hooks_install_parity.bats` is what made it visible
+(dotfiles-dev#467) — it asserts the two lists agree, in both directions.
 
 ## Worktree rescue fan-out: two callers, one implementation
 

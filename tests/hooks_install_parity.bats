@@ -10,9 +10,16 @@
 # printed success for the 21 hooks it did copy. A green test proves a hook WORKS; it does not
 # prove the hook is DEPLOYED.
 #
-# Direction asserted: registered => installed. The reverse is deliberately NOT asserted --
-# lib/review_thread_gate.sh is a shared library that is installed but never registered as a
-# hook entry, and that is correct.
+# Both directions are asserted: registered => installed (below), AND installed => registered
+# (dotfiles-dev#458). The second gap shipped in PR #452: rtk_worktree_passthrough.sh was
+# installed by hooks.sh, had its own passing bats suite, and settings.json still invoked
+# `rtk hook claude` directly -- no PreToolUse payload ever reached it. An installed file
+# nothing references looks identical to a working hook from every place a test previously
+# looked (file exists, is executable, its own suite passes).
+#
+# lib/ is the one legitimate exception to installed => registered: a lib is sourced by a
+# hook, never registered as a hook entry itself. Any other exception must be an explicit
+# allowlist entry with a reason, never an implicit pass.
 #
 # Run locally:  bats tests/            (install with: sudo apt-get install -y bats)
 
@@ -22,9 +29,26 @@ setup() {
     HOOKS_LIB="$REPO_ROOT/ai_clients/claude/lib/hooks.sh"
 }
 
+# Hooks installed by hooks.sh but intentionally not registered as a hook entry in
+# settings.json. Empty today -- any future entry here must carry a one-line reason.
+ORPHAN_ALLOWLIST=()
+
 # Every "hooks/<name>.sh" path named in settings.json, deduped.
+# Every hook name INVOKED by a hook command entry under .hooks. Scoped to those command
+# strings on purpose: a bare grep over the whole file answers "is this path mentioned
+# anywhere in settings.json", which is not the question. settings.json holds other keys
+# whose values are commands or command fragments (`permissions.allow`, `statusLine`), so a
+# path named in one of those would read as registered while no hook entry invokes it --
+# defeating the installed=>registered test below with the exact class of wiring gap that
+# test exists to catch. Same reasoning as installed_hooks() stripping comments (#467).
 registered_hooks() {
-    grep -oE 'hooks/[A-Za-z0-9_./-]+\.sh' "$SETTINGS" \
+    jq -r '
+        .hooks
+        | .. | objects
+        | select(.type == "command" and ((.command | type) == "string"))
+        | .command
+    ' "$SETTINGS" \
+        | grep -oE 'hooks/[A-Za-z0-9_./-]+\.sh' \
         | sed 's|^hooks/||' \
         | sort -u
 }
@@ -69,6 +93,54 @@ installed_hooks() {
         echo "Add a copy_hook_file call for each, per the header note in lib/hooks.sh."
         return 1
     fi
+}
+
+@test "every hook installed by hooks.sh is registered in settings.json" {
+    local orphaned=""
+    local hook
+    while IFS= read -r hook; do
+        [ -n "$hook" ] || continue
+        [[ "$hook" == lib/* ]] && continue  # libs are sourced, never registered
+        if printf '%s\n' "${ORPHAN_ALLOWLIST[@]-}" | grep -qxF "$hook"; then
+            continue
+        fi
+        if ! registered_hooks | grep -qxF "$hook"; then
+            orphaned="$orphaned $hook"
+        fi
+    done < <(installed_hooks)
+
+    if [ -n "$orphaned" ]; then
+        echo "Installed by hooks.sh but never registered in settings.json:$orphaned"
+        echo "Add a settings.json hook entry, or add an ORPHAN_ALLOWLIST entry with a reason."
+        return 1
+    fi
+}
+
+# --- registration is a hook COMMAND, never a text mention (#467) ------------------
+#
+# Measured 2026-09-24 on the real settings.json: dropping the one hook entry that invoked
+# stale_local_ref_guard.sh and adding `Bash(bash ~/.claude/hooks/stale_local_ref_guard.sh)`
+# to permissions.allow left the old bare-grep extractor reporting it REGISTERED, so the
+# installed=>registered test above passed for a hook nothing invoked. The fixture below
+# uses a synthetic name instead of that real one, so this test asserts the extractor's
+# contract and cannot fail because some unrelated hook entry was renamed.
+
+@test "a hook named only outside .hooks is not counted as registered" {
+	local decoy="$BATS_TEST_TMPDIR/decoy-settings.json"
+	jq '.permissions.allow += ["Bash(bash ~/.claude/hooks/zz_mentioned_never_wired.sh)"]' \
+		"$SETTINGS" >"$decoy"
+
+	# The fixture must be the intended shape: the name is in the file, no entry invokes it.
+	run grep -c zz_mentioned_never_wired "$decoy"
+	[ "$output" -ge 1 ]
+	run jq -r '.hooks | .. | objects | select(.type == "command") | .command' "$decoy"
+	[ "$status" -eq 0 ]
+	[[ "$output" != *zz_mentioned_never_wired* ]]
+
+	SETTINGS="$decoy"
+	run registered_hooks
+	[ "$status" -eq 0 ]
+	[[ "$output" != *zz_mentioned_never_wired* ]]
 }
 
 # Every lib/ file a hook SOURCES must land in the installed tree. The registered=>installed

@@ -28,6 +28,8 @@ setup() {
     /usr/bin/git config user.name t
     /usr/bin/git commit -q --allow-empty -m init
 
+    AGENT_WORKTREES=()
+
     BIN="$TEST_TMP/bin"
     mkdir -p "$BIN"
     PATH="$BIN:$PATH"
@@ -35,8 +37,36 @@ setup() {
 }
 
 teardown() {
+    local wt
+    for wt in "${AGENT_WORKTREES[@]:-}"; do
+        [ -n "$wt" ] || continue
+        /usr/bin/git -C "$TEST_TMP" worktree remove --force "$wt" 2>/dev/null
+        rm -rf "$wt"
+    done
     cd /
     rm -rf "$TEST_TMP"
+}
+
+# mk_agent_worktree BRANCH FILE...
+# Registers a real git worktree of $TEST_TMP on a new branch off "main", with FILE... committed
+# on it — simulates a LIVE agent (dotfiles-dev#433 finding 1: collision is agent-vs-agent, a
+# git-worktree notion, never agent-vs-open-PR). The worktree lives outside $TEST_TMP so its
+# files can never be reached by root.glob() from the planner's own checkout (finding 3's whole
+# point: a live agent's file is invisible to the local glob and must still be caught).
+mk_agent_worktree() {
+    local branch="$1"
+    shift
+    local wt
+    wt="$(mktemp -d)"
+    AGENT_WORKTREES+=("$wt")
+    /usr/bin/git worktree add -q -b "$branch" "$wt" main
+    local f
+    for f in "$@"; do
+        mkdir -p "$(dirname "$wt/$f")"
+        : >"$wt/$f"
+        /usr/bin/git -C "$wt" add "$f"
+    done
+    /usr/bin/git -C "$wt" -c user.email=t@t -c user.name=t commit -q -m "agent: $branch"
 }
 
 # gh_field NAME -> the .body value of one gh issue-list record: a fenced ```surface block
@@ -57,15 +87,21 @@ issue_json() {
     printf '{"number": %s, "body": "%s"}' "$number" "$body"
 }
 
-# stub_gh ISSUES_JSON [HELD_FILE] [CLAIMED_ISSUE] [FAIL_BRANCH]
+# stub_gh ISSUES_JSON [HELD_FILE] [CLAIMED_ISSUE] [FAIL_BRANCH] [FROZEN_PR_FILE]
 # ISSUES_JSON is the full `gh issue list --json number,body` array. HELD_FILE, if given, is the
-# one file the "feature" branch's compare reports as held. CLAIMED_ISSUE, if given, is the one
-# issue number closingIssuesReferences reports as already claimed. FAIL_BRANCH=1 makes the
-# default-branch lookup fail, exercising gate_free_surface's own fail-closed path.
+# one file the "feature" branch's compare reports as held (gate_free_surface's OWN held-paths
+# computation — unused by the planner's classification since #433 finding 1, still exercised
+# here so gate_free_surface itself keeps succeeding for the claimed-issue answer it still
+# supplies). CLAIMED_ISSUE, if given, is the one issue number closingIssuesReferences reports as
+# already claimed. FAIL_BRANCH=1 makes the default-branch lookup fail, exercising
+# gate_free_surface's own fail-closed path. FROZEN_PR_FILE, if given, is a file an OPEN PR (no
+# live agent behind it — no matching worktree) touches, for finding 1's own test.
 stub_gh() {
-    local issues_json="$1" held="${2:-}" claimed="${3:-}" fail="${4:-0}"
+    local issues_json="$1" held="${2:-}" claimed="${3:-}" fail="${4:-0}" frozen="${5:-}"
     local claimed_nodes="[]"
     [ -n "$claimed" ] && claimed_nodes="[{\"closingIssuesReferences\":{\"nodes\":[{\"number\":$claimed}]}}]"
+    local pr_list='[]'
+    [ -n "$frozen" ] && pr_list='[{"number":99,"headRefName":"frozen-pr-branch"}]'
     cat >"$BIN/gh" <<STUB
 #!/bin/bash
 case "\$*" in
@@ -89,7 +125,8 @@ JSON
     [ "$fail" = 1 ] && exit 1
     echo main
     ;;
-"pr list --repo acme/widgets --state open --json number,headRefName --limit 200") echo '[]' ;;
+"pr list --repo acme/widgets --state open --json number,headRefName --limit 200") echo '$pr_list' ;;
+"pr view 99 --repo acme/widgets --json files --jq .files[].path") echo "$frozen" ;;
 "api repos/acme/widgets/branches --paginate --jq .[].name") printf 'main\nfeature\n' ;;
 "api repos/acme/widgets/compare/main...feature --jq .files[]?.filename") echo "$held" ;;
 "api graphql -f query="*)
@@ -139,7 +176,8 @@ field() {
 }
 
 @test "a fully held surface is excluded, naming the held path" {
-    stub_gh "[$(issue_json 2 held/file.sh)]" held/file.sh
+    stub_gh "[$(issue_json 2 held/file.sh)]"
+    mk_agent_worktree agent-a held/file.sh
     run_planner
     [ "$status" -eq 0 ]
     [ "$(field '.dispatchable | length')" -eq 0 ]
@@ -187,6 +225,72 @@ field() {
     [ "$(field '.dispatchable[0].surface | length')" -eq 2 ]
     [[ "$(field '.dispatchable[0].surface | join(",")')" == *"hooks/lib/bar_handler.py"* ]]
     [[ "$(field '.dispatchable[0].surface | join(",")')" == *"hooks/lib/foo_handler.py"* ]]
+}
+
+# --- finding 1: collision is agent-vs-agent, never agent-vs-open-PR (PR #476 review) ---------
+
+@test "a candidate colliding only with a frozen open PR (no live agent) is dispatchable" {
+    stub_gh "[$(issue_json 10 frozen/only.sh)]" "" "" 0 frozen/only.sh
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable[0].issue')" = "10" ]
+    [ "$(field '.excluded | length')" -eq 0 ]
+}
+
+@test "a candidate colliding with a live agent worktree is excluded (pre-fix: same case was free)" {
+    mk_agent_worktree agent-live agent/held.sh
+    stub_gh "[$(issue_json 11 agent/held.sh)]"
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 0 ]
+    [[ "$(field '.excluded[0].reason')" == *"agent/held.sh"* ]]
+}
+
+# --- finding 2: a truncated issue read must not yield a complete-looking plan (LATENT here) ---
+
+@test "an issue list at the 500-issue cap refuses to print a plan, never a partial one" {
+    local json="[" i
+    for ((i = 1; i <= 500; i++)); do
+        [ "$i" -gt 1 ] && json+=","
+        json+="$(issue_json "$i")"
+    done
+    json+="]"
+    stub_gh "$json"
+    run_planner
+    [ "$status" -ne 0 ]
+    [[ "$output" != *'"dispatchable"'* ]]
+}
+
+# --- finding 3: a glob token must see a live agent's file too, not just the local checkout ----
+
+@test "a live agent's file invisible to root.glob still collides (pre-fix: read as free)" {
+    mk_agent_worktree agent-glob hooks/lib/new_handler.py
+    stub_gh "[$(issue_json 12 'hooks/lib/*_handler.py')]"
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 0 ]
+    [[ "$(field '.excluded[0].reason')" == *"hooks/lib/new_handler.py"* ]]
+}
+
+# --- finding 4: dispatchable candidates must be mutually disjoint -----------------------------
+
+@test "two candidates declaring the same free path are not both dispatched" {
+    stub_gh "[$(issue_json 20 shared.sh), $(issue_json 21 shared.sh extra.sh)]"
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 1 ]
+    [ "$(field '.dispatchable[0].issue')" = "20" ]
+    [ "$(field '.excluded[0].issue')" = "21" ]
+    [[ "$(field '.excluded[0].reason')" == *"shared.sh"* ]]
+}
+
+@test "greedy selection prefers two small disjoint candidates over one bigger one" {
+    stub_gh "[$(issue_json 30 x.sh), $(issue_json 31 y.sh), $(issue_json 32 x.sh y.sh)]"
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 2 ]
+    [ "$(field '[.dispatchable[].issue] | sort | join(",")')" = "30,31" ]
+    [ "$(field '.excluded[0].issue')" = "32" ]
 }
 
 # --- fail-closed half of the gate contract (dotfiles-dev#398) --------------------------------

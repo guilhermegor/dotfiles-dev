@@ -7,14 +7,18 @@ on (it never ``cd``s anywhere first). Prints exactly one JSON object to stdout::
     {"dispatchable": [{"issue": 433, "surface": ["a/b.py"]}],
      "excluded":     [{"issue": 426, "reason": "..."}]}
 
-Never re-derives collision logic. Every exact-path comparison against a live agent's or
-open PR's file set runs through the existing ``gate_free_surface``/``free_classify_files``
-pair in ``lib/free_surface.sh`` (dotfiles-dev#340) — this script only orchestrates around
-them: parsing each issue's declared surface, expanding globs against the repo tree, and
-turning the three-way classify verdict into a dispatchable/excluded record. Collapsing
-``would-need-a-held-file`` into ``held`` was the specific bug that hid 97% of a free
-directory behind a directory-level summary (#340); the mapping below keeps all three
-states apart on purpose.
+Collision is agent-vs-agent, never agent-vs-open-PR (dotfiles-dev#433; review findings on PR
+#476). The held set fed to ``free_classify_files`` (``lib/free_surface.sh``, #340) is built
+here from ``git worktree list`` — the same "which branches are live agents" notion
+``hooks/lib/worktree_fanout.sh`` already owns for session_start_context.sh and
+quota_gap_rescue.sh — never from ``gate_free_surface``'s own ``FREE_HELD_PATHS``, which unions
+every open PR's files regardless of whether an agent is still live on it (a frozen/idle open PR
+would otherwise suppress dispatch of an unrelated candidate). ``gate_free_surface`` is still
+called for its OTHER answer: the claimed-issue check (``FREE_UNCLAIMED_ISSUES``) is
+deliberately agent-vs-{open,merged}-PR, a different question ("is this issue already being
+delivered") that this script leaves untouched. Collapsing ``would-need-a-held-file`` into
+``held`` was the specific bug that hid 97% of a free directory behind a directory-level summary
+(#340); the mapping below keeps all three classify states apart on purpose.
 
 An issue's file surface is declared as a fenced ```surface block in its body — the
 convention dotfiles-dev#426 formalises with an issue-template requirement; here it is
@@ -22,18 +26,29 @@ read, not enforced. An issue with no such block, or an empty one, is UNKNOWN, ne
 "collides with nothing": it is excluded with its own named reason, same as one whose
 surface is held.
 
-Fails LOUD, not closed-and-quiet, on anything that breaks the read itself (``gh`` missing,
-not authenticated, a malformed response): an uncaught exception prints a traceback to
-stderr and nothing parseable to stdout, which is exactly what round_dispatch_guard.sh's own
-shape check reads as UNREADABLE and blocks on — the fail-closed behaviour lives in the
-caller, so this script does not need to fake a valid-looking empty answer to get it. A
-*recoverable* gate failure (a rate limit, a bad compare) is different: gate_free_surface
-already reports that as its own clean "unknown" state, so it is surfaced here as a named
+A glob token in a declared surface is matched against the local checkout tree AND the
+live-agent held-paths set (dotfiles-dev#433 finding 3): a live agent's own branch can hold a
+file matching the token that never reaches this checkout, and would otherwise read as free.
+
+Because each issue is classified independently, two issues can both come back individually
+free while declaring an overlapping path (dotfiles-dev#433 finding 4). ``select_disjoint`` runs
+a second, deterministic GREEDY pass — smallest surface first, ties by issue number — reserving
+each selected candidate's paths before the next is considered. This is not an optimal
+maximum-cardinality solver; #433 explicitly does not require one.
+
+Fails LOUD, not closed-and-quiet, on anything that breaks the read itself (``gh`` missing, not
+authenticated, a malformed response, or an open-issue count at/above the 500-issue cap
+``gate_free_surface``'s own claimed-issue read shares — dotfiles-dev#433 finding 2, LATENT on
+this repo's ~33 open issues): an uncaught exception prints a traceback to stderr and nothing
+parseable to stdout, which is exactly what round_dispatch_guard.sh's own shape check reads as
+UNREADABLE and blocks on. A *recoverable* gate failure (a rate limit, a bad compare, or the
+live-agent worktree walk itself failing) is different: it is surfaced as a named UNKNOWN
 exclusion reason on every open issue — still a valid, still fail-closed JSON object.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 import subprocess
@@ -45,12 +60,16 @@ FREE_SURFACE_SH = LIB_DIR / "free_surface.sh"
 GH_TIMEOUT = 20
 GATE_TIMEOUT = 25
 
+# gate_free_surface's own `gh issue list --state open --limit 500` cap (free_surface.sh) — not
+# editable from here (dotfiles-dev#433 finding 2, see module docstring).
+FREE_SURFACE_ISSUE_CAP = 500
+
 SURFACE_BLOCK_RE = re.compile(r"```surface\s*\n(.*?)```", re.DOTALL)
 GLOB_CHARS = ("*", "?", "[")
 
-# Runs gate_free_surface exactly once and classifies every candidate against it in the SAME
-# bash process (never one subprocess per issue): FREE_HELD_PATHS is a plain shell variable the
-# gate sets, not exported, so free_classify_files can only see it from inside that same process.
+# Classifies every request against a caller-supplied held-paths set (the live-agent set,
+# finding 1) rather than gate_free_surface's own FREE_HELD_PATHS. gate_free_surface still runs,
+# for FREE_UNCLAIMED_ISSUES only.
 _GATE_SCRIPT = r"""
 set -eu
 owner="$1"; repo="$2"; free_surface_sh="$3"
@@ -61,8 +80,14 @@ source "$free_surface_sh"
 # synchronous and gh has no default request deadline of its own.
 gh() { timeout "${DISPATCH_PLAN_GH_TIMEOUT:-15}" gh "$@"; }
 
-# Read every classify request BEFORE the network calls below: issue<TAB>file1|file2|...,
-# one per line. gate_free_surface never touches stdin, so this ordering is safe.
+# stdin: the live-agent held paths, one per line, then a lone "===REQUESTS===" line, then every
+# classify request as issue<TAB>file1|file2|... . Read before the network call below: neither
+# gate_free_surface nor free_classify_files touches stdin, so this ordering is safe.
+live_held=""
+while IFS= read -r line; do
+	[ "$line" = "===REQUESTS===" ] && break
+	live_held="$(printf '%s\n%s' "$live_held" "$line")"
+done
 mapfile -t requests
 
 if ! gate_free_surface "$owner" "$repo"; then
@@ -70,6 +95,11 @@ if ! gate_free_surface "$owner" "$repo"; then
 	exit 0
 fi
 echo "GATE_STATUS:ok"
+
+# dotfiles-dev#433 finding 1: overwrite gate_free_surface's own agent-vs-open-PR held set with
+# the caller's agent-vs-agent one before classifying.
+FREE_HELD_PATHS="$(printf '%s\n' "$live_held" | sed '/^$/d' | sort -u)"
+
 echo "===UNCLAIMED==="
 printf '%s\n' "$FREE_UNCLAIMED_ISSUES"
 echo "===RESULTS==="
@@ -107,8 +137,72 @@ def repo_root() -> Path:
 	return Path(_run(["git", "rev-parse", "--show-toplevel"]))
 
 
+def default_branch(slug: str) -> str | None:
+	"""Return ``slug``'s default branch name, or None on any failure (never raises).
+
+	Same source ``_free_held_paths`` (free_surface.sh) reads its own default branch from — kept
+	as a second, independent call rather than threading the value out of that sourced function,
+	which is out of scope to edit for this change.
+	"""
+	try:
+		branch = _run(["gh", "api", f"repos/{slug}", "--jq", ".default_branch"])
+	except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+		return None
+	return branch or None
+
+
+def live_agent_held_paths(root: Path, default: str) -> tuple[bool, list[str]]:
+	"""Return ``(ok, held_paths)`` — files any OTHER live-agent worktree's branch has changed
+	relative to ``default`` (dotfiles-dev#433 finding 1).
+
+	A "live agent" is a git worktree of this checkout — the same notion
+	``hooks/lib/worktree_fanout.sh`` already walks via ``git worktree list --porcelain`` for
+	session_start_context.sh and quota_gap_rescue.sh. That file exposes no standalone accessor
+	for just the branch list (only printed alerts) and is out of scope to edit here, so this
+	mirrors its own porcelain walk rather than inventing a different liveness signal (a pushed-
+	branch scan, a naming convention, ...).
+
+	``ok=False`` on anything that leaves liveness undetermined — a ``git worktree list``/``git
+	diff`` failure that is not a plain "unrelated histories" orphan branch — never silently read
+	as zero held paths, i.e. free.
+	"""
+	try:
+		porcelain = _run(["git", "-C", str(root), "worktree", "list", "--porcelain"])
+	except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+		return False, []
+
+	held: set[str] = set()
+	branch = ""
+	prefix = "branch refs/heads/"
+	for line in [*porcelain.splitlines(), ""]:
+		if line.startswith(prefix):
+			branch = line[len(prefix) :]
+			continue
+		if line != "":
+			continue
+		if branch and branch != default:
+			diff = subprocess.run(  # noqa: S603, S607 - fixed argv, no shell
+				["git", "-C", str(root), "diff", "--name-only", f"{default}...{branch}"],
+				capture_output=True,
+				text=True,
+				timeout=GH_TIMEOUT,
+			)
+			if diff.returncode != 0:
+				stderr = diff.stderr.lower()
+				if "merge base" not in stderr and "unknown revision" not in stderr:
+					return False, []
+			else:
+				held.update(p for p in diff.stdout.splitlines() if p)
+		branch = ""
+	return True, sorted(held)
+
+
 def open_issues(slug: str) -> list[dict]:
-	"""Return every open issue's number and body for ``slug`` (``owner/name``)."""
+	"""Return every open issue's number and body for ``slug`` (``owner/name``).
+
+	Capped at ``FREE_SURFACE_ISSUE_CAP`` — ``build_plan`` refuses to print a plan when the
+	result hits that cap (dotfiles-dev#433 finding 2).
+	"""
 	raw = _run(
 		[
 			"gh",
@@ -119,7 +213,7 @@ def open_issues(slug: str) -> list[dict]:
 			"--state",
 			"open",
 			"--limit",
-			"500",
+			str(FREE_SURFACE_ISSUE_CAP),
 			"--json",
 			"number,body",
 		]
@@ -139,18 +233,23 @@ def declared_surface(body: str) -> list[str]:
 	return [line.strip() for line in match.group(1).splitlines() if line.strip()]
 
 
-def expand_tokens(tokens: list[str], root: Path) -> list[str]:
-	"""Expand each glob token against the repo tree.
+def expand_tokens(tokens: list[str], root: Path, held: list[str]) -> list[str]:
+	"""Expand each glob token against the repo tree AND the live-agent held-paths set.
 
-	A literal token (no glob character) passes through unchanged whether or not it exists
-	yet — an issue's declared surface may name a file its own solution would create. A glob
-	that matches nothing yet is kept as its literal pattern for the same reason, rather than
-	silently dropped.
+	A live agent can add a file matching an issue's glob token on its own branch, invisible to
+	``root.glob`` since it never reaches this checkout (dotfiles-dev#433 finding 3) — matching
+	the token against ``held`` too (``fnmatch``) surfaces that collision instead of reading the
+	issue as free. A literal (non-glob) token passes through unchanged whether or not it exists
+	yet — an issue's declared surface may name a file its own solution would create. A token
+	that matches nothing anywhere is kept as its literal pattern for the same reason, rather
+	than silently dropped.
 	"""
 	files: list[str] = []
 	for token in tokens:
 		if any(ch in token for ch in GLOB_CHARS):
-			matches = sorted(str(p.relative_to(root)) for p in root.glob(token))
+			local_matches = {str(p.relative_to(root)) for p in root.glob(token)}
+			held_matches = {p for p in held if fnmatch.fnmatch(p, token)}
+			matches = sorted(local_matches | held_matches)
 			files.extend(matches or [token])
 		else:
 			files.append(token)
@@ -158,15 +257,18 @@ def expand_tokens(tokens: list[str], root: Path) -> list[str]:
 
 
 def run_gate(
-	owner: str, repo: str, requests: list[tuple[int, list[str]]]
+	owner: str, repo: str, requests: list[tuple[int, list[str]]], held: list[str]
 ) -> tuple[bool, set[int], dict[int, str]]:
-	"""Run gate_free_surface once and classify every request against it in one process.
+	"""Run gate_free_surface once (for the claimed-issue answer only) and classify every request
+	against ``held`` — the live-agent-only set, not gate_free_surface's own — in one process.
 
 	Returns ``(gate_ok, unclaimed_issue_numbers, {issue: classify_verdict})``. ``gate_ok`` is
 	False exactly when gate_free_surface itself reported FREE_STATUS=unknown — a recoverable,
 	expected condition (gh rate limit, an unhandled compare error), never a crash.
 	"""
-	stdin = "".join(f"{issue}\t{'|'.join(files)}\n" for issue, files in requests)
+	stdin = "".join(f"{p}\n" for p in held)
+	stdin += "===REQUESTS===\n"
+	stdin += "".join(f"{issue}\t{'|'.join(files)}\n" for issue, files in requests)
 	proc = subprocess.run(  # noqa: S603, S607 - fixed argv, script is a module constant
 		["bash", "-c", _GATE_SCRIPT, "dispatch_plan", owner, repo, str(FREE_SURFACE_SH)],
 		input=stdin,
@@ -190,12 +292,56 @@ def run_gate(
 	return True, unclaimed, verdicts
 
 
+def select_disjoint(candidates: list[dict]) -> tuple[list[dict], list[dict]]:
+	"""Greedily select the largest disjoint set of candidates and name every collision.
+
+	Each issue is classified independently against the held set, so two issues declaring an
+	overlapping free path both read individually free (dotfiles-dev#433 finding 4) — nothing
+	reserves a selected candidate's paths before the next one is considered. This is a
+	deterministic GREEDY pass over candidates sorted by surface size ascending (ties by issue
+	number), not an optimal maximum-cardinality solver — sorting smallest-first means a single
+	large candidate can never displace two smaller ones it only blocks, but a harder packing
+	instance can still lose to the greedy choice. #433 explicitly allows this: "you do NOT need
+	an optimal ... solver."
+	"""
+	ordered = sorted(candidates, key=lambda c: (len(c["surface"]), c["issue"]))
+	reserved: set[str] = set()
+	dispatchable: list[dict] = []
+	excluded: list[dict] = []
+	for cand in ordered:
+		collision = reserved.intersection(cand["surface"])
+		if collision:
+			excluded.append(
+				{
+					"issue": cand["issue"],
+					"reason": "collides with an already-selected candidate's surface: "
+					+ sorted(collision)[0],
+				}
+			)
+		else:
+			dispatchable.append(cand)
+			reserved.update(cand["surface"])
+	dispatchable.sort(key=lambda c: c["issue"])
+	return dispatchable, excluded
+
+
 def build_plan() -> dict:
 	"""Assemble the {"dispatchable": [...], "excluded": [...]} plan for every open issue."""
 	slug = repo_slug()
 	owner, name = slug.split("/", 1)
 	root = repo_root()
 	issues = open_issues(slug)
+	if len(issues) >= FREE_SURFACE_ISSUE_CAP:
+		raise RuntimeError(
+			f"open issue count ({len(issues)}) is at or past the "
+			f"{FREE_SURFACE_ISSUE_CAP}-issue cap this read and gate_free_surface's own "
+			"claimed-issue read share (dotfiles-dev#433 finding 2) — a truncated read can "
+			"misclassify a later issue as claimed; refusing to print a plan rather than a "
+			"possibly wrong one"
+		)
+
+	default = default_branch(slug)
+	live_ok, live_held = live_agent_held_paths(root, default) if default else (False, [])
 
 	surfaces: dict[int, list[str]] = {}
 	expanded: dict[int, list[str]] = {}
@@ -204,16 +350,27 @@ def build_plan() -> dict:
 		if tokens:
 			number = issue["number"]
 			surfaces[number] = tokens
-			expanded[number] = expand_tokens(tokens, root)
+			expanded[number] = expand_tokens(tokens, root, live_held)
 
 	requests = list(expanded.items())
-	gate_ok, unclaimed, verdicts = run_gate(owner, name, requests)
+	if live_ok:
+		gate_ok, unclaimed, verdicts = run_gate(owner, name, requests, live_held)
+	else:
+		gate_ok, unclaimed, verdicts = False, set(), {}
 
-	dispatchable: list[dict] = []
+	candidates: list[dict] = []
 	excluded: list[dict] = []
 	for issue in issues:
 		number = issue["number"]
-		if not gate_ok:
+		if not live_ok:
+			excluded.append(
+				{
+					"issue": number,
+					"reason": "live-agent liveness UNKNOWN (worktree walk failed) — "
+					"verify non-collision by hand",
+				}
+			)
+		elif not gate_ok:
 			excluded.append(
 				{
 					"issue": number,
@@ -235,15 +392,17 @@ def build_plan() -> dict:
 		else:
 			verdict = verdicts.get(number, "")
 			if verdict == "free" or verdict.startswith("would-need-a-held-file"):
-				dispatchable.append({"issue": number, "surface": expanded[number]})
+				candidates.append({"issue": number, "surface": expanded[number]})
 			else:
-				held = verdict.split(":", 1)[1] if ":" in verdict else "unreadable classify verdict"
-				excluded.append(
-					{
-						"issue": number,
-						"reason": f"surface held by an open pull request or live branch: {held}",
-					}
+				held_paths = (
+					verdict.split(":", 1)[1] if ":" in verdict else "unreadable classify verdict"
 				)
+				excluded.append(
+					{"issue": number, "reason": f"surface held by a live agent: {held_paths}"}
+				)
+
+	dispatchable, disjoint_excluded = select_disjoint(candidates)
+	excluded.extend(disjoint_excluded)
 
 	return {"dispatchable": dispatchable, "excluded": excluded}
 

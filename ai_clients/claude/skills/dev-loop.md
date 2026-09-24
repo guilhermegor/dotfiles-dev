@@ -486,8 +486,13 @@ notice-and-report external timer is worth building; one 3-hour sample is not tha
    slot it was meant to fix. The 24h threshold is a default, not a measurement; move it when
    there is one.
 
-4. **At most one ask per invocation of this step — comment or push, whichever came first.** This
-   replaces the old "one ask per round" cap, and the two are not the same rule: step 4b now fires
+4. **At most one ask per invocation of this step ON THE PRIMARY RUNG — comment or push, whichever
+   came first.** ⚠️ **Scoped to the primary rung, never to the whole step (dotfiles-dev#477).** The
+   cap exists to protect CodeRabbit's account-level quota; the qwen/codex fallback rungs in item 5
+   below shell out to local runtimes and share none of that quota, so this cap does not bound them
+   — 19 of 21 open PRs sat unreviewed, oldest ~64h, while the fallback rung this cap was silently
+   throttling stood idle. This replaces the old "one ask per round" cap, and the two are not the
+   same rule: step 4b now fires
    from two cadences (the dedicated tick above, and the full round's own pass through step 4b), and
    the cap applies per firing, not pooled across the hour — a tick asking at `:08` and the round
    asking again at `:23` are two separate, legitimate invocations, not a doubled budget. What the
@@ -547,6 +552,17 @@ notice-and-report external timer is worth building; one 3-hour sample is not tha
    rates differ. The same blast-radius discipline as item 2 applies, plus two more: **one PR per
    invocation** (there is no loop-over-PRs form of `run_fallback_review`), and **never re-review a
    PR whose comments already carry a higher rung's attribution line**.
+
+   🔴 **N subagents each invoking it once IS NOT a loop-over-PRs form (dotfiles-dev#477).** The
+   one-PR-per-invocation rule above stays exactly as written — it forbids `run_fallback_review`
+   looping internally over a PR list. It says nothing about how many *invocations* run at once.
+   Dispatch up to N subagents, each given exactly one starving PR (blast radius, then age — the
+   same ranking item 2 already uses) and told to invoke `run_fallback_review` on that PR alone,
+   then judge every finding per-finding (never bulk-accept), fix, push, and arm auto-merge. Bound N
+   by the real constraints, not by this rule: API budget (#445's latch is a prerequisite — parallel
+   agents re-reading PR state exhausted the GraphQL bucket once already) and file collision between
+   the agents themselves (step 6's live-agent rule, dotfiles-dev#432). A `DIRTY` PR is still never a
+   candidate for any of them.
 
    `DRY_RUN=1` (or a trailing `--dry-run`) resolves and reports the chosen rung+model without
    invoking a runtime or posting anything — and the entitlement probe IS a runtime call, so a dry

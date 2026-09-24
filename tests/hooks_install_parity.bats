@@ -34,8 +34,21 @@ setup() {
 ORPHAN_ALLOWLIST=()
 
 # Every "hooks/<name>.sh" path named in settings.json, deduped.
+# Every hook name INVOKED by a hook command entry under .hooks. Scoped to those command
+# strings on purpose: a bare grep over the whole file answers "is this path mentioned
+# anywhere in settings.json", which is not the question. settings.json holds other keys
+# whose values are commands or command fragments (`permissions.allow`, `statusLine`), so a
+# path named in one of those would read as registered while no hook entry invokes it --
+# defeating the installed=>registered test below with the exact class of wiring gap that
+# test exists to catch. Same reasoning as installed_hooks() stripping comments (#467).
 registered_hooks() {
-    grep -oE 'hooks/[A-Za-z0-9_./-]+\.sh' "$SETTINGS" \
+    jq -r '
+        .hooks
+        | .. | objects
+        | select(.type == "command" and ((.command | type) == "string"))
+        | .command
+    ' "$SETTINGS" \
+        | grep -oE 'hooks/[A-Za-z0-9_./-]+\.sh' \
         | sed 's|^hooks/||' \
         | sort -u
 }
@@ -101,6 +114,53 @@ installed_hooks() {
         echo "Add a settings.json hook entry, or add an ORPHAN_ALLOWLIST entry with a reason."
         return 1
     fi
+}
+
+# --- registration is a hook COMMAND, never a text mention (#467) ------------------
+#
+# Measured 2026-09-24 on the real settings.json: stripping the one hook entry that invokes
+# stale_local_ref_guard.sh and adding `Bash(bash ~/.claude/hooks/stale_local_ref_guard.sh)`
+# to permissions.allow left the old extractor reporting it as REGISTERED, so the
+# installed=>registered test above passed for a hook nothing invokes.
+
+@test "a hook named only outside .hooks is not counted as registered" {
+	local decoy="$BATS_TEST_TMPDIR/decoy-settings.json"
+	python3 - "$SETTINGS" "$decoy" <<'PYEOF'
+import json, sys
+
+src, dest = sys.argv[1], sys.argv[2]
+TARGET = "stale_local_ref_guard"
+
+
+def drop_entries(node):
+    """Remove every hook command entry invoking TARGET, at any depth."""
+    if isinstance(node, list):
+        return [drop_entries(item) for item in node
+                if not (isinstance(item, dict)
+                        and TARGET in str(item.get("command", "")))]
+    if isinstance(node, dict):
+        return {key: drop_entries(value) for key, value in node.items()}
+    return node
+
+
+data = json.load(open(src))
+data["hooks"] = drop_entries(data["hooks"])
+data.setdefault("permissions", {}).setdefault("allow", []).append(
+    "Bash(bash ~/.claude/hooks/stale_local_ref_guard.sh)")
+json.dump(data, open(dest, "w"), indent=2)
+PYEOF
+
+	# The fixture must be the intended shape: nothing invokes it, the name is still in the file.
+	run jq -r '.hooks | .. | objects | select(.type == "command") | .command' "$decoy"
+	[ "$status" -eq 0 ]
+	[[ "$output" != *stale_local_ref_guard* ]]
+	run grep -c stale_local_ref_guard "$decoy"
+	[ "$output" -ge 1 ]
+
+	SETTINGS="$decoy"
+	run registered_hooks
+	[ "$status" -eq 0 ]
+	[[ "$output" != *stale_local_ref_guard* ]]
 }
 
 # Every lib/ file a hook SOURCES must land in the installed tree. The registered=>installed

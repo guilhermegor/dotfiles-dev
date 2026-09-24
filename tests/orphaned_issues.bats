@@ -224,3 +224,202 @@ JSON
     [ "$ORPHAN_STATUS" = "unknown" ]
     [ -z "$ORPHAN_REPORT" ]
 }
+
+# --- _orphan_surface_lines / _orphan_surface_present_count: pure helpers (dotfiles-dev#419) ------
+
+@test "_orphan_surface_lines extracts a fenced surface block, dropping the fences" {
+    local body
+    body="$(printf 'intro text\n\`\`\`surface\nai_clients/claude/hooks/lib/*.sh\ntests/*.bats\n\`\`\`\n\nmore text\n')"
+    run _orphan_surface_lines "$body"
+    [ "$status" -eq 0 ]
+    [[ "$output" == $'ai_clients/claude/hooks/lib/*.sh\ntests/*.bats' ]]
+}
+
+@test "_orphan_surface_lines on a body with no surface block is empty" {
+    run _orphan_surface_lines "just prose, no fenced block"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "_orphan_surface_present_count: every line matches, present equals total" {
+    local tree
+    tree="$(printf 'a/one.sh\nb/two.sh\nc/three.sh\n')"
+    run _orphan_surface_present_count "$tree" "a/one.sh" "b/two.sh"
+    [ "$output" = "2 2" ]
+}
+
+@test "_orphan_surface_present_count: a glob line matches a tracked path" {
+    local tree
+    tree="$(printf 'templates/python-common/src/chassis/db_schema/infrastructure/user_handler.py\n')"
+    run _orphan_surface_present_count "$tree" 'templates/*/src/chassis/db_schema/infrastructure/*_handler.py'
+    [ "$output" = "1 1" ]
+}
+
+@test "_orphan_surface_present_count: a missing path is not counted present" {
+    local tree
+    tree="$(printf 'a/one.sh\n')"
+    run _orphan_surface_present_count "$tree" "a/one.sh" "b/never-shipped.sh"
+    [ "$output" = "1 2" ]
+}
+
+# --- gate_orphaned_surface: the zero-PR-mention direction (dotfiles-dev#419) ---------------------
+#
+# gate_orphaned_surface composes gate_free_surface (never re-derived) with a content probe, so
+# every fixture below stubs BOTH `gh` (free_surface's own calls, plus `gh issue view` for the
+# body) and `git` (symbolic-ref + ls-tree against the resolved default branch).
+
+@test "gate_orphaned_surface: a fully-present declared surface with no claiming PR is reported" {
+    git() {
+        case "$*" in
+            "symbolic-ref --quiet --short refs/remotes/origin/HEAD") echo "origin/master" ;;
+            "ls-tree -r --name-only origin/master") printf 'seams/otel_logging.py\n' ;;
+            *) command git "$@" ;;
+        esac
+    }
+    gh() {
+        case "$*" in
+            "api repos/o/r --jq .default_branch") echo master ;;
+            "pr list --repo o/r --state open --json number,headRefName --limit 200") echo '[]' ;;
+            "api repos/o/r/branches --paginate --jq .[].name") echo master ;;
+            "api graphql -f query="*) echo '{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}' ;;
+            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number") echo 438 ;;
+            "issue view 438 --repo o/r --json body --jq .body")
+                printf 'shipped both seams\n\`\`\`surface\nseams/otel_logging.py\n\`\`\`\n' ;;
+            *) return 1 ;;
+        esac
+    }
+
+    gate_orphaned_surface o r
+    local rc=$?
+
+    [ "$rc" -eq 0 ]
+    [ "$ORPHAN_SURFACE_STATUS" = "ok" ]
+    [[ "$ORPHAN_SURFACE_REPORT" == "#438 may already be shipped -- declared surface fully present on origin/master, no PR claims it -- verify before closing" ]]
+}
+
+@test "gate_orphaned_surface: a partially-present surface is reported as partial, not full" {
+    git() {
+        case "$*" in
+            "symbolic-ref --quiet --short refs/remotes/origin/HEAD") echo "origin/master" ;;
+            "ls-tree -r --name-only origin/master") printf 'seams/one.py\n' ;;
+            *) command git "$@" ;;
+        esac
+    }
+    gh() {
+        case "$*" in
+            "api repos/o/r --jq .default_branch") echo master ;;
+            "pr list --repo o/r --state open --json number,headRefName --limit 200") echo '[]' ;;
+            "api repos/o/r/branches --paginate --jq .[].name") echo master ;;
+            "api graphql -f query="*) echo '{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}' ;;
+            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number") echo 355 ;;
+            "issue view 355 --repo o/r --json body --jq .body")
+                printf '\`\`\`surface\nseams/one.py\nseams/two.py\n\`\`\`\n' ;;
+            *) return 1 ;;
+        esac
+    }
+
+    gate_orphaned_surface o r
+    local rc=$?
+
+    [ "$rc" -eq 0 ]
+    [ "$ORPHAN_SURFACE_STATUS" = "ok" ]
+    [[ "$ORPHAN_SURFACE_REPORT" == "#355 partially shipped (1 of 2 surface paths present on origin/master) -- verify before closing" ]]
+}
+
+@test "gate_orphaned_surface: an issue with no declared surface block is skipped, not reported" {
+    git() {
+        case "$*" in
+            "symbolic-ref --quiet --short refs/remotes/origin/HEAD") echo "origin/master" ;;
+            "ls-tree -r --name-only origin/master") printf 'seams/one.py\n' ;;
+            *) command git "$@" ;;
+        esac
+    }
+    gh() {
+        case "$*" in
+            "api repos/o/r --jq .default_branch") echo master ;;
+            "pr list --repo o/r --state open --json number,headRefName --limit 200") echo '[]' ;;
+            "api repos/o/r/branches --paginate --jq .[].name") echo master ;;
+            "api graphql -f query="*) echo '{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}' ;;
+            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number") echo 999 ;;
+            "issue view 999 --repo o/r --json body --jq .body") echo "no surface block here" ;;
+            *) return 1 ;;
+        esac
+    }
+
+    gate_orphaned_surface o r
+    local rc=$?
+
+    [ "$rc" -eq 0 ]
+    [ "$ORPHAN_SURFACE_STATUS" = "ok" ]
+    [ -z "$ORPHAN_SURFACE_REPORT" ]
+}
+
+@test "gate_orphaned_surface: an issue already claimed by a PR is excluded from the candidate pool" {
+    # Reuses gate_free_surface's own FREE_UNCLAIMED_ISSUES -- an issue closingIssuesReferences
+    # already links to a PR never reaches the surface probe at all.
+    git() {
+        case "$*" in
+            "symbolic-ref --quiet --short refs/remotes/origin/HEAD") echo "origin/master" ;;
+            "ls-tree -r --name-only origin/master") printf 'seams/one.py\n' ;;
+            *) command git "$@" ;;
+        esac
+    }
+    gh() {
+        case "$*" in
+            "api repos/o/r --jq .default_branch") echo master ;;
+            "pr list --repo o/r --state open --json number,headRefName --limit 200") echo '[]' ;;
+            "api repos/o/r/branches --paginate --jq .[].name") echo master ;;
+            "api graphql -f query="*)
+                echo '{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"closingIssuesReferences":{"nodes":[{"number":355}]}}]}}}' ;;
+            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number")
+                printf '355\n' ;;
+            "issue view "*) echo "must not be called for a claimed issue" ; return 1 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    gate_orphaned_surface o r
+    local rc=$?
+
+    [ "$rc" -eq 0 ]
+    [ "$ORPHAN_SURFACE_STATUS" = "ok" ]
+    [ -z "$ORPHAN_SURFACE_REPORT" ]
+}
+
+@test "gate_orphaned_surface: gate_free_surface failing fails the whole gate closed" {
+    git() { command git "$@"; }
+    gh() { return 1; }
+
+    local rc=0
+    gate_orphaned_surface o r || rc=$?
+
+    [ "$rc" -eq 1 ]
+    [ "$ORPHAN_SURFACE_STATUS" = "unknown" ]
+    [ -z "$ORPHAN_SURFACE_REPORT" ]
+}
+
+@test "gate_orphaned_surface: an unresolvable default branch fails closed" {
+    git() {
+        case "$*" in
+            "symbolic-ref --quiet --short refs/remotes/origin/HEAD") return 1 ;;
+            *) command git "$@" ;;
+        esac
+    }
+    gh() {
+        case "$*" in
+            "api repos/o/r --jq .default_branch") echo master ;;
+            "pr list --repo o/r --state open --json number,headRefName --limit 200") echo '[]' ;;
+            "api repos/o/r/branches --paginate --jq .[].name") echo master ;;
+            "api graphql -f query="*) echo '{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}' ;;
+            "issue list --repo o/r --state open --limit 500 --json number --jq .[].number") echo 438 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    local rc=0
+    gate_orphaned_surface o r || rc=$?
+
+    [ "$rc" -eq 1 ]
+    [ "$ORPHAN_SURFACE_STATUS" = "unknown" ]
+    [ -z "$ORPHAN_SURFACE_REPORT" ]
+}

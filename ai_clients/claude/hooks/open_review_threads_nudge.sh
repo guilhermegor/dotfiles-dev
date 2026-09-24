@@ -90,7 +90,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/review_thread_gate.sh"
 # A SECOND, narrower GraphQL query than the gate's own -- adds `isRequired` (GitHub's
 # RequirableByPullRequest interface) to both node types so this file can split a genuinely
 # running CheckRun from an unbounded-PENDING StatusContext without touching the shared gate
-# (dotfiles-dev#491 -- review_thread_gate.sh is held by sibling work).
+# (dotfiles-dev#491 -- review_thread_gate.sh is held by sibling work). Also requests `totalCount`
+# and the same reviewer-identity fields the gate's own `_gate_running_filter` uses
+# (`checkSuite.app.slug` / `creator.login`), caught by CodeRabbit review on PR #498: a page that
+# cannot hold every context is indistinguishable from one that legitimately has nothing left
+# running, and skipping the gate's roster scoping here would let an unrelated CI check (or an
+# unrelated bot's check) override the gate's own reviewer-scoped verdict.
 _status_check_query() {
 	cat <<'GRAPHQL'
 query($owner:String!, $repo:String!, $number:Int!) {
@@ -101,10 +106,21 @@ query($owner:String!, $repo:String!, $number:Int!) {
           commit {
             statusCheckRollup {
               contexts(first:100) {
+                totalCount
                 nodes {
                   __typename
-                  ... on CheckRun { name status isRequired(pullRequestNumber:$number) }
-                  ... on StatusContext { context state isRequired(pullRequestNumber:$number) }
+                  ... on CheckRun {
+                    name
+                    status
+                    isRequired(pullRequestNumber:$number)
+                    checkSuite { app { slug } }
+                  }
+                  ... on StatusContext {
+                    context
+                    state
+                    isRequired(pullRequestNumber:$number)
+                    creator { login }
+                  }
                 }
               }
             }
@@ -118,35 +134,67 @@ GRAPHQL
 }
 
 # _classify_checks OWNER REPO NUMBER
-# Sets RUNNING_DETAIL (a non-terminal CheckRun, or a still-non-terminal REQUIRED StatusContext --
-# either is worth blocking on) and PENDING_DETAIL (a non-required StatusContext sitting at
-# PENDING/EXPECTED -- nothing promises it ever resolves). Leaves both empty on any read error:
-# this call is advisory on top of the gate's own "running" verdict, never the sole source of
-# truth, so a failure here falls back to the gate's original wording (_reclassify_running below)
-# instead of inventing a new failure mode.
+# Sets RUNNING_DETAIL (a non-terminal, roster-scoped CheckRun, or a still-non-terminal REQUIRED
+# roster-scoped StatusContext -- either is worth blocking on) and PENDING_DETAIL (a non-required,
+# roster-scoped StatusContext sitting at PENDING/EXPECTED -- nothing promises it ever resolves).
+# Reuses `_gate_roster_logins` (from the sourced review_thread_gate.sh) so the roster read and its
+# `__NO_ROSTER__`/`github-actions` handling can never drift from the gate's own scoping.
+# Leaves both empty when the page is truncated (totalCount exceeds the returned nodes -- a check
+# beyond this page could be the real running one) or on any other read error: this call is
+# advisory on top of the gate's own "running" verdict, never the sole source of truth, so a
+# failure here falls back to the gate's original wording (_reclassify_running below) instead of
+# inventing a new failure mode.
 _classify_checks() {
-	local owner="$1" repo="$2" number="$3" json
+	local owner="$1" repo="$2" number="$3" json roster total have
 	RUNNING_DETAIL=""
 	PENDING_DETAIL=""
 	json="$(gh api graphql -f query="$(_status_check_query)" \
 		-F owner="$owner" -F repo="$repo" -F number="$number" 2>/dev/null)" || return 0
 	printf '%s' "$json" | jq -e '.errors' >/dev/null 2>&1 && return 0
 
-	RUNNING_DETAIL="$(printf '%s' "$json" | jq -r '
-		[.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[]?
-		 | if .__typename == "CheckRun" and .status != "COMPLETED" then .name
-		   elif .__typename == "StatusContext"
-		        and (.state == "PENDING" or .state == "EXPECTED")
-		        and .isRequired then .context
+	total="$(printf '%s' "$json" | jq -r \
+		'.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.totalCount // 0' \
+		2>/dev/null)"
+	have="$(printf '%s' "$json" | jq -r \
+		'.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes | length' \
+		2>/dev/null)"
+	[[ "$total" =~ ^[0-9]+$ ]] || total=0
+	[[ "$have" =~ ^[0-9]+$ ]] || have=0
+	[ "$total" -gt "$have" ] && return 0
+
+	roster="$(_gate_roster_logins "$ROSTER_FILE")"
+
+	# ⚠️ `. as $n` MUST come before any `$bots | index(...)` call: `index()` evaluates its
+	# argument with `.` rebound to $bots (its own input), not to the node -- the exact fault
+	# review_thread_gate.sh's own `_gate_running_filter` comment warns about ("Cannot index array
+	# with string ..."). Binding the node to $n first, then reading $n.checkSuite/$n.creator
+	# inside index()'s argument, is what keeps the lookup pointed at the node.
+	RUNNING_DETAIL="$(printf '%s' "$json" | jq -r --arg roster "$roster" '
+		($roster | split("\n") | map(select(length > 0)) | map(ascii_downcase)
+		 | map(select(. != "github-actions"))) as $bots
+		| [.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[]?
+		 | . as $n
+		 | if $n.__typename == "CheckRun" and $n.status != "COMPLETED"
+		        and (($bots | index(($n.checkSuite.app.slug // "") | ascii_downcase)) != null)
+		   then $n.name
+		   elif $n.__typename == "StatusContext"
+		        and ($n.state == "PENDING" or $n.state == "EXPECTED")
+		        and $n.isRequired
+		        and (($bots | index(($n.creator.login // "") | ascii_downcase)) != null)
+		   then $n.context
 		   else empty end]
 		| join(", ")' 2>/dev/null)"
 
-	PENDING_DETAIL="$(printf '%s' "$json" | jq -r '
-		[.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[]?
-		 | select(.__typename == "StatusContext"
-		          and (.state == "PENDING" or .state == "EXPECTED")
-		          and (.isRequired | not))
-		 | .context]
+	PENDING_DETAIL="$(printf '%s' "$json" | jq -r --arg roster "$roster" '
+		($roster | split("\n") | map(select(length > 0)) | map(ascii_downcase)
+		 | map(select(. != "github-actions"))) as $bots
+		| [.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[]?
+		 | . as $n
+		 | select($n.__typename == "StatusContext"
+		          and ($n.state == "PENDING" or $n.state == "EXPECTED")
+		          and ($n.isRequired | not)
+		          and (($bots | index(($n.creator.login // "") | ascii_downcase)) != null))
+		 | $n.context]
 		| join(", ")' 2>/dev/null)"
 }
 

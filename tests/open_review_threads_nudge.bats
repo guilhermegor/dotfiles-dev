@@ -153,22 +153,50 @@ YAML
 }
 
 # checks_fixture NUM SHAPE
-# The SECOND query's fixture (dotfiles-dev#491's own `isRequired`-bearing read).
+# The SECOND query's fixture (dotfiles-dev#491's own `isRequired`-bearing read). Every node
+# carries the same roster-scoping fields the gate itself uses (`creator.login` /
+# `checkSuite.app.slug` = "coderabbitai", matching `roster_fixture`'s "coderabbitai[bot]") and
+# `totalCount` equal to the single returned node -- CodeRabbit review on PR #498 flagged both the
+# missing roster scope and the missing truncation guard; `truncated-page` exercises that guard.
 checks_fixture() {
     local shape="$2"
     case "$shape" in
     required-pending)
         jq -nc '{data:{repository:{pullRequest:{commits:{nodes:[{commit:{statusCheckRollup:
-            {contexts:{nodes:[{__typename:"StatusContext",context:"CodeRabbit",
-                                state:"PENDING",isRequired:true}]}}}}]}}}}}' ;;
+            {contexts:{totalCount:1,nodes:[{__typename:"StatusContext",context:"CodeRabbit",
+                                state:"PENDING",isRequired:true,
+                                creator:{login:"coderabbitai"}}]}}}}]}}}}}' ;;
     not-required-pending)
         jq -nc '{data:{repository:{pullRequest:{commits:{nodes:[{commit:{statusCheckRollup:
-            {contexts:{nodes:[{__typename:"StatusContext",context:"CodeRabbit",
-                                state:"PENDING",isRequired:false}]}}}}]}}}}}' ;;
+            {contexts:{totalCount:1,nodes:[{__typename:"StatusContext",context:"CodeRabbit",
+                                state:"PENDING",isRequired:false,
+                                creator:{login:"coderabbitai"}}]}}}}]}}}}}' ;;
+    not-required-pending-unlisted)
+        jq -nc '{data:{repository:{pullRequest:{commits:{nodes:[{commit:{statusCheckRollup:
+            {contexts:{totalCount:1,nodes:[{__typename:"StatusContext",context:"unrelated-ci",
+                                state:"PENDING",isRequired:false,
+                                creator:{login:"some-other-bot"}}]}}}}]}}}}}' ;;
     checkrun-running)
         jq -nc '{data:{repository:{pullRequest:{commits:{nodes:[{commit:{statusCheckRollup:
-            {contexts:{nodes:[{__typename:"CheckRun",name:"build",
-                                status:"IN_PROGRESS",isRequired:true}]}}}}]}}}}}' ;;
+            {contexts:{totalCount:1,nodes:[{__typename:"CheckRun",name:"build",
+                                status:"IN_PROGRESS",isRequired:true,
+                                checkSuite:{app:{slug:"coderabbitai"}}}]}}}}]}}}}}' ;;
+    checkrun-running-unlisted)
+        # Two contexts: an unrelated github-actions job still running (must be ignored -- it is
+        # not a roster reviewer) alongside the real, non-required CodeRabbit status (must still
+        # drive the downgrade). Proves the unrelated CheckRun cannot override the right answer.
+        jq -nc '{data:{repository:{pullRequest:{commits:{nodes:[{commit:{statusCheckRollup:
+            {contexts:{totalCount:2,nodes:[
+                {__typename:"CheckRun",name:"lint",status:"IN_PROGRESS",isRequired:false,
+                 checkSuite:{app:{slug:"github-actions"}}},
+                {__typename:"StatusContext",context:"CodeRabbit",state:"PENDING",
+                 isRequired:false,creator:{login:"coderabbitai"}}
+            ]}}}}]}}}}}' ;;
+    truncated-page)
+        jq -nc '{data:{repository:{pullRequest:{commits:{nodes:[{commit:{statusCheckRollup:
+            {contexts:{totalCount:2,nodes:[{__typename:"StatusContext",context:"CodeRabbit",
+                                state:"PENDING",isRequired:false,
+                                creator:{login:"coderabbitai"}}]}}}}]}}}}}' ;;
     esac >"$FIXTURE_DIR/$1.checks.json"
 }
 
@@ -206,6 +234,45 @@ checks_fixture() {
     [ "$status" -eq 2 ]
     [[ "$output" == *"still running"* ]]
     [[ "$output" == *"CodeRabbit"* ]]
+}
+
+@test "an unrelated non-roster CheckRun does not override the gate's downgrade to pending" {
+    # PR #498 review (CodeRabbit): _classify_checks used to count ANY non-completed CheckRun,
+    # so an unrelated CI job (github-actions, not a roster reviewer) still running would wrongly
+    # override the gate's own "this is just a non-required CodeRabbit status" downgrade and keep
+    # blocking on a check that has nothing to do with review completeness.
+    roster_fixture
+    export PR_VIEW_NUMBER=62
+    running_fixture 62 PENDING
+    checks_fixture 62 checkrun-running-unlisted
+    run bash -c "payload | '$HOOK'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"pending (no completion expected)"* ]]
+}
+
+@test "an unrelated non-roster StatusContext is not treated as the pending one either" {
+    roster_fixture
+    export PR_VIEW_NUMBER=63
+    running_fixture 63 PENDING
+    checks_fixture 63 not-required-pending-unlisted
+    run bash -c "payload | '$HOOK'"
+    # Neither RUNNING_DETAIL nor PENDING_DETAIL matches (the only context on the page is not a
+    # roster reviewer) -> _reclassify_running leaves the gate's original "still running" verdict.
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"still running"* ]]
+}
+
+@test "a truncated context page keeps the gate's original running verdict, never downgrades" {
+    # PR #498 review (CodeRabbit): totalCount > returned nodes means a real running check could
+    # be sitting on a page this query never saw -- downgrading to pending_indefinite on an
+    # incomplete read would silently drop a genuine wait.
+    roster_fixture
+    export PR_VIEW_NUMBER=64
+    running_fixture 64 PENDING
+    checks_fixture 64 truncated-page
+    run bash -c "payload | '$HOOK'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"still running"* ]]
 }
 
 @test "a failed re-classify query keeps the original still-running verdict (fail-safe)" {

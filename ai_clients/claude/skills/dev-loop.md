@@ -28,8 +28,13 @@ Invoking this skill should be enough to make the loop run; remembering to arm th
 is the gap this step closes. The owner asking *"eu precisaria ter pedido ou já tem algo agendado
 que rode?"* is the measurement that it didn't.
 
-1. **`CronList` first.** Invoking the skill twice in one session must not produce six jobs
-   firing in duplicate against the same PRs — check what already exists before creating anything.
+1. **`CronList` first, and diff it against exactly the three jobs below.** Invoking the skill
+   twice in one session must not produce six jobs firing in duplicate against the same PRs — check
+   what already exists before creating anything. ⚠️ **A resumed session must run this same diff,
+   not just a fresh one.** A session-limit kill silently disarms every `CronCreate` job it owned,
+   and the session that resumes is not new — it is the same session picking back up, which reads
+   as "already armed" unless this step explicitly re-checks. Report the gap in one line: `armed:
+   :23 round, :53 sweep — MISSING: 8,28,48 tick` is the shape, not silence (dotfiles-dev#421).
 2. **`CronCreate` whatever is missing:**
    - the round (all seven steps below) at `:23`;
    - a thread sweep at `:53`;
@@ -343,6 +348,23 @@ stated requirement for every cron this skill arms, not a new gap this tick intro
 measured running **6 times in 21 hours** — GitHub throttles scheduled workflows on low-activity
 repos, hardest where the mechanism is most needed. `schedule:` is the one trigger GitHub is free to
 skip; a session-owned `CronCreate` poll is not.
+
+### The tick cannot fire while the session is blocked — measured, not assumed (dotfiles-dev#421)
+
+**3 hours, one sample.** Measured on blueprintx, 2026-09-20: the session hit its session limit at
+~12:05 UTC and resumed at ~15:04 UTC. The last rate-limit notice before the gap stated a 7-minute
+wait, so the window reopened at ~11:55Z and sat open, unspent, for the whole outage — the tick fired
+zero times because the session that owns it was not running at all, not merely idle. Worse: on
+resume, `CronList` showed only the `8,28,48` tick survived; the `:23` round and `:53` sweep were
+gone, and nothing said so until the operator asked. Step 0 above now runs that comparison itself.
+
+**Decision, not yet a poller.** The obvious fixes are disqualified above (GitHub Actions
+`schedule:` measured unreliable; a dedicated `CronCreate` "is the session alive?" poll spends the
+very session quota already under limit). A poller with no session cannot post a review ask either
+way — the honest ceiling for anything outside the session is *notice and report*, never *spend* —
+so this issue closes on **instrumentation** (step 0's resume diff) rather than a new mechanism. A
+week of real gap-vs-expired-notice data is the prerequisite for deciding whether even a
+notice-and-report external timer is worth building; one 3-hour sample is not that.
 
 1. **Classify the slot, three states plus an escape hatch — never a binary busy/free.** Pipe the
    comment page into `hooks/lib/slot_classify.py`, which prints one token (`FREE|<reason>`,

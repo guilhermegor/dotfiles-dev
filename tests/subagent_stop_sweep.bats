@@ -339,6 +339,68 @@ STUB
     [[ "$output" != *"no open or merged PR touches these files"* ]]
 }
 
+# --- gh_budget_gate: latch on a real 403, no further gh call while fresh (dotfiles-dev#445) ------
+
+stub_gh_budget_probe() {
+    # $1 = "403" to make the `repos/o/r --jq .id` probe return the exact measured 2026-09-20 403
+    # body on stderr; anything else = a healthy probe. Every invocation touches $BIN/CALLED so a
+    # test can assert the stub was never reached at all (the whole point of the latch).
+    cat > "$BIN/gh" <<STUB
+#!/bin/bash
+touch "$BIN/CALLED"
+case "\$*" in
+"api repos/o/r --jq .id")
+    if [ "$1" = "403" ]; then
+        echo "API rate limit exceeded for user ID 55053188" >&2
+        exit 1
+    fi
+    echo 12345
+    ;;
+*) exit 1 ;;
+esac
+STUB
+    chmod +x "$BIN/gh"
+}
+
+@test "gh_budget_gate proceeds and never latches on a healthy probe" {
+    export GH_BUDGET_LATCH_FILE="$REPO/latch"
+    stub_gh_budget_probe ok
+    run gh_budget_gate "o/r"
+    [ "$status" -eq 0 ]
+    [ ! -f "$GH_BUDGET_LATCH_FILE" ]
+}
+
+@test "a real 403 on the probe writes the latch and gh_budget_gate returns non-zero" {
+    export GH_BUDGET_LATCH_FILE="$REPO/latch"
+    stub_gh_budget_probe 403
+    run gh_budget_gate "o/r"
+    [ "$status" -eq 1 ]
+    [ -f "$GH_BUDGET_LATCH_FILE" ]
+}
+
+@test "once latched, gh_budget_gate returns non-zero without calling gh at all" {
+    export GH_BUDGET_LATCH_FILE="$REPO/latch"
+    stub_gh_budget_probe 403
+    gh_budget_gate "o/r" || true   # first call writes the latch
+    rm -f "$BIN/CALLED"
+
+    run gh_budget_gate "o/r"
+    [ "$status" -eq 1 ]
+    [ ! -f "$BIN/CALLED" ]
+}
+
+@test "a non-budget gh failure on the probe does not latch" {
+    export GH_BUDGET_LATCH_FILE="$REPO/latch"
+    cat > "$BIN/gh" <<'STUB'
+#!/bin/bash
+exit 1
+STUB
+    chmod +x "$BIN/gh"
+    run gh_budget_gate "o/r"
+    [ "$status" -eq 0 ]
+    [ ! -f "$GH_BUDGET_LATCH_FILE" ]
+}
+
 @test "a gh API failure listing one PR's files reports UNKNOWN, never a clean overlap" {
     export ORPHAN_PR_NUMS="9"
     export ORPHAN_FAIL_FILES=1

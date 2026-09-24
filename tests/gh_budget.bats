@@ -7,6 +7,12 @@
 
 setup() {
 	source "$BATS_TEST_DIRNAME/../ai_clients/claude/hooks/lib/gh_budget.sh"
+	LATCH_DIR="$(mktemp -d)"
+	export GH_BUDGET_LATCH_FILE="$LATCH_DIR/latch"
+}
+
+teardown() {
+	rm -rf "$LATCH_DIR"
 }
 
 @test "the exact measured 2026-09-20 18:20:02Z GitHub 403 classifies as github-api-limit" {
@@ -65,4 +71,42 @@ setup() {
 	gh_budget_classify 'something unrelated entirely'
 	run gh_budget_is_terminal
 	[ "$status" -ne 0 ]
+}
+
+# --- 403 latch (dotfiles-dev#445) -----------------------------------------------------------------
+
+@test "gh_budget_latch_path honours GH_BUDGET_LATCH_FILE" {
+	[ "$(gh_budget_latch_path)" = "$GH_BUDGET_LATCH_FILE" ]
+}
+
+@test "no marker file means the latch is not active" {
+	run gh_budget_latch_active
+	[ "$status" -ne 0 ]
+}
+
+@test "a freshly written latch is active" {
+	gh_budget_latch_write 300
+	run gh_budget_latch_active
+	[ "$status" -eq 0 ]
+}
+
+@test "a latch written with a negative TTL is already expired" {
+	gh_budget_latch_write -5
+	run gh_budget_latch_active
+	[ "$status" -ne 0 ]
+}
+
+@test "an unparsable marker file is treated as not active" {
+	echo "not-a-number" > "$GH_BUDGET_LATCH_FILE"
+	run gh_budget_latch_active
+	[ "$status" -ne 0 ]
+}
+
+@test "gh_budget_latch_write defaults to a 300s TTL" {
+	gh_budget_latch_write
+	now="$(date +%s)"
+	until="$(cat "$GH_BUDGET_LATCH_FILE")"
+	diff=$((until - now))
+	[ "$diff" -gt 290 ]
+	[ "$diff" -le 300 ]
 }

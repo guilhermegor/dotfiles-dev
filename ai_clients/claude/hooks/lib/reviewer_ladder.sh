@@ -315,6 +315,28 @@ _pr_head_sha() {
 	gh pr view "$pr_number" --repo "$owner/$repo" --json headRefOid --jq '.headRefOid' 2>/dev/null
 }
 
+# _pr_remote_url OWNER REPO
+# The repository `_checkout_pr_worktree` fetches the PR's head FROM — always
+# the forge's own owner/repo, never the caller's local `origin` remote
+# (issue #487 review, CodeRabbit finding). `origin` can be a fork (no
+# `refs/pull/*` at all — the codex rung would always refuse) or point at an
+# unrelated repository (fetches a different PR's head entirely, though
+# assert_worktree_matches_pr still catches that and fails closed). Override
+# via REVIEWER_LADDER_REMOTE_URL_CMD for tests — real tests must never fetch
+# over the network.
+# ⚠️ For a PRIVATE repo this plain https URL needs a credential helper on
+# PATH (e.g. `gh auth setup-git`, which this account's `gh` calls elsewhere
+# already assume) — unverified beyond that; this lib does not itself manage
+# credentials.
+_pr_remote_url() {
+	local owner="$1" repo="$2"
+	if [ -n "${REVIEWER_LADDER_REMOTE_URL_CMD:-}" ]; then
+		"$REVIEWER_LADDER_REMOTE_URL_CMD" "$owner" "$repo"
+		return $?
+	fi
+	printf 'https://github.com/%s/%s.git\n' "$owner" "$repo"
+}
+
 # assert_worktree_matches_pr DIR OWNER REPO PR_NUMBER
 # The severity of issue #487 in one check: a checkout is never trusted to be
 # the PR's head just because something put it there — its HEAD must equal
@@ -345,9 +367,10 @@ _checkout_pr_worktree() {
 		[ -n "$PR_WORKTREE_DIR" ]
 		return $?
 	fi
-	local dir
+	local dir url
 	dir="$(mktemp -d "${TMPDIR:-/tmp}/reviewer-ladder-pr${pr_number}-XXXXXX")" || return 1
-	if ! git fetch --quiet origin "pull/$pr_number/head" 2>/dev/null ||
+	url="$(_pr_remote_url "$owner" "$repo")"
+	if ! git fetch --quiet "$url" "pull/$pr_number/head" 2>/dev/null ||
 		! git worktree add --detach --quiet "$dir" FETCH_HEAD 2>/dev/null; then
 		rmdir "$dir" 2>/dev/null
 		return 1
@@ -408,9 +431,17 @@ _run_runtime_review() {
 			return 1
 		fi
 		# The comment must read as repo paths, never as this run's throwaway
-		# worktree location.
+		# worktree location — strip both the LOGICAL path handed to us and its
+		# CANONICAL (symlink-resolved) form, since they can differ (e.g. macOS
+		# `$TMPDIR` vs. its `/private/...` realpath) and either one can appear
+		# verbatim in codex's own output.
 		if [ "$workdir" != "." ]; then
-			output="${output//$workdir\//}"
+			local real_workdir
+			real_workdir="$(cd "$workdir" && pwd -P)" 2>/dev/null
+			output="${output//"$workdir"\//}"
+			if [ -n "$real_workdir" ] && [ "$real_workdir" != "$workdir" ]; then
+				output="${output//"$real_workdir"\//}"
+			fi
 		fi
 		printf '%s\n' "$output"
 		;;

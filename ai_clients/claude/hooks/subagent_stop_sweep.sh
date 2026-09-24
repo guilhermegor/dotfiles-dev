@@ -47,6 +47,8 @@ source "$HOOK_DIR/lib/review_thread_gate.sh"
 source "$HOOK_DIR/lib/free_surface.sh"
 # shellcheck source=lib/kanban_reconcile.sh
 source "$HOOK_DIR/lib/kanban_reconcile.sh"
+# shellcheck source=lib/gh_budget.sh
+source "$HOOK_DIR/lib/gh_budget.sh"
 
 emit() {
 	# $1 = plain-text report body. Wraps it as SubagentStop additionalContext.
@@ -322,6 +324,40 @@ free_dispatch_surface() {
 	[ "${#free_list[@]}" -gt 0 ] && printf '%s\n' "${free_list[*]}"
 }
 
+# gh_budget_gate REPO
+# ONE cheap gh call standing in for "can the sweep reach the API at all right now" — never a
+# re-run of the whole fan-out just to find out. Returns 0 to proceed. Returns 1 with
+# BUDGET_GATE_REASON set (shellcheck disable=SC2034 — read by main() after this returns) when
+# either an earlier 403 latch is still fresh, or THIS probe just came back 403/429 and wrote a
+# fresh latch itself. dotfiles-dev#445: 6 agents x a sweep per SubagentStop x ~6 gh calls each
+# burned the whole hourly budget on sweeps that read UNKNOWN either way — one cheap call here
+# replaces finding that out the expensive way every time.
+# A non-budget failure (bad repo, network blip) still returns 0: this gate only ever stops the
+# sweep for a BUDGET reason, it is not a general health check.
+gh_budget_gate() {
+	local repo="$1" err rc
+	BUDGET_GATE_REASON=""
+	if gh_budget_latch_active; then
+		BUDGET_GATE_REASON="403 latch active — GitHub API budget still exhausted"
+		return 1
+	fi
+	err="$(mktemp)"
+	gh api "repos/$repo" --jq '.id' >/dev/null 2>"$err"
+	rc=$?
+	if [ "$rc" -ne 0 ]; then
+		gh_budget_classify "$(cat "$err" 2>/dev/null)"
+		rm -f "$err"
+		if gh_budget_is_terminal; then
+			gh_budget_latch_write
+			BUDGET_GATE_REASON="GitHub API budget just returned 403/429 — latched until reset"
+			return 1
+		fi
+		return 0
+	fi
+	rm -f "$err"
+	return 0
+}
+
 main() {
 	local payload cwd repo owner name db roster_file report
 	if [ ! -t 0 ]; then payload="$(cat)"; else payload=""; fi
@@ -339,6 +375,13 @@ dispatch: free surface empty"
 	roster_file="$cwd/.review-bots.yaml"
 	db="$(default_branch "$cwd")"
 	$GIT -C "$cwd" fetch origin --quiet 2>/dev/null || true
+
+	if ! gh_budget_gate "$repo"; then
+		emit "── sweep $(date -u '+%H:%M UTC') — $repo ──
+$BUDGET_GATE_REASON (dotfiles-dev#445) — skipping this sweep, no further gh calls.
+dispatch: UNKNOWN — $BUDGET_GATE_REASON"
+		exit 1
+	fi
 
 	report="$(
 		echo "── sweep $(date -u '+%H:%M UTC') — $repo ──"

@@ -68,3 +68,44 @@ gh_budget_classify() {
 gh_budget_is_terminal() {
 	[[ "${GH_BUDGET_CLASS:-}" == "github-api-limit" ]]
 }
+
+# --- 403 latch (dotfiles-dev#445) -----------------------------------------------------------------
+# A hook-side twin of the agent-side lesson "the completion sweep retries a dead API until the
+# agent's budget is spent": a 403 is terminal until GitHub's own reset, so re-probing every time a
+# SubagentStop fires (measured: more than once per finished agent, unbounded with N agents) is pure
+# waste. These three functions are the whole latch — write a marker on a real 403, and let any
+# caller check it before spending a single gh call.
+
+# gh_budget_latch_path
+# $GH_BUDGET_LATCH_FILE overrides it (tests, or a caller wanting a scoped marker); otherwise a
+# fixed path under $XDG_RUNTIME_DIR (falls back to /tmp — not every host sets it) shared by every
+# dotfiles-dev hook process on this machine, since the exhausted budget is account-wide, never
+# per-repo.
+gh_budget_latch_path() {
+	printf '%s\n' "${GH_BUDGET_LATCH_FILE:-${XDG_RUNTIME_DIR:-/tmp}/dotfiles-dev-sweep-403-until}"
+}
+
+# gh_budget_latch_write [TTL_SECONDS]
+# Marks the budget exhausted until now+TTL (default 300s via $GH_BUDGET_LATCH_TTL).
+# ponytail: a fixed conservative window, not GitHub's real per-account reset time — this file's
+# own header rules out trusting `gh api rate_limit` for that, and re-probing is one cheap call
+# every TTL seconds rather than a guaranteed-correct reset, so a too-short TTL only costs one
+# extra probe, never a wrong "still exhausted" verdict. Tighten it if a trusted reset timestamp
+# ever becomes available.
+gh_budget_latch_write() {
+	local ttl="${1:-${GH_BUDGET_LATCH_TTL:-300}}"
+	printf '%s\n' "$(($(date +%s) + ttl))" >"$(gh_budget_latch_path)" 2>/dev/null
+}
+
+# gh_budget_latch_active
+# True (0) while a marker written by gh_budget_latch_write has not yet expired. False on no
+# marker, an unparsable one, or an expired one — every one of those means "safe to call gh
+# again", never "assume still exhausted".
+gh_budget_latch_active() {
+	local path until
+	path="$(gh_budget_latch_path)"
+	[ -f "$path" ] || return 1
+	until="$(cat "$path" 2>/dev/null)"
+	[[ "$until" =~ ^[0-9]+$ ]] || return 1
+	[ "$(date +%s)" -lt "$until" ]
+}

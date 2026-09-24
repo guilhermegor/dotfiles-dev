@@ -939,6 +939,15 @@ _verify_openlogi_deb() {
     return 1
 }
 
+_openlogi_download_arch() {
+    local arch="$1"
+    case "$arch" in
+        amd64|x86_64)  echo "x64" ;;
+        arm64|aarch64) echo "arm64" ;;
+        *)             return 1 ;;
+    esac
+}
+
 install_openlogi() {
     print_status "section" "OPENLOGI"
 
@@ -949,15 +958,11 @@ install_openlogi() {
 
         local arch download_arch
         arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
-        case "$arch" in
-            amd64|x86_64)  download_arch="amd64" ;;
-            arm64|aarch64) download_arch="arm64" ;;
-            *)
-                print_status "warning" "openlogi has no prebuilt package for architecture: $arch"
-                print_status "info" "Install manually from: https://openlogi.org/download/linux"
-                return 1
-                ;;
-        esac
+        if ! download_arch=$(_openlogi_download_arch "$arch"); then
+            print_status "warning" "openlogi has no prebuilt package for architecture: $arch"
+            print_status "info" "Install manually from: https://openlogi.org/download/linux"
+            return 1
+        fi
 
         case "$PACKAGE_MANAGER" in
             apt)

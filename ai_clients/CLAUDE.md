@@ -123,6 +123,35 @@ The issue guard derives its requirements straight from each template file:
 A repo with several issue templates passes if the body satisfies **any
 one** of them — an issue follows one template, not all.
 
+### Where a PR body scratch file lives (dotfiles-dev#441)
+
+`pr_template_guard.sh`'s filesystem view is sandboxed to the project
+directory (see `block_unresolved_body_file()`), so a `--body-file` under
+`/tmp` or any other out-of-repo path is rejected outright. The body must
+live inside the repo, but a PR body is not source — it must never be
+committed. The home is a **root-level `$root/.git-pr-<slug>.md`**, already
+git-ignored (`.gitignore`'s `.git-pr-*.md` entry, dotfiles-dev#197) —
+**not** `$root/.git/`, which the guard used to recommend. `.git/` fails in
+two ways: inside a git worktree it is a plain FILE, not a directory, so a
+write there fails outright (this repo's own agents work almost entirely in
+worktrees under `.claude/worktrees/`); and even where it is writable,
+nothing ever looks at it again — 31 files rotted there in blueprintx alone
+before this was caught. A `.git-pr-<slug>.md` file works identically in a
+worktree or the main checkout, and stays visible to `ls` at the repo root
+(unlike `.git/`, which every tool skips by convention) — easier to notice,
+not easier to lose.
+
+`hooks/pr_body_orphan_check.sh` is the deterministic reaper's first half:
+run it (`ai_clients/claude/hooks/pr_body_orphan_check.sh [repo-root]`) to
+report every `.git-pr-*.md` file with **no corresponding PR**, matched by
+CONTENT rather than filename (a name like `issue_rmw.md` says nothing
+about which PR it belongs to). It is deliberately **not** wired into
+`settings.json` as a live hook — it is a manual/periodic report, run by a
+human or `/session-closeout`-style flow. It **never deletes anything**: a
+file whose PR can't be determined (no `gh`/`jq`, or the `gh` call itself
+fails) is reported UNKNOWN, never treated as orphaned — reaping is a
+follow-up once the matching is trusted, not this cut.
+
 ## PR merge guard: review threads AND a reviewer's own check
 
 `hooks/pr_merge_threads_guard.sh` is a third `PreToolUse` hook, but it gates
@@ -152,6 +181,37 @@ It blocks the merge on **either** of two independent findings:
 
 Both findings share the one escape hatch, since standing aside for either is
 the same deliberate call: `ALLOW_UNRESOLVED_THREADS=1 gh pr merge <n>`.
+
+## Stale-local-ref guard: checkout and worktree add (dotfiles-dev#410)
+
+`hooks/stale_local_ref_guard.sh` (`PreToolUse`, `Bash`) blocks `git
+checkout`/`git switch`/`git worktree add` when the target is a bare **local**
+branch name that is behind its `origin/<branch>` counterpart. The decision
+lives in `hooks/lib/stale_local_ref_gate.sh`'s `gate_stale_local_ref()`,
+which sets `STALE_REF_STATUS` (`fresh | ahead | stale | no_remote | no_local
+| unreadable`) from a plain `git rev-parse` comparison — no network call, so
+it never needs the `gh`-stub test pattern the other gates use.
+
+Measured 2026-09-18 (blueprintx#512): `git worktree add <path>
+fix/precommit-ci-parity-384` checked out a ref 3 commits behind the real PR
+head. The file under review did not exist at that revision, and a review
+pass publicly refuted three real CodeRabbit findings (two Major) as "not in
+this PR", resolving all three threads on that false premise — caught only
+incidentally, when an unrelated `git merge` later surfaced the very files
+the replies said did not exist.
+
+Only **behind** blocks; **ahead** (ordinary unpushed work) is always
+allowed — the same asymmetry `push_pr_head_guard.sh` and
+`uncommitted_worktree_guard.sh` protect from the other direction. Branch
+**creation** (`checkout -b`/`switch -c`/`worktree add -b`) is a different
+case, already owned by `branch_requires_issue_guard.sh`, and is skipped
+here. Escape hatch: `ALLOW_STALE_LOCAL_REF=1 <command>`.
+
+⚠️ **Not yet registered in `settings.json`'s `PreToolUse` `Bash` array** —
+that file was held by a concurrent PR when this guard was written. It IS
+installed by `install_hooks()` (so `make ai_clients` already ships it to
+`~/.claude/hooks/`); wiring the one `settings.json` entry is the remaining
+step, same shape as every other row in that array.
 
 ## Worktree rescue fan-out: two callers, one implementation
 

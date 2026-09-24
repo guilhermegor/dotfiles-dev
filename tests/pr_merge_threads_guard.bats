@@ -219,3 +219,39 @@ checkrun_fixture() {
     run bash -c "payload 'ALLOW_UNRESOLVED_THREADS=1 gh pr merge 42' | '$GUARD'"
     [ "$status" -eq 0 ]
 }
+
+# --- --auto is a deferred merge, not a merge (dotfiles-dev#462) ---------------------------------
+# `gh pr merge --auto` merges only once every REQUIRED check is green, which includes the very
+# reviewer check this guard waits for -- so the state the guard protects against cannot be
+# reached through it. Both halves matter: the pass-through alone would let the next refactor
+# turn this into a fail-open without anything going red.
+
+@test "--auto stands aside on a thread state that otherwise blocks" {
+    threads_fixture "coderabbitai" "Bot" false "finding"
+    run bash -c "payload 'gh pr merge 42 --auto --squash' | '$GUARD'"
+    [ "$status" -eq 0 ]
+}
+
+@test "--auto stands aside while the roster reviewer's check is still running" {
+    checkrun_fixture "IN_PROGRESS"
+    run bash -c "payload 'gh pr merge 42 --auto --squash' | '$GUARD'"
+    [ "$status" -eq 0 ]
+}
+
+@test "the same state WITHOUT --auto still blocks" {
+    threads_fixture "coderabbitai" "Bot" false "finding"
+    run bash -c "payload 'gh pr merge 42 --squash' | '$GUARD'"
+    [ "$status" -eq 2 ]
+}
+
+@test "--auto inside a quoted value is not the flag and does not stand aside" {
+    threads_fixture "coderabbitai" "Bot" false "finding"
+    run bash -c "payload 'gh pr merge 42 --squash --subject \"ship --auto now\"' | '$GUARD'"
+    [ "$status" -eq 2 ]
+}
+
+@test "an untokenizable command is unknown, not --auto, and still blocks" {
+    threads_fixture "coderabbitai" "Bot" false "finding"
+    run bash -c "payload 'gh pr merge 42 --squash --subject \"unbalanced' | '$GUARD'"
+    [ "$status" -eq 2 ]
+}

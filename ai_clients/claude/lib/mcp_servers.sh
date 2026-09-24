@@ -20,6 +20,7 @@ install_mcp_servers() {
     _install_notesnook "$env_file"
     _install_linear
     _install_notion
+    _install_axiom
 }
 
 _install_linear() {
@@ -60,6 +61,27 @@ _install_notion() {
 
     print_status "success" "notion MCP registered (SSE transport, user scope)"
     print_status "info" "Run /mcp in Claude Code to complete Notion OAuth login"
+}
+
+_install_axiom() {
+    # Axiom ships a hosted remote MCP server authenticated via OAuth — no API
+    # key, so nothing is read from .env. Same shape as _install_linear /
+    # _install_notion, but HTTP transport like _install_context7 (Axiom's docs,
+    # axiom.co/docs/llms/mcp-server, give the streamable-HTTP endpoint as
+    # primary and SSE at mcp.axiom.co/sse as legacy fallback). The old
+    # axiomhq/mcp-server-axiom GitHub repo is deprecated — do not install it.
+    if claude mcp list 2>/dev/null | grep -q '^axiom'; then
+        print_status "info" "axiom MCP already registered — skipping"
+        return 0
+    fi
+
+    claude mcp add --scope user \
+        --transport http \
+        axiom \
+        "https://mcp.axiom.co/mcp"
+
+    print_status "success" "axiom MCP registered (HTTP transport, user scope)"
+    print_status "info" "Run /mcp in Claude Code to complete Axiom OAuth login"
 }
 
 _install_tavily() {

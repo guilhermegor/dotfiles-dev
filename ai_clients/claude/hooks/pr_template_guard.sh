@@ -173,8 +173,12 @@ block_unresolved_body_file() {
             echo
             echo "The path is outside the project directory ($root), which this hook cannot"
             echo "read — its filesystem view is sandboxed to the project. Move the file inside"
-            echo "the repo (e.g. $root/.git/, which stays out of the worktree and any commit),"
-            echo "then re-run the SAME gh command with the new path."
+            echo "the repo instead — but NOT into $root/.git/: inside a git worktree, .git is a"
+            echo "plain FILE (not a directory), so a write there fails outright, and a body left"
+            echo "there anyway has no lifecycle (dotfiles-dev#441). Use a root-level"
+            echo "$root/.git-pr-<slug>.md file instead — already git-ignored (see .gitignore's"
+            echo "'.git-pr-*.md' entry) and a real writable path in every checkout, worktree or"
+            echo "not — then re-run the SAME gh command with the new path."
         else
             echo
             echo "If the file is created and consumed in the same command (e.g. \`cat >file &&"

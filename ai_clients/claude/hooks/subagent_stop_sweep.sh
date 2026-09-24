@@ -45,6 +45,8 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HOOK_DIR/lib/review_thread_gate.sh"
 # shellcheck source=lib/free_surface.sh
 source "$HOOK_DIR/lib/free_surface.sh"
+# shellcheck source=lib/kanban_reconcile.sh
+source "$HOOK_DIR/lib/kanban_reconcile.sh"
 
 emit() {
 	# $1 = plain-text report body. Wraps it as SubagentStop additionalContext.
@@ -146,7 +148,10 @@ sweep_worktrees() {
 
 sweep_review_gate() {
 	local owner="$1" name="$2" repo="$3" roster_file="$4" prs
-	prs="$(gh api "repos/$repo/pulls?state=open" --jq '.[].number' 2>/dev/null)"
+	if ! prs="$(gh api "repos/$repo/pulls?state=open" --jq '.[].number' 2>/dev/null)"; then
+		echo "    UNKNOWN — could not list open PRs (gh API failure), not 'none'"
+		return
+	fi
 	if [ -z "$prs" ]; then
 		echo "    no open PRs"
 		return
@@ -241,12 +246,23 @@ stash_snapshot_pr_overlap() {
 }
 
 sweep_orphan_branches() {
-	local cwd="$1" repo="$2" owner="$3" db="$4" b p any=0 title
+	local cwd="$1" repo="$2" owner="$3" db="$4" b heads any=0 title
+	# ONE call for every PR head, never one per branch: the per-branch form
+	# cost an API call per remote branch (33 on blueprintx) and, on a 403,
+	# rendered EVERY branch as missing a PR (see s:dev-loop, GitHub API budget).
+	# `head.label` ("<owner>:<branch>"), never `head.ref`: a fork PR can carry
+	# the same branch name as ours, and matching the bare name would read that
+	# fork's PR as covering OUR branch, hiding a real orphan. The per-branch
+	# query this replaces was owner-scoped (`?head=$owner:$b`) for the same
+	# reason, so matching "$owner:$b" below keeps that property.
+	if ! heads="$(gh api "repos/$repo/pulls?state=all&per_page=100" --paginate --jq '.[].head.label' 2>/dev/null)"; then
+		echo "    UNKNOWN — could not list PR head refs (gh API failure), not 'no PR'"
+		return
+	fi
 	while read -r b; do
 		[ -n "$b" ] || continue
 		case "$b" in "$db" | gh-pages) continue ;; esac
-		p="$(gh api "repos/$repo/pulls?head=$owner:$b&state=all" --jq '.[0].number // empty' 2>/dev/null)"
-		if [ -z "$p" ]; then
+		if ! printf '%s\n' "$heads" | grep -qxF "$owner:$b"; then
 			title="$($GIT -C "$cwd" log -1 --format=%s "origin/$b" 2>/dev/null)"
 			if is_stash_snapshot_title "$title"; then
 				echo "    - $b: STASH SNAPSHOT (\"$title\"), not a branch missing a PR"
@@ -346,6 +362,16 @@ dispatch: free surface empty"
 			echo "dispatch these $#: $free"
 		else
 			echo "dispatch: free surface empty"
+		fi
+		echo "[7] kanban reconcile (open PRs -> In review)"
+		if reconcile_kanban "$owner" "$name"; then
+			if [ -n "$RECONCILE_KANBAN_REPORT" ]; then
+				printf '%s\n' "$RECONCILE_KANBAN_REPORT"
+			else
+				echo "no kanban cards changed"
+			fi
+		else
+			echo "kanban reconcile: UNKNOWN — $RECONCILE_KANBAN_REPORT"
 		fi
 	)"
 

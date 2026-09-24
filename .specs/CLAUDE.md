@@ -6,9 +6,78 @@ produce before and during implementation, and what `s:work-breakdown`'s
 auto-sizing step (dotfiles-dev#306) produces for a decomposed feature. See
 dotfiles-dev#303.
 
+## Top-level allowlist
+
+`.specs/` may contain exactly these entries at its top level — nothing
+else, including a change-type folder (`bugfix/`, `chore/`, `feat/`, …; see
+"Type-folders are rejected" below). Mechanically enforced by
+`tests/check_specs_structure.sh` (dotfiles-dev#443), wired into CI and the
+local pre-commit hook.
+
+| Entry       | What it holds                                                    |
+|-------------|-------------------------------------------------------------------|
+| `CLAUDE.md` | this file — required whenever `.specs/` exists                    |
+| `features/` | one directory per unit of work (see "What belongs here" below)    |
+| `backlog/`  | cross-feature efforts that map to no single feature (see below)   |
+| `_lessons/` | generated lesson mirrors, git-ignored (see below)                 |
+
+## Type-folders are rejected — recorded so this is not re-raised
+
+`bugfix/`, `chore/`, `feat/` and similar change-type folders at the
+`.specs/` top level were considered and deliberately **not** adopted
+(dotfiles-dev#442):
+
+- `features/` splits on **lifecycle** (design → plan → tasks → PR), not
+  change type. Change type is an orthogonal axis, and mixing the two forces
+  a choice with no right answer: a bugfix that needed a real design
+  document, a chore that produced three PRs.
+- The type is already recorded twice — the Conventional-Commit prefix and
+  the branch name. A third copy in a path is a third thing to keep in sync.
+- A feature directory is not the place to learn what kind of change it
+  was — that is what the PR and the commits say.
+
+`tests/check_specs_structure.sh` enforces this by construction: the
+top-level allowlist above has no entry for a type-folder, so anything
+outside `CLAUDE.md`/`features/`/`backlog/`/`_lessons/` fails — type-folders
+included, with no special-casing needed.
+
+## `backlog/` — cross-feature efforts that map to no single feature
+
+Not every piece of work fits `features/<name>/`'s one-unit-of-work shape.
+Some records are cross-cutting notes, decisions, or triage items that map
+to no single feature. Those live flat under `.specs/backlog/`, one file per
+entry — this is distinct from "Backlog / issue-triage notes", which still
+routes to `docs/backlog/` (see "What does NOT belong here" below); this
+directory is for cross-feature *spec-shaped* records, not triage notes.
+
+**Naming: `<kebab-slug>.md`** — the same convention `features/<name>/`
+uses, not the `<topic>_YYYYMMDD_HHMMSS.md` timestamp pattern blueprintx's
+migrated backlog files use (blueprintx#575). One naming rule across
+`.specs/` is simpler than two to state, follow, and mechanically check, and
+dotfiles-dev's own `.specs/backlog/` starts empty — there is no existing
+content whose pattern needs preserving. git history already carries the
+timeline, the same reasoning `features/<name>/`'s slug-not-date naming
+uses below.
+
+## Scaffolded `.specs/` (generated projects) — a different, smaller contract
+
+blueprintx's `templates/common/.specs/` (blueprintx#446) ships `spec.md` +
+`features/.gitkeep` to every generated project. That is a deliberately
+smaller, different contract from this file's — a generated project has not
+adopted the full `CLAUDE.md`/`features/`/`backlog/`/`_lessons/` layout
+described here just because it was scaffolded a `.specs/` starting point.
+`tests/check_specs_structure.sh` checks dotfiles-dev's own tree only; it is
+not run against scaffolded output, so this is stated explicitly rather than
+reconciled here (dotfiles-dev#442 non-goal — blueprintx#583 owns the
+scaffold-side validator).
+
 ## What belongs here
 
 Per feature, one directory: `.specs/features/<feature-name>/`
+
+**Required: at least one of `spec.md`, `design.md`, `plan.md`.** Everything
+else below is optional. `tests/check_specs_structure.sh` checks this
+mechanically.
 
 - `spec.md` — `s:work-breakdown`'s always-present output: acceptance criteria,
   sized one-liner/brief/full per its auto-sizing table (#306)
@@ -16,16 +85,49 @@ Per feature, one directory: `.specs/features/<feature-name>/`
   output, or `s:work-breakdown`'s own Large-scope decisions (#306). Never
   `architecture.md` — it records one feature's decisions, not the system's.
 - `plan.md` — the `s:writing-plans` output (a single-agent implementation plan)
-- `tasks.md` — `s:work-breakdown`'s Large-scope per-task breakdown for a
-  decomposed, multi-issue feature (#306) — a different shape than `plan.md`,
-  written only when the feature was split into parallel-dispatchable issues
+- `tasks.md` — the per-feature task tracker; two writers, one file.
+  `s:work-breakdown`'s Large-scope per-task breakdown for a decomposed,
+  multi-issue feature (#306) — a different shape than `plan.md` — writes it
+  up front whenever the feature was split into parallel-dispatchable issues.
+  A multi-step effort carried across sessions and subagents is **expected**
+  to keep one, updated in the same round that ships each slice. ⚠️ This is a
+  convention, not an enforced check: `s:dev-loop` does **not** verify it
+  today (`grep -c 'tasks\.md'` in the skill returns 0), and saying otherwise
+  here would be worse than saying nothing — a session would read as
+  compliant with nothing enforcing it. Enforcement is tracked separately in
+  dotfiles-dev#485, which has to settle what counts as an in-flight effort
+  first: every feature directory in this repo currently has a `plan.md` and
+  none has a `tasks.md`, so the naive predicate fires on all of them at once
+  and gets ignored. Not in `docs/`, and not only in a session-local task
+  tool: an account switch or session limit erases either of those, but not a
+  file in the repo.
+
+  **Status markers** — the same three states as `progress.md` below, plus one
+  addition: `[~]` **must name its owner**, as `[~] <branch-or-agent>`. The
+  branch name is the durable half — an agent id dies with its session — so N
+  concurrent subagents each writing a bare `[~]` recreate the exact collision
+  the tracker exists to prevent.
+
+  ⚠️ **A marker is a claim, not evidence — reconcile it against the forge,
+  never read it as the answer.** A `[x]` with no merged PR behind it is the
+  #509 failure (merged with an empty `closingIssuesReferences`, issue never
+  closed) reproduced in a cheaper file. The shipped-check (sibling issue to
+  #428) takes the tracker as one input among others, never its verdict.
+- `pr.md` — the PR body, written before the PR exists (dotfiles-dev#441
+  settled this as `pr.md`'s home). A single PR: `pr.md`. Several PRs from
+  one feature: `pr-N-<slug>.md` per PR — the body is written **before** the
+  PR number exists, so the filename can't carry it; the number goes on a
+  header line inside the file instead (e.g. `# PR 3: <slug>`).
 - `progress.md` — **optional**, and unlike the four above it is not written up
   front by a planning skill: the session doing the work writes and updates it
   as the work happens, so an interrupted session can be resumed without
   reconstructing state by inference (#313). Three states, not two:
   `- [ ]` to do, `- [~]` **in progress**, `- [x]` done. `[~]` is the point —
   it is the state git cannot represent. Worth writing for any size of change;
-  a three-file fix can have one, a Large feature can go without.
+  a three-file fix can have one, a Large feature can go without. Distinct
+  from `tasks.md` above: `progress.md` is one session's own resumption
+  state and stays optional; `tasks.md` is the cross-session, cross-agent
+  tracker `s:dev-loop` requires and reconciles against the forge.
 
 ## Lesson mirrors (`_lessons/`) — not a feature directory
 
@@ -84,7 +186,12 @@ defines the shape new ones follow.
 
 - Shipped or reference documentation → `docs/` (see the `_lessons/` exception above
   — a generated mirror is not "documentation" in this sense)
-- Backlog / issue-triage notes → `docs/backlog/`
+- Backlog / issue-triage notes → `docs/backlog/` (dotfiles-dev#428: measured
+  on blueprintx 2026-09-20, `docs/backlog/` had accumulated 44 files despite
+  mkdocs' `exclude_docs` hiding them from the published site — the
+  accumulation was the defect, the hiding was never the fix. A tracked doc
+  outranks memory next session, which is why this routing is written here
+  instead of left as a habit to re-litigate)
 - Anything meant to outlive the feature it was written for (ADRs, README,
   CLAUDE.md changes) — the `_lessons/` mirrors above are the one exception: they
   outlive not a *feature* but the global store they mirror, which is the point

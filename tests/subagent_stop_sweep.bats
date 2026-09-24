@@ -21,13 +21,15 @@ setup() {
     export PATH="$BIN:$PATH"
 
     # Functions only — main() is never invoked by sourcing this. HOOK_DIR resolves relative to
-    # wherever this gets sourced from, so its `source "$HOOK_DIR/lib/review_thread_gate.sh"` and
-    # `source "$HOOK_DIR/lib/free_surface.sh"` lines each need a real copy sitting next to it.
+    # wherever this gets sourced from, so its `source "$HOOK_DIR/lib/review_thread_gate.sh"`,
+    # `source "$HOOK_DIR/lib/free_surface.sh"`, and `source "$HOOK_DIR/lib/kanban_reconcile.sh"`
+    # lines each need a real copy sitting next to it.
     FUNCS="$REPO/sweep_funcs.sh"
     head -n -1 "$SWEEP_SRC" > "$FUNCS"
     mkdir -p "$REPO/lib"
     cp "$(dirname "$SWEEP_SRC")/lib/review_thread_gate.sh" "$REPO/lib/"
     cp "$(dirname "$SWEEP_SRC")/lib/free_surface.sh" "$REPO/lib/"
+    cp "$(dirname "$SWEEP_SRC")/lib/kanban_reconcile.sh" "$REPO/lib/"
     source "$FUNCS"
 
     cd "$REPO" || return 1
@@ -152,25 +154,31 @@ STUB
 # as unfinished work missing a PR, round after round, on blueprintx's `rescue/pep8-naming-422-wip`.
 
 stub_gh_orphan() {
+    # ORPHAN_PR_HEADS      = head labels ("<owner>:<branch>") the head-listing query returns
     # ORPHAN_PR_NUMS       = PR numbers the state=all query returns (space/newline separated)
     # ORPHAN_PR_FILES_<n>  = space-separated filenames PR <n> touches
+    # ORPHAN_FAIL_HEADS=1     = the head-listing call fails (exit 1)
     # ORPHAN_FAIL_PULLS_ALL=1 = the state=all PR-listing call fails (exit 1)
     # ORPHAN_FAIL_FILES=1     = every per-PR files call fails (exit 1)
+    # Clauses discriminate on the --jq expression, never on the query string: both
+    # callers now hit `pulls?state=all`, and matching the query alone sent the
+    # head-listing call to `*) exit 1` — which reads as UNKNOWN, not as a stub gap.
     cat > "$BIN/gh" <<'STUB'
 #!/bin/bash
 case "$*" in
-*"pulls?head="*"&state=all --jq"*)
-    echo ""
+*"head.label"*)
+    [ "${ORPHAN_FAIL_HEADS:-0}" = 1 ] && exit 1
+    printf '%s\n' "${ORPHAN_PR_HEADS:-}"
     ;;
-*"pulls?state=all --paginate --jq"*)
-    [ "${ORPHAN_FAIL_PULLS_ALL:-0}" = 1 ] && exit 1
-    printf '%s\n' "${ORPHAN_PR_NUMS:-}"
-    ;;
-*"/files --paginate --jq"*)
+*"/files"*)
     [ "${ORPHAN_FAIL_FILES:-0}" = 1 ] && exit 1
     n="$(printf '%s' "$*" | sed -n 's#.*pulls/\([0-9]\{1,\}\)/files.*#\1#p')"
     var="ORPHAN_PR_FILES_$n"
     printf '%s\n' "${!var:-}" | tr ' ' '\n'
+    ;;
+*"pulls?state=all"*)
+    [ "${ORPHAN_FAIL_PULLS_ALL:-0}" = 1 ] && exit 1
+    printf '%s\n' "${ORPHAN_PR_NUMS:-}"
     ;;
 *)
     exit 1
@@ -261,6 +269,49 @@ STUB
 
     run sweep_orphan_branches "$REPO" "o/r" "o" "main"
     [[ "$output" == *"rescue/untracked-branch: STASH SNAPSHOT"* ]]
+}
+
+@test "a branch whose head a PR already carries is not reported at all" {
+    export ORPHAN_PR_HEADS="o:feature/has-a-pr"
+    stub_gh_orphan
+    git checkout -q -b feature/has-a-pr
+    echo work > realfile.txt
+    git add realfile.txt
+    git commit -q -m "work behind an open PR"
+    git push -q origin HEAD:refs/heads/feature/has-a-pr
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" != *"feature/has-a-pr"* ]]
+}
+
+@test "a fork PR sharing our branch name does not claim our branch" {
+    # head.label is "<owner>:<branch>"; matching the bare branch name would read
+    # the fork's PR as covering ours and hide a real orphan.
+    export ORPHAN_PR_HEADS="someforker:feature/shared-name"
+    stub_gh_orphan
+    git checkout -q -b feature/shared-name
+    echo work > realfile.txt
+    git add realfile.txt
+    git commit -q -m "our own unclaimed work"
+    git push -q origin HEAD:refs/heads/feature/shared-name
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" == *"- feature/shared-name"* ]]
+}
+
+@test "a gh API failure listing PR heads reports UNKNOWN, never 'none'" {
+    export ORPHAN_FAIL_HEADS=1
+    stub_gh_orphan
+    git checkout -q -b feature/unclaimed
+    echo work > realfile.txt
+    git add realfile.txt
+    git commit -q -m "work with no PR"
+    git push -q origin HEAD:refs/heads/feature/unclaimed
+
+    run sweep_orphan_branches "$REPO" "o/r" "o" "main"
+    [[ "$output" == *"UNKNOWN"* ]]
+    [[ "$output" != *"none"* ]]
+    [[ "$output" != *"- feature/unclaimed"* ]]
 }
 
 @test "a gh API failure listing PRs reports UNKNOWN, never a clean overlap" {

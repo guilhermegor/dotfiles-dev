@@ -68,7 +68,23 @@ paths:
   by diff shape alone — that is exactly why it needs a stated reason, not a
   silent edit.
 - **Reproducibility:** prefer automated, deterministic solutions over manual steps.
-- Keep functions/methods small and single-purpose (SRP).
+- **SRP (actor cohesion, not size):** a class/module is responsible to
+  exactly one **actor** — the one person or role who requests changes to
+  it (Clean Architecture ch. 7). Name the actor when it isn't obvious. A
+  300-line class serving one actor is fine; three 10-line methods serving
+  the CFO, the COO, and the CTO are a violation. Two symptoms: **accidental
+  duplication** — `calculatePay()` (CFO) and `reportHours()` (COO) sharing
+  a `regularHours()` helper means a CFO-requested change silently corrupts
+  COO reports, so DRY does not apply here; letting the two diverge is
+  correct — and **merge risk** — two people editing one file for two
+  unrelated actors. Fix with separate classes over a shared data
+  structure, or a Facade when instantiating several classes is the cost to
+  avoid; an interface implemented per actor is a valid trade-off but not
+  an improvement — it trades the shared helper for a shared base class,
+  moving the coupling rather than removing it.
+- **One function, one job (Clean Code, not SOLID):** keep functions/methods
+  small and single-purpose, doing one thing at one level of abstraction —
+  see "Class vs function" below for when that one thing needs a class.
 - Immutability by default; mutate only at well-defined boundaries.
 
 ## Code Style (All Languages)

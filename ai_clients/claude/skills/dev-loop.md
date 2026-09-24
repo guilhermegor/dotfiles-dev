@@ -633,6 +633,39 @@ erroring. `.claude/release.conf` is the declared list where one exists.
 
 ## 6. DISPATCH — the loop's other half
 
+### DISPATCH is the standing priority; the review slot is opportunistic (dotfiles-dev#432)
+
+**Every round ends in dispatch.** The question is never *"should we dispatch?"* — it is *"what is
+the largest non-colliding set?"* If the answer is genuinely zero, name the blocker **per
+candidate**, never a summary judgement about queue depth. Measured 2026-09-20: a round concluded
+*"adding a third agent now buys nothing the review queue can absorb"* with two agents live and ten
+unclaimed issues — a full review queue is the goal, not a ceiling on dispatch, and throttling
+dispatch to match review throughput starves the one buffer (PRs waiting on review) that keeps the
+reviewer step fed.
+
+Step 4b (REVIEWER SLOT) is opportunistic, never a gate: spend it immediately when free, report one
+line and move on when it is not, and never let its state feed into how many agents this round
+starts.
+
+🔴 **Collision is between LIVE AGENTS, not between a candidate and an open PR.** This is the
+specific error that suppressed dispatch: candidates were rejected for overlapping the *file lists
+of open PRs*. An open PR is a frozen branch — overlapping it is an ordinary, resolvable future
+merge conflict, not a reason to withhold dispatch. Two live agents writing the same file right now
+is the unrecoverable case, and that is what blocks:
+- **Blocks dispatch:** the candidate's files intersect a file surface this session already has a
+  live, unresolved agent working (`ListAgents` against what this session dispatched).
+- **Merge-risk annotation only, never a blocker:** `free_classify_files`'s `held` /
+  `would-need-a-held-file` verdict below is computed against *open PRs*, not live agents — note it
+  in the dispatched agent's brief as a heads-up, dispatch anyway.
+
+A missing file-surface declaration on an issue blocks **planning that one issue**, never the whole
+round. Measured the same day: 7 of 10 unclaimed issues had no declared surface, and the planner
+used that gap to conclude "nothing to dispatch" instead of writing the surface — refinement work
+this round can do — for the ones missing it.
+
+Bound concurrency by the real constraint — API budget, session budget — and say which one bound it.
+Both were the actual ceiling that day; **a cap justified by review throughput is not legitimate.**
+
 `hooks/round_dispatch_guard.sh` (a `Stop` hook, dotfiles-dev#433) refuses to end a round that
 had dispatchable candidates and started no agent, naming each candidate and its file surface;
 the legitimate zero case is every candidate carrying its own named reason, never an override
@@ -668,8 +701,9 @@ its entire value is existing before the window closes, the same principle step 0
 to the 7-day cron expiry.
 
 Compute the free surface: the exact files the open PRs touch, versus the exact files each open
-issue would touch. Dispatch agents for what does not collide. **Call the gate; never re-derive it
-by hand** (dotfiles-dev#340):
+issue would touch. ⚠️ **This PR-vs-issue check is the merge-risk annotation from the priority
+section above, never the collision that blocks dispatch** — dispatch against live agents, note a
+PR overlap in the brief. **Call the gate; never re-derive it by hand** (dotfiles-dev#340):
 
 ```bash
 source ai_clients/claude/hooks/lib/free_surface.sh

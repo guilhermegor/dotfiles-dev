@@ -66,18 +66,33 @@ case "$1 $2" in
     ;;
 "api graphql")
     shift 2
-    num=""
+    num="" query=""
     while [ $# -gt 0 ]; do
-        if [ "$1" = "-F" ]; then
+        case "$1" in
+        -F)
             shift
             case "$1" in number=*) num="${1#number=}" ;; esac
             shift
-        else
+            ;;
+        -f)
             shift
-        fi
+            case "$1" in query=*) query="${1#query=}" ;; esac
+            shift
+            ;;
+        *)
+            shift
+            ;;
+        esac
     done
     echo "$num" >>"$GRAPHQL_LOG"
-    cat "$FIXTURE_DIR/$num.json" 2>/dev/null || echo '{}'
+    # dotfiles-dev#491's fix issues a SECOND graphql query (adds `isRequired`) to split a
+    # genuinely-running CheckRun from an unbounded-PENDING StatusContext, distinct from the
+    # gate's own reviewThreads/running query -- route each to its own fixture file.
+    if printf '%s' "$query" | grep -q isRequired; then
+        cat "$FIXTURE_DIR/$num.checks.json" 2>/dev/null || echo '{}'
+    else
+        cat "$FIXTURE_DIR/$num.json" 2>/dev/null || echo '{}'
+    fi
     ;;
 esac
 STUB
@@ -113,6 +128,107 @@ problem_fixture() {
             nodes: [{author: {login: "coderabbitai", __typename: "Bot"}, body: $body}]
         }}]
     }}}}}' >"$FIXTURE_DIR/$1.json"
+}
+
+# running_fixture NUM STATE
+# Gate-side fixture: zero threads, one StatusContext from a roster-listed creator, so
+# gate_pr_thread_state reports GATE_STATUS=running -- the undifferentiated verdict dotfiles-dev#491
+# is about. The caller must also write a `.review-bots.yaml` roster naming "coderabbitai[bot]",
+# since the gate's running filter only counts a StatusContext whose creator is on the roster.
+running_fixture() {
+    jq -nc --arg state "$2" '{data: {repository: {pullRequest: {
+        reviewThreads: {totalCount: 0, nodes: []},
+        commits: {nodes: [{commit: {statusCheckRollup: {contexts: {totalCount: 1, nodes: [
+            {__typename: "StatusContext", context: "CodeRabbit", state: $state,
+             creator: {login: "coderabbitai"}}
+        ]}}}}]}
+    }}}}' >"$FIXTURE_DIR/$1.json"
+}
+
+roster_fixture() {
+    cat >.review-bots.yaml <<'YAML'
+reviewers:
+  - login: coderabbitai[bot]
+YAML
+}
+
+# checks_fixture NUM SHAPE
+# The SECOND query's fixture (dotfiles-dev#491's own `isRequired`-bearing read).
+checks_fixture() {
+    local shape="$2"
+    case "$shape" in
+    required-pending)
+        jq -nc '{data:{repository:{pullRequest:{commits:{nodes:[{commit:{statusCheckRollup:
+            {contexts:{nodes:[{__typename:"StatusContext",context:"CodeRabbit",
+                                state:"PENDING",isRequired:true}]}}}}]}}}}}' ;;
+    not-required-pending)
+        jq -nc '{data:{repository:{pullRequest:{commits:{nodes:[{commit:{statusCheckRollup:
+            {contexts:{nodes:[{__typename:"StatusContext",context:"CodeRabbit",
+                                state:"PENDING",isRequired:false}]}}}}]}}}}}' ;;
+    checkrun-running)
+        jq -nc '{data:{repository:{pullRequest:{commits:{nodes:[{commit:{statusCheckRollup:
+            {contexts:{nodes:[{__typename:"CheckRun",name:"build",
+                                status:"IN_PROGRESS",isRequired:true}]}}}}]}}}}}' ;;
+    esac >"$FIXTURE_DIR/$1.checks.json"
+}
+
+# --- dotfiles-dev#491: split a running CheckRun from an unbounded-PENDING StatusContext ----------
+
+@test "a genuinely in-progress CheckRun still blocks, with the running message" {
+    roster_fixture
+    export PR_VIEW_NUMBER=55
+    running_fixture 55 PENDING
+    checks_fixture 55 checkrun-running
+    run bash -c "payload | '$HOOK'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"still running"* ]]
+    [[ "$output" == *"build"* ]]
+}
+
+@test "a non-required PENDING commit status does not block and says why" {
+    roster_fixture
+    export PR_VIEW_NUMBER=56
+    running_fixture 56 PENDING
+    checks_fixture 56 not-required-pending
+    run bash -c "payload | '$HOOK'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"pending (no completion expected)"* ]]
+    [[ "$output" == *"CodeRabbit"* ]]
+    [[ "$output" != *"still running"* ]]
+}
+
+@test "a required PENDING commit status still blocks" {
+    roster_fixture
+    export PR_VIEW_NUMBER=58
+    running_fixture 58 PENDING
+    checks_fixture 58 required-pending
+    run bash -c "payload | '$HOOK'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"still running"* ]]
+    [[ "$output" == *"CodeRabbit"* ]]
+}
+
+@test "a failed re-classify query keeps the original still-running verdict (fail-safe)" {
+    roster_fixture
+    export PR_VIEW_NUMBER=57
+    running_fixture 57 PENDING
+    # No $FIXTURE_DIR/57.checks.json -> stub returns '{}' -> both RUNNING_DETAIL and
+    # PENDING_DETAIL come back empty -> _reclassify_running leaves the gate's verdict alone.
+    run bash -c "payload | '$HOOK'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"still running"* ]]
+}
+
+@test "repo-wide scan: a non-required pending PR is skipped, a real problem further down still blocks" {
+    unset PR_VIEW_NUMBER
+    roster_fixture
+    export PR_LIST=$'60\n61'
+    running_fixture 60 PENDING
+    checks_fixture 60 not-required-pending
+    problem_fixture 61
+    run bash -c "payload | '$HOOK'"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"PR #61"* ]]
 }
 
 # --- fast path: unchanged branch-scoped behaviour ------------------------------------------------

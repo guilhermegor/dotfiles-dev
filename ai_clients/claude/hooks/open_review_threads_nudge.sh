@@ -53,6 +53,21 @@
 #
 # Fails OPEN on everything it cannot resolve (no gh, no jq, no network, no PR anywhere in the
 # repo) — a nudge that fires on its own blindness is noise, and noise gets the hook deleted.
+#
+# ⚠️ dotfiles-dev#491: `statusCheckRollup` mixes two node types that read alike and behave
+# nothing alike. A `CheckRun` is work a runner is doing — QUEUED/IN_PROGRESS means it WILL reach
+# a conclusion, so waiting is sound. A `StatusContext` is an assertion someone POSTED; its
+# PENDING carries NO completion guarantee. The shared gate's own `running` filter already
+# branches on `__typename`, but folds a merely-PENDING, non-required StatusContext into the same
+# bucket as a real in-flight CheckRun — and CodeRabbit on this repo (under 10 stars, no
+# auto-review) sits at PENDING for its whole life whenever nobody runs `@coderabbitai review`.
+# Measured 2026-09-23: 4 of the last 8 merged PRs merged while still PENDING; the hook fired 3x
+# in 15 minutes on #486 with nothing having changed. `review_thread_gate.sh` is held by sibling
+# work, so this file re-queries the SAME statusCheckRollup with `isRequired` added (GitHub's
+# `RequirableByPullRequest` interface, on both node types) and downgrades a non-required,
+# still-PENDING StatusContext from "still running" to "pending (no completion expected)" — which
+# does NOT block. A genuinely in-flight CheckRun, or a still-non-terminal REQUIRED context,
+# keeps blocking exactly as before: the wait is bounded by relevance, not removed.
 
 set -u
 
@@ -70,6 +85,89 @@ ROSTER_FILE='.review-bots.yaml'
 # calling it).
 # shellcheck source=lib/review_thread_gate.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review_thread_gate.sh"
+
+# _status_check_query
+# A SECOND, narrower GraphQL query than the gate's own -- adds `isRequired` (GitHub's
+# RequirableByPullRequest interface) to both node types so this file can split a genuinely
+# running CheckRun from an unbounded-PENDING StatusContext without touching the shared gate
+# (dotfiles-dev#491 -- review_thread_gate.sh is held by sibling work).
+_status_check_query() {
+	cat <<'GRAPHQL'
+query($owner:String!, $repo:String!, $number:Int!) {
+  repository(owner:$owner, name:$repo) {
+    pullRequest(number:$number) {
+      commits(last:1) {
+        nodes {
+          commit {
+            statusCheckRollup {
+              contexts(first:100) {
+                nodes {
+                  __typename
+                  ... on CheckRun { name status isRequired(pullRequestNumber:$number) }
+                  ... on StatusContext { context state isRequired(pullRequestNumber:$number) }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+GRAPHQL
+}
+
+# _classify_checks OWNER REPO NUMBER
+# Sets RUNNING_DETAIL (a non-terminal CheckRun, or a still-non-terminal REQUIRED StatusContext --
+# either is worth blocking on) and PENDING_DETAIL (a non-required StatusContext sitting at
+# PENDING/EXPECTED -- nothing promises it ever resolves). Leaves both empty on any read error:
+# this call is advisory on top of the gate's own "running" verdict, never the sole source of
+# truth, so a failure here falls back to the gate's original wording (_reclassify_running below)
+# instead of inventing a new failure mode.
+_classify_checks() {
+	local owner="$1" repo="$2" number="$3" json
+	RUNNING_DETAIL=""
+	PENDING_DETAIL=""
+	json="$(gh api graphql -f query="$(_status_check_query)" \
+		-F owner="$owner" -F repo="$repo" -F number="$number" 2>/dev/null)" || return 0
+	printf '%s' "$json" | jq -e '.errors' >/dev/null 2>&1 && return 0
+
+	RUNNING_DETAIL="$(printf '%s' "$json" | jq -r '
+		[.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[]?
+		 | if .__typename == "CheckRun" and .status != "COMPLETED" then .name
+		   elif .__typename == "StatusContext"
+		        and (.state == "PENDING" or .state == "EXPECTED")
+		        and .isRequired then .context
+		   else empty end]
+		| join(", ")' 2>/dev/null)"
+
+	PENDING_DETAIL="$(printf '%s' "$json" | jq -r '
+		[.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[]?
+		 | select(.__typename == "StatusContext"
+		          and (.state == "PENDING" or .state == "EXPECTED")
+		          and (.isRequired | not))
+		 | .context]
+		| join(", ")' 2>/dev/null)"
+}
+
+# _reclassify_running OWNER REPO NUMBER
+# Call only when GATE_STATUS=="running". Re-derives the split above and downgrades the verdict
+# to "pending_indefinite" when nothing left waiting on is a genuine CheckRun or a required
+# context. Leaves GATE_STATUS/GATE_DETAIL exactly as the gate set them when the re-query itself
+# comes back empty (a transient read failure) -- see _classify_checks.
+_reclassify_running() {
+	local owner="$1" repo="$2" number="$3"
+	[ "$GATE_STATUS" = "running" ] || return 0
+
+	_classify_checks "$owner" "$repo" "$number"
+
+	if [ -n "$RUNNING_DETAIL" ]; then
+		GATE_DETAIL="$RUNNING_DETAIL"
+	elif [ -n "$PENDING_DETAIL" ]; then
+		GATE_STATUS="pending_indefinite"
+		GATE_DETAIL="$PENDING_DETAIL"
+	fi
+}
 
 # _emit_verdict NUMBER PREFIX
 # Prints the human-facing message for the current $GATE_STATUS/$GATE_DETAIL (set by a prior
@@ -103,6 +201,15 @@ _emit_verdict() {
 			echo "checks to go terminal and re-read the threads before reporting this PR as clean."
 		} >&2
 		return 2
+		;;
+	pending_indefinite)
+		# Not a verdict to wait out — a StatusContext PENDING with isRequired=false carries no
+		# completion guarantee at all (dotfiles-dev#491). Reported, never waited on.
+		{
+			echo "${prefix}PR #${number}: pending (no completion expected): ${GATE_DETAIL} —"
+			echo "not a required context, so nothing promises it will ever resolve. Not blocking."
+		} >&2
+		return 0
 		;;
 	clean)
 		return 0
@@ -188,6 +295,15 @@ _repo_wide_scan() {
 		if [ "$GATE_STATUS" = "unreadable" ]; then
 			return 1
 		fi
+		if [ "$GATE_STATUS" = "running" ]; then
+			_reclassify_running "$owner" "$name" "$n"
+		fi
+		# A non-required, indefinitely-PENDING status is not a reason to stop the scan here --
+		# it never blocks, so it must not be mistaken for the one finding this scan is looking
+		# for (dotfiles-dev#491). Keep looking at the rest of the open PRs.
+		if [ "$GATE_STATUS" = "pending_indefinite" ]; then
+			continue
+		fi
 		if [ "$GATE_STATUS" != "clean" ]; then
 			REPORT_NUMBER="$n"
 			break
@@ -227,6 +343,7 @@ main() {
 		# handling. Measured 2026-08-17: a run of HTTP 503s swallowed a thread reply, and the thread
 		# then sat resolved with no reasoning recorded.
 		gate_pr_thread_state "$owner" "$name" "$number" "$ROSTER_FILE"
+		[ "$GATE_STATUS" = "running" ] && _reclassify_running "$owner" "$name" "$number"
 		_emit_verdict "$number" ""
 		exit $?
 	fi

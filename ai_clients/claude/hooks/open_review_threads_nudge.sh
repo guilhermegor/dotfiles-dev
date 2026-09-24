@@ -68,6 +68,19 @@
 # still-PENDING StatusContext from "still running" to "pending (no completion expected)" — which
 # does NOT block. A genuinely in-flight CheckRun, or a still-non-terminal REQUIRED context,
 # keeps blocking exactly as before: the wait is bounded by relevance, not removed.
+#
+# ⚠️ dotfiles-dev#490/#497 reconciliation: #497 (the shared gate's comment-channel fix) is no
+# longer "sibling work" once merged, and its own author suggested folding this file's isRequired
+# split into review_thread_gate.sh's `_gate_running_filter` to retire this second query.
+# Deliberately NOT done: `subagent_stop_sweep.sh`'s `sweep_review_gate()` is a THIRD, unlisted
+# caller of `gate_pr_thread_state` with a fixed `case "$GATE_STATUS" in clean|problems|running|
+# unreadable)` — adding a new status value to the shared gate's contract (the pending/running
+# split this file makes) would silently drop that PR from the board sweep's report, a caller
+# neither #490 nor #491 touched or tested. The two features are orthogonal (comment-channel
+# review-thread problems vs. checks running/pending-indefinite) and share only the roster-login
+# lookup, which this file already reuses via the sourced `_gate_roster_logins` rather than
+# re-deriving it — so keeping the second query here costs one extra `gh api graphql` call per
+# gated PR, not a duplicated implementation.
 
 set -u
 

@@ -252,6 +252,11 @@ gate_pr_thread_state() {
 			-F owner="$owner" -F repo="$repo" -F number="$number" 2>/dev/null)" || threads=""
 		# GraphQL answers 200 with a PARTIAL body: `errors` alongside a half-filled `data`.
 		# Accepting that reads a truncated thread list as the whole truth.
+		# ⚠️ Every stubbed `gh` fixture anywhere in the test suite that feeds this function must
+		# include a `comments` key (even empty) or this check never passes and the gate exhausts
+		# its retries into GATE_STATUS=unreadable — the exact break #497 caused in
+		# tests/open_review_threads_nudge.bats and tests/review_threads_trigger.bats, whose
+		# fixtures predated the `comments` field this query added for #490.
 		if printf '%s' "$threads" | jq -e '
 			(.errors | not)
 			and (.data.repository.pullRequest.reviewThreads != null)

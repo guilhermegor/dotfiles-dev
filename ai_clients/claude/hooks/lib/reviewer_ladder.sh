@@ -302,14 +302,107 @@ _review_base_ref() {
 	printf '%s\n' "$base"
 }
 
-# _run_runtime_review RUNTIME MODEL FALLBACKS PR_NUMBER
+# _pr_head_sha OWNER REPO PR_NUMBER
+# The forge's own answer for the PR's head commit — the ground truth a
+# resolved checkout is asserted against (issue #487). Override via
+# REVIEWER_LADDER_HEAD_SHA_CMD for tests. Empty on any `gh` error.
+_pr_head_sha() {
+	local owner="$1" repo="$2" pr_number="$3"
+	if [ -n "${REVIEWER_LADDER_HEAD_SHA_CMD:-}" ]; then
+		"$REVIEWER_LADDER_HEAD_SHA_CMD" "$owner" "$repo" "$pr_number"
+		return $?
+	fi
+	gh pr view "$pr_number" --repo "$owner/$repo" --json headRefOid --jq '.headRefOid' 2>/dev/null
+}
+
+# _pr_remote_url OWNER REPO
+# The repository `_checkout_pr_worktree` fetches the PR's head FROM — always
+# the forge's own owner/repo, never the caller's local `origin` remote
+# (issue #487 review, CodeRabbit finding). `origin` can be a fork (no
+# `refs/pull/*` at all — the codex rung would always refuse) or point at an
+# unrelated repository (fetches a different PR's head entirely, though
+# assert_worktree_matches_pr still catches that and fails closed). Override
+# via REVIEWER_LADDER_REMOTE_URL_CMD for tests — real tests must never fetch
+# over the network.
+# ⚠️ For a PRIVATE repo this plain https URL needs a credential helper on
+# PATH (e.g. `gh auth setup-git`, which this account's `gh` calls elsewhere
+# already assume) — unverified beyond that; this lib does not itself manage
+# credentials.
+_pr_remote_url() {
+	local owner="$1" repo="$2"
+	if [ -n "${REVIEWER_LADDER_REMOTE_URL_CMD:-}" ]; then
+		"$REVIEWER_LADDER_REMOTE_URL_CMD" "$owner" "$repo"
+		return $?
+	fi
+	printf 'https://github.com/%s/%s.git\n' "$owner" "$repo"
+}
+
+# assert_worktree_matches_pr DIR OWNER REPO PR_NUMBER
+# The severity of issue #487 in one check: a checkout is never trusted to be
+# the PR's head just because something put it there — its HEAD must equal
+# what the forge itself reports for that PR, checked live, every call.
+# Fails closed (no match, no forge answer, no readable HEAD) rather than
+# reviewing whatever happens to be at DIR.
+assert_worktree_matches_pr() {
+	local dir="$1" owner="$2" repo="$3" pr_number="$4"
+	local wanted got
+	wanted="$(_pr_head_sha "$owner" "$repo" "$pr_number")"
+	[ -n "$wanted" ] || return 1
+	got="$(git -C "$dir" rev-parse HEAD 2>/dev/null)" || return 1
+	[ -n "$got" ] && [ "$got" = "$wanted" ]
+}
+
+# _checkout_pr_worktree OWNER REPO PR_NUMBER
+# Resolves the PR's head into its OWN detached worktree — never the caller's
+# ambient cwd (issue #487: `codex review` diffs whatever is checked out, and
+# nothing previously connected that to the PR number it was handed). Sets
+# PR_WORKTREE_DIR on success. Override via REVIEWER_LADDER_CHECKOUT_CMD for
+# tests — it must print the resolved worktree dir on success, nothing on
+# failure, same contract as the real implementation.
+_checkout_pr_worktree() {
+	PR_WORKTREE_DIR=""
+	local owner="$1" repo="$2" pr_number="$3"
+	if [ -n "${REVIEWER_LADDER_CHECKOUT_CMD:-}" ]; then
+		PR_WORKTREE_DIR="$("$REVIEWER_LADDER_CHECKOUT_CMD" "$owner" "$repo" "$pr_number")"
+		[ -n "$PR_WORKTREE_DIR" ]
+		return $?
+	fi
+	local dir url
+	dir="$(mktemp -d "${TMPDIR:-/tmp}/reviewer-ladder-pr${pr_number}-XXXXXX")" || return 1
+	url="$(_pr_remote_url "$owner" "$repo")"
+	if ! git fetch --quiet "$url" "pull/$pr_number/head" 2>/dev/null ||
+		! git worktree add --detach --quiet "$dir" FETCH_HEAD 2>/dev/null; then
+		rmdir "$dir" 2>/dev/null
+		return 1
+	fi
+	if ! assert_worktree_matches_pr "$dir" "$owner" "$repo" "$pr_number"; then
+		print_status "error" "PR #$pr_number: checked-out HEAD does not match the forge's head — refusing"
+		git worktree remove --force "$dir" 2>/dev/null
+		return 1
+	fi
+	PR_WORKTREE_DIR="$dir"
+}
+
+# _teardown_pr_worktree DIR
+# Torn down after every use, success or failure — a leaked worktree per
+# ladder ask is its own slow failure (issue #487's own scope note).
+_teardown_pr_worktree() {
+	local dir="$1"
+	[ -n "$dir" ] || return 0
+	git worktree remove --force "$dir" 2>/dev/null || rm -rf "$dir" 2>/dev/null
+}
+
+# _run_runtime_review RUNTIME MODEL FALLBACKS PR_NUMBER [WORKDIR]
 # Invokes the resolved CLI's own non-interactive review subcommand and prints
 # its findings. Override via REVIEWER_LADDER_RUN_CMD for tests/dry-run — never
 # executed when DRY_RUN=1 (run_fallback_review returns before reaching this).
-# Runs in the caller's cwd, which must be a checkout of the PR's head branch:
-# `codex review` reads the working tree, it does not fetch a PR by number.
+# WORKDIR (default: caller's cwd) is where the codex arm runs: `codex review`
+# reads the working tree, it does not fetch a PR by number (issue #487), so
+# the caller must hand it a checkout already proven to be the PR's head —
+# see _checkout_pr_worktree. qwen's own `review run PR_NUMBER` needs no
+# checkout at all and ignores WORKDIR.
 _run_runtime_review() {
-	local runtime="$1" model="$2" fallbacks="$3" pr_number="$4"
+	local runtime="$1" model="$2" fallbacks="$3" pr_number="$4" workdir="${5:-.}"
 	if [ -n "${REVIEWER_LADDER_RUN_CMD:-}" ]; then
 		"$REVIEWER_LADDER_RUN_CMD" "$runtime" "$model" "$fallbacks" "$pr_number"
 		return $?
@@ -328,7 +421,29 @@ _run_runtime_review() {
 		# `--base` and the positional [PROMPT] are mutually exclusive (measured
 		# live on #434: "the argument '--base <BRANCH>' cannot be used with
 		# '[PROMPT]'"); the PR label rides on --title instead.
-		codex -m "$model" review --base "$base" --title "PR #$pr_number"
+		local output
+		output="$(cd "$workdir" && codex -m "$model" review --base "$base" --title "PR #$pr_number")" || return 1
+		# issue #487: an empty diff is never a legitimate review of an open PR
+		# — it means the checkout matched the base, not the PR's head. Fail
+		# closed instead of posting the runtime's own "nothing to say" text.
+		if [ -z "$output" ] || [[ "$output" == *"No changes are present relative to the specified merge base"* ]]; then
+			print_status "error" "codex reported an empty diff for PR #$pr_number — refusing to post it as a review"
+			return 1
+		fi
+		# The comment must read as repo paths, never as this run's throwaway
+		# worktree location — strip both the LOGICAL path handed to us and its
+		# CANONICAL (symlink-resolved) form, since they can differ (e.g. macOS
+		# `$TMPDIR` vs. its `/private/...` realpath) and either one can appear
+		# verbatim in codex's own output.
+		if [ "$workdir" != "." ]; then
+			local real_workdir
+			real_workdir="$(cd "$workdir" && pwd -P)" 2>/dev/null
+			output="${output//"$workdir"\//}"
+			if [ -n "$real_workdir" ] && [ "$real_workdir" != "$workdir" ]; then
+				output="${output//"$real_workdir"\//}"
+			fi
+		fi
+		printf '%s\n' "$output"
 		;;
 	qwen)
 		local fb_args=() fb
@@ -405,8 +520,26 @@ run_fallback_review() {
 		return 0
 	fi
 
-	local findings body
-	findings="$(_run_runtime_review "$LADDER_RUNTIME" "$LADDER_MODEL" "$LADDER_FALLBACK_MODELS" "$pr_number")" || return 1
+	# Only codex reads the working tree (issue #487) — qwen's own
+	# `review run PR_NUMBER` already fetches the PR itself. Resolving a
+	# worktree only when it is actually needed keeps qwen's rung free of a
+	# fetch+worktree round trip it has no use for.
+	local workdir="." worktree_dir=""
+	if [ "$LADDER_RUNTIME" = "codex" ]; then
+		if ! _checkout_pr_worktree "$owner" "$repo" "$pr_number"; then
+			print_status "error" "PR #$pr_number: cannot check out a verified head for codex — refusing to review"
+			return 1
+		fi
+		workdir="$PR_WORKTREE_DIR"
+		worktree_dir="$PR_WORKTREE_DIR"
+	fi
+
+	local findings rc=0
+	findings="$(_run_runtime_review "$LADDER_RUNTIME" "$LADDER_MODEL" "$LADDER_FALLBACK_MODELS" "$pr_number" "$workdir")" || rc=1
+	[ -n "$worktree_dir" ] && _teardown_pr_worktree "$worktree_dir"
+	[ "$rc" -eq 0 ] || return 1
+
+	local body
 	body="$attribution"$'\n\n'"$findings"
 	_post_pr_comment "$owner" "$repo" "$pr_number" "$body"
 }

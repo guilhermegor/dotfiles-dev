@@ -234,6 +234,33 @@ named default branch before closing, the same rule step 6 already applies to a d
 candidate. A partly-shipped issue (blueprintx#381: only one of two slices landed) would lose real
 remaining work if closed on the mention alone.
 
+### Orphaned issues — the zero-PR-mention direction (dotfiles-dev#419)
+
+`gate_orphaned_issues` above only catches an orphan that some merged PR at least *mentions*.
+blueprintx#438 shipped with no PR ever mentioning it at all — both seams existed on `main`
+because a sibling issue's PR quietly delivered them too. That shape needs a different signal:
+not a PR's text, but the issue's own declared ` ```surface ` block (the format s:intake-plan
+already parses) content-tested against the default branch. Cheap enough to run every round
+here, since it rides on `gate_free_surface`'s `FREE_UNCLAIMED_ISSUES` — already paid for by
+step 6 and by `gate_orphaned_issues` itself — rather than a fresh API budget line:
+
+```bash
+source ai_clients/claude/hooks/lib/orphaned_issues.sh
+gate_orphaned_surface <owner> <repo> || echo "orphaned-surface gate UNKNOWN — nothing reported"
+printf '%s\n' "$ORPHAN_SURFACE_REPORT"
+```
+
+Report **one line per candidate** — an open issue no PR claims whose declared surface is fully
+or partially present on the default branch. An issue with no ` ```surface ` block is silently
+skipped (out of scope for this cheap pass, not a failure). If `$ORPHAN_SURFACE_REPORT` is empty,
+say "no surface-shipped orphans found" and move on.
+
+⚠️ **Report only, never auto-close — same rule, same reason.** A fully-present surface is
+evidence the *files* landed, never proof the *behavior* is wired in (blueprintx#355: the SQL
+guard file existed in the template pre-commit hook but was never wired into CI, so
+`--no-verify` bypassed it in every generated project — the issue was correctly still open).
+Verify by reading the code before closing, exactly as `gate_orphaned_issues` requires above.
+
 ## 3. THREADS — read, verify, fix, reply, resolve
 
 ⚠️ **Ask the gate; never eyeball the PR list.** A thread arrives *after* the moment work feels

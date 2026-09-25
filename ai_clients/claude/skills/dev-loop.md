@@ -266,6 +266,31 @@ guard file existed in the template pre-commit hook but was never wired into CI, 
 `--no-verify` bypassed it in every generated project — the issue was correctly still open).
 Verify by reading the code before closing, exactly as `gate_orphaned_issues` requires above.
 
+### Missing tracker (dotfiles-dev#485)
+
+`.specs/CLAUDE.md`'s `tasks.md` convention only works if someone remembers it — a multi-step
+effort split across sessions and subagents is *expected* to keep one, but nothing checked. The
+naive predicate ("has `plan.md`, lacks `tasks.md`") is wrong, measured: every feature directory in
+this repo has a `plan.md` and none has a `tasks.md`, so that predicate fires on all of them at
+once, including long-finished ones — a check that reports findings the day it ships is one nobody
+reads twice. "In-flight" is the missing half, and the filesystem alone cannot answer it, so this
+asks the forge instead — never re-derive the walk by hand:
+
+```bash
+source ai_clients/claude/hooks/lib/tasks_tracker_gate.sh
+gate_missing_tracker <owner> <repo> || echo "missing-tracker gate UNKNOWN — nothing reported"
+printf '%s\n' "$TRACKER_REPORT"
+```
+
+Report **one line per candidate** — a feature directory with a `plan.md`/`design.md`/`spec.md`,
+no `tasks.md`, and at least one **open** issue or PR whose title or body mentions the feature
+slug. If `$TRACKER_REPORT` is empty, say "no missing trackers found" and move on — that is the
+legitimate quiet case, not a defect: a finished feature has no open issue or PR still naming it.
+
+⚠️ **Report only, never auto-create.** The tracker's content is judgement; an auto-generated
+empty `tasks.md` satisfies the check while helping nobody. ⚠️ **Fails closed on read errors**:
+a slug whose forge search fails is reported UNKNOWN, never assumed unreferenced.
+
 ## 3. THREADS — read, verify, fix, reply, resolve
 
 ⚠️ **Ask the gate; never eyeball the PR list.** A thread arrives *after* the moment work feels

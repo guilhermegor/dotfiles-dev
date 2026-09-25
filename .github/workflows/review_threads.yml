@@ -175,12 +175,21 @@ jobs:
           # decision is re-checked here at runtime instead. OWNER and REPO
           # come from the env: block above, which actionlint cannot see when
           # it lints this run: script standalone — hence SC2153.
+          # ⚠️ dotfiles-dev#502: this pattern MUST select exactly the same
+          # paths as coderabbit_trigger.yml's `paths:` filter
+          # (ai_clients/claude/hooks/** and ai_clients/claude/settings.json
+          # only) — a bare `(^|/)settings\.json$` matched ANY settings.json
+          # in the repo (e.g. .vscode/settings.json), so a PR could be
+          # REQUIRED to pass this gate while the trigger that would produce
+          # the review it demands never fires (measured on #493: asks=0 for
+          # 8h05m). tests/review_threads_trigger.bats asserts the two stay
+          # in lockstep.
           # shellcheck disable=SC2153
           changed=$(gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" \
             --json files --jq '.files[].path')
-          if ! printf '%s\n' "$changed" | grep -qE '^ai_clients/claude/hooks/|(^|/)settings\.json$'; then
+          if ! printf '%s\n' "$changed" | grep -qE '^ai_clients/claude/hooks/|^ai_clients/claude/settings\.json$'; then
             report success "gate not required (selective policy)" \
-              "No ai_clients/claude/hooks/ or settings.json changes in this PR."
+              "No ai_clients/claude/hooks/ or ai_clients/claude/settings.json changes in this PR."
           fi
 
           # No review at all is a distinct failure from "thread left open" —

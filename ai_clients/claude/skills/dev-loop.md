@@ -430,6 +430,37 @@ notice-and-report external timer is worth building; one 3-hour sample is not tha
    - ⚠️ A `DIRTY` PR is not a candidate: a review cannot resolve a merge conflict, so the ask is
      spent for nothing. Measured — of the five PRs holding the contended wiring files, **three
      were `DIRTY`**; asking for any of them would have burned the window.
+   - ⚠️ **A PR over the reviewer's file cap is not a candidate either — same reasoning as `DIRTY`:
+     a review cannot resolve a merge conflict, and it cannot read 241 files either (dotfiles-
+     dev#420).** This is a hard vendor refusal, not a rate limit — waiting does not clear it and
+     re-asking never will:
+
+     ```
+     ⚠️ Action not completed — Review skipped: 241 files exceed the limit of 100.
+     ```
+
+     The cap is a **named constant next to the check**, not a number buried in prose — it is a
+     vendor limit and it can move:
+
+     ```bash
+     CODERABBIT_FILE_CAP=100  # vendor limit — re-measure if the roster config changes reviewers
+     gh pr view <n> --json changedFiles --jq '.changedFiles'
+     ```
+
+     Exclude any candidate at or above `CODERABBIT_FILE_CAP` before ranking, the same point
+     `DIRTY` is excluded. Checking `changedFiles` up front is cheaper than reading a notice after
+     the fact and catches the refusal before an ask is ever spent — the ranker's own bias makes
+     this matter: it sorts by measured file contention then age, and a large mechanical PR (a
+     reindent, a formatter run, a mass rename) both ties or wins on contention and tends to be
+     old because nobody wants to rebase it, so it wins the age tiebreak too and gets selected
+     **first, every time a window opens** unless this filter runs before ranking. Report the
+     excluded count once, separately from the ranked list (`N over file cap, excluded`) — a
+     silent exclusion is indistinguishable from a ranker that never looked.
+
+     Do not hard-code CodeRabbit's 100 here beyond the constant above — the cap belongs beside the
+     roster config so a different reviewer's limit can be set without touching this filter's logic,
+     and do not attempt to auto-split an oversized PR: deciding the seam needs judgement the loop
+     does not have; its job is to stop wasting windows on it and say so.
    - ⚠️ **Skip any PR whose head was pushed in the last ~10 minutes.** A push already triggers a
      re-review (the item-1 note above), so an ask on top of it spends the window on a review that
      was already coming — `gh pr view <n> --json commits --jq '.commits[-1].committedDate'` against
@@ -582,6 +613,22 @@ Say **which branch fired** — human requested, re-requested, no assignable revi
 in one line. The four outcomes look identical from outside the loop, and "no assignable reviewer"
 in particular is a standing configuration gap that stays invisible if the step only reports when
 it acted.
+
+⚠️ **Name the refusal class, never just "pending" (dotfiles-dev#420).** "Requested — verdict
+pending" and "structurally refused" read identically from outside the loop today, which is what
+let two windows go by on a 241-file PR before anyone looked — both were reported the same way.
+When a candidate carries a prior ask with no submitted review, read the reviewer's **most recent
+notice** on that PR (the ack comment item 4 above already tracks, not the roster notice item 1
+reads) instead of assuming the verdict is still in flight:
+
+```bash
+gh pr view <n> --json comments --jq '.comments[-1].body' | grep -o 'exceed the limit of [0-9]*'
+```
+
+A match means the prior ask was **structurally refused** (file cap or another vendor limit) —
+report it as `#<n> structurally refused (file cap)`, not `requested — verdict pending`, and
+never re-ask it (the item-2 filter above now excludes it from candidacy going forward regardless).
+No match with no submitted review is genuinely pending — report it as such.
 
 🔴 **Report the count of open PRs with zero submitted reviews, every invocation — not only when
 this step acted.** "No refusal was posted" and "a review happened" are different facts, and a loop

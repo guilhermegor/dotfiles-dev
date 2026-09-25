@@ -225,9 +225,19 @@
       "Read(**/id_rsa)",
       "Read(**/id_ed25519)",
       "Read(**/.aws/credentials)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials/**)",
+      "Read(**/config/credentials.*)",
+      "Read(**/*.key)",
+      "Read(**/*.p12)",
+      "Read(**/*.pfx)",
       "Bash(rm -rf /:*)",
       "Bash(rm -rf ~:*)",
-      "Bash(chmod -R 777:*)"
+      "Bash(chmod -R 777:*)",
+      "Bash(cat ~/.ssh/*)",
+      "Bash(printenv:*)",
+      "Bash(env)",
+      "Bash(cat /proc/*/environ)"
     ]
   },
   "enabledPlugins": {

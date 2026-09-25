@@ -401,6 +401,49 @@ STUB
     [ ! -f "$GH_BUDGET_LATCH_FILE" ]
 }
 
+# --- sweep_no_automerge / sweep_behind_base: a raw 403 body must never read as PR numbers -------
+# dotfiles-dev#512: `gh api ... --jq` exits non-zero on an HTTP error WITHOUT ever running the
+# filter, but still writes the unfiltered JSON body to stdout. Piping that straight into
+# `while read` via `done < <(...)` (no exit-status check) turned each raw body line into a bogus
+# "- #{" / "- #\"message\": ..." finding instead of failing.
+
+stub_gh_raw_403_body() {
+    # Prints an UNFILTERED 403 error body to stdout (never running --jq) and exits 1 — the exact
+    # shape `gh api --jq` produces on an HTTP error.
+    cat > "$BIN/gh" <<'STUB'
+#!/bin/bash
+case "$*" in
+"api "*"pulls?state=open"*)
+    cat <<'BODY'
+{
+  "message": "API rate limit exceeded for user ID 55053188",
+  "documentation_url": "https://docs.github.com/rest"
+}
+BODY
+    exit 1
+    ;;
+*) exit 1 ;;
+esac
+STUB
+    chmod +x "$BIN/gh"
+}
+
+@test "sweep_no_automerge reports UNKNOWN on a raw 403 body, never fake PR numbers" {
+    stub_gh_raw_403_body
+    run sweep_no_automerge "o/r"
+    [[ "$output" == *"UNKNOWN"* ]]
+    [[ "$output" != *"- #{"* ]]
+    [[ "$output" != *'- #"message"'* ]]
+}
+
+@test "sweep_behind_base reports UNKNOWN on a raw 403 body, never fake PR numbers" {
+    stub_gh_raw_403_body
+    run sweep_behind_base "$REPO" "o/r" "main"
+    [[ "$output" == *"UNKNOWN"* ]]
+    [[ "$output" != *"- #{"* ]]
+    [[ "$output" != *'- #"message"'* ]]
+}
+
 @test "a gh API failure listing one PR's files reports UNKNOWN, never a clean overlap" {
     export ORPHAN_PR_NUMS="9"
     export ORPHAN_FAIL_FILES=1

@@ -86,14 +86,12 @@ gh_budget_latch_path() {
 }
 
 # gh_budget_latch_write [TTL_SECONDS]
-# Marks the budget exhausted until now+TTL (default 300s via $GH_BUDGET_LATCH_TTL).
-# ponytail: a fixed conservative window, not GitHub's real per-account reset time — this file's
-# own header rules out trusting `gh api rate_limit` for that, and re-probing is one cheap call
-# every TTL seconds rather than a guaranteed-correct reset, so a too-short TTL only costs one
-# extra probe, never a wrong "still exhausted" verdict. Tighten it if a trusted reset timestamp
-# ever becomes available.
+# Marks the budget exhausted until now+TTL. Default is $GH_BUDGET_LATCH_TTL, or 45s — a short
+# burst-backoff, not a long guess — because callers are expected to pass an explicit TTL from
+# gh_budget_reset_ttl() below once a real 403 has fired; this default only covers a caller that
+# skips that step.
 gh_budget_latch_write() {
-	local ttl="${1:-${GH_BUDGET_LATCH_TTL:-300}}"
+	local ttl="${1:-${GH_BUDGET_LATCH_TTL:-45}}"
 	printf '%s\n' "$(($(date +%s) + ttl))" >"$(gh_budget_latch_path)" 2>/dev/null
 }
 
@@ -108,4 +106,38 @@ gh_budget_latch_active() {
 	until="$(cat "$path" 2>/dev/null)"
 	[[ "$until" =~ ^[0-9]+$ ]] || return 1
 	[ "$(date +%s)" -lt "$until" ]
+}
+
+# gh_budget_reset_ttl [BURST_TTL]
+# A measured TTL for gh_budget_latch_write, given a REAL 403/429 already fired — this never
+# decides WHETHER the budget is exhausted (gh_budget_classify's job alone, off a real call's own
+# error text, per this file's header). `gh api rate_limit` costs nothing against any budget, so
+# once terminal is already known it is safe to spend one free call telling apart the two shapes
+# a GitHub 403 actually has:
+#   - primary exhaustion: `remaining` near zero on core or graphql — wait for the real `reset`.
+#   - a secondary/concurrency burst: `remaining` still high — the documented quota was never
+#     touched, and the right wait is seconds, not minutes.
+# Measured dotfiles-dev#445 follow-up, 2026-09-25: two real 403s on this repo, both with core
+# `remaining:5000/used:0` — a burst, not the documented quota, clearing in under a minute both
+# times. A 300s fixed latch was suppressing the sweep ~5 minutes over a ~40s condition.
+# Falls back to BURST_TTL (default 45s) on anything unreadable — an unreadable rate_limit read
+# must never be upgraded to "assume primary exhaustion", since this file's own header already
+# documents that endpoint reporting healthy quota it does not have; the failure mode of guessing
+# wrong here is only an extra cheap probe, never a suppressed real 403.
+gh_budget_reset_ttl() {
+	local burst_ttl="${1:-45}" json now remaining reset resource ttl
+	json="$(gh api rate_limit 2>/dev/null)" || {
+		printf '%s\n' "$burst_ttl"
+		return 0
+	}
+	now="$(date +%s)"
+	for resource in core graphql; do
+		remaining="$(printf '%s' "$json" | jq -r ".resources.$resource.remaining // empty" 2>/dev/null)"
+		reset="$(printf '%s' "$json" | jq -r ".resources.$resource.reset // empty" 2>/dev/null)"
+		if [[ "$remaining" =~ ^[0-9]+$ ]] && [ "$remaining" -lt 5 ] && [[ "$reset" =~ ^[0-9]+$ ]]; then
+			ttl=$((reset - now))
+			[ "$ttl" -gt 0 ] && printf '%s\n' "$ttl" && return 0
+		fi
+	done
+	printf '%s\n' "$burst_ttl"
 }

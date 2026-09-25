@@ -279,18 +279,34 @@ sweep_orphan_branches() {
 	[ "$any" = "0" ] && echo "    none"
 }
 
+# ⚠️ Both functions below capture the listing call into a variable and check ITS OWN exit status
+# before iterating — never `done < <(gh api ... 2>/dev/null)` directly. Piping straight into the
+# loop via process substitution discards the command's exit status, so a 403 prints its RAW
+# response body as fake PR numbers instead of failing: `gh api --jq` exits non-zero on an HTTP
+# error WITHOUT ever running the filter, but still writes the unfiltered JSON body to stdout —
+# `{`, `  "message": "API rate limit exceeded...",`, `}` — and each of those lines becomes a
+# bogus "- #{" / "- #\"message\": ..." finding (dotfiles-dev#512, found via the exact #445 latch
+# work above). Same fix shape sweep_review_gate() and sweep_orphan_branches() already use.
 sweep_no_automerge() {
-	local repo="$1" n any=0
+	local repo="$1" prs n any=0
+	if ! prs="$(gh api "repos/$repo/pulls?state=open" --jq '.[] | select(.auto_merge == null) | .number' 2>/dev/null)"; then
+		echo "    UNKNOWN — could not list open PRs (gh API failure), not 'none'"
+		return
+	fi
 	while read -r n; do
 		[ -n "$n" ] || continue
 		echo "    - #$n"
 		any=1
-	done < <(gh api "repos/$repo/pulls?state=open" --jq '.[] | select(.auto_merge == null) | .number' 2>/dev/null)
+	done <<<"$prs"
 	[ "$any" = "0" ] && echo "    none"
 }
 
 sweep_behind_base() {
-	local cwd="$1" repo="$2" db="$3" n headref behind any=0
+	local cwd="$1" repo="$2" db="$3" prs n headref behind any=0
+	if ! prs="$(gh api "repos/$repo/pulls?state=open" --jq '.[].number' 2>/dev/null)"; then
+		echo "    UNKNOWN — could not list open PRs (gh API failure), not 'none'"
+		return
+	fi
 	while read -r n; do
 		[ -n "$n" ] || continue
 		headref="$(gh api "repos/$repo/pulls/$n" --jq .head.ref 2>/dev/null)"
@@ -300,7 +316,7 @@ sweep_behind_base() {
 			echo "    - #$n: $behind commit(s) behind $db"
 			any=1
 		fi
-	done < <(gh api "repos/$repo/pulls?state=open" --jq '.[].number' 2>/dev/null)
+	done <<<"$prs"
 	[ "$any" = "0" ] && echo "    none"
 }
 
@@ -348,7 +364,7 @@ gh_budget_gate() {
 		gh_budget_classify "$(cat "$err" 2>/dev/null)"
 		rm -f "$err"
 		if gh_budget_is_terminal; then
-			gh_budget_latch_write
+			gh_budget_latch_write "$(gh_budget_reset_ttl)"
 			BUDGET_GATE_REASON="GitHub API budget just returned 403/429 — latched until reset"
 			return 1
 		fi

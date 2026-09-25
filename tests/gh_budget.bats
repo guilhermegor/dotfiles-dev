@@ -9,6 +9,9 @@ setup() {
 	source "$BATS_TEST_DIRNAME/../ai_clients/claude/hooks/lib/gh_budget.sh"
 	LATCH_DIR="$(mktemp -d)"
 	export GH_BUDGET_LATCH_FILE="$LATCH_DIR/latch"
+	BIN="$LATCH_DIR/bin"
+	mkdir -p "$BIN"
+	export PATH="$BIN:$PATH"
 }
 
 teardown() {
@@ -102,11 +105,53 @@ teardown() {
 	[ "$status" -ne 0 ]
 }
 
-@test "gh_budget_latch_write defaults to a 300s TTL" {
+@test "gh_budget_latch_write defaults to a 45s burst-backoff TTL" {
 	gh_budget_latch_write
 	now="$(date +%s)"
 	until="$(cat "$GH_BUDGET_LATCH_FILE")"
 	diff=$((until - now))
-	[ "$diff" -gt 290 ]
-	[ "$diff" -le 300 ]
+	[ "$diff" -gt 35 ]
+	[ "$diff" -le 45 ]
+}
+
+# --- gh_budget_reset_ttl: primary exhaustion vs. secondary/concurrency burst (dotfiles-dev#445 follow-up) --
+
+stub_gh_rate_limit() {
+    # $1 = core remaining, $2 = core reset (epoch), $3 = graphql remaining, $4 = graphql reset.
+    cat > "$BIN/gh" <<STUB
+#!/bin/bash
+case "\$*" in
+"api rate_limit")
+    cat <<JSON
+{"resources":{"core":{"remaining":$1,"reset":$2},"graphql":{"remaining":$3,"reset":$4}}}
+JSON
+    ;;
+*) exit 1 ;;
+esac
+STUB
+    chmod +x "$BIN/gh"
+}
+
+@test "primary exhaustion (core remaining near zero) waits for the real reset" {
+    reset=$(( $(date +%s) + 900 ))
+    stub_gh_rate_limit 0 "$reset" 5000 9999999999
+    ttl="$(gh_budget_reset_ttl 45)"
+    [ "$ttl" -gt 890 ]
+    [ "$ttl" -le 900 ]
+}
+
+@test "a secondary/concurrency burst (remaining still high) uses the short backoff, not the reset" {
+    stub_gh_rate_limit 5000 9999999999 4977 9999999999
+    ttl="$(gh_budget_reset_ttl 45)"
+    [ "$ttl" -eq 45 ]
+}
+
+@test "an unreadable rate_limit call falls back to the burst backoff, never assumes exhaustion" {
+    cat > "$BIN/gh" <<'STUB'
+#!/bin/bash
+exit 1
+STUB
+    chmod +x "$BIN/gh"
+    ttl="$(gh_budget_reset_ttl 45)"
+    [ "$ttl" -eq 45 ]
 }

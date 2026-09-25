@@ -76,13 +76,36 @@ gh_budget_is_terminal() {
 # waste. These three functions are the whole latch — write a marker on a real 403, and let any
 # caller check it before spending a single gh call.
 
+# gh_budget_latch_default_dir
+# A private base directory for the default latch path — never bare /tmp, which is world-writable
+# and lets another local user on a shared host disable the sweep indefinitely by pre-creating the
+# predictable filename with a far-future timestamp (dotfiles-dev#511 review). Prefers
+# $XDG_RUNTIME_DIR (already private, mode 0700, per the XDG spec — the check below only confirms
+# it EXISTS, since a spec-compliant runtime dir is never created on demand by this script). Falls
+# back to "$HOME/.cache" (created mode 0700 if missing). If even that mkdir fails (no $HOME, a
+# read-only home, ...), this still falls back to bare /tmp as the last resort a caller with no
+# private directory anywhere has left — gh_budget_latch_write's own write-failure check is what
+# keeps THAT last-resort case from failing silently rather than pretending it is safe.
+gh_budget_latch_default_dir() {
+	if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ]; then
+		printf '%s\n' "$XDG_RUNTIME_DIR"
+		return 0
+	fi
+	# -m on `mkdir -p` only sets the mode of the DEEPEST directory (SC2174) — chmod separately so
+	# ".cache" ends up 0700 even if $HOME itself had to be created too.
+	if [ -n "${HOME:-}" ] && mkdir -p "$HOME/.cache" 2>/dev/null && chmod 700 "$HOME/.cache" 2>/dev/null; then
+		printf '%s\n' "$HOME/.cache"
+		return 0
+	fi
+	printf '%s\n' "/tmp"
+}
+
 # gh_budget_latch_path
 # $GH_BUDGET_LATCH_FILE overrides it (tests, or a caller wanting a scoped marker); otherwise a
-# fixed path under $XDG_RUNTIME_DIR (falls back to /tmp — not every host sets it) shared by every
-# dotfiles-dev hook process on this machine, since the exhausted budget is account-wide, never
-# per-repo.
+# fixed filename under gh_budget_latch_default_dir, shared by every dotfiles-dev hook process on
+# this machine, since the exhausted budget is account-wide, never per-repo.
 gh_budget_latch_path() {
-	printf '%s\n' "${GH_BUDGET_LATCH_FILE:-${XDG_RUNTIME_DIR:-/tmp}/dotfiles-dev-sweep-403-until}"
+	printf '%s\n' "${GH_BUDGET_LATCH_FILE:-$(gh_budget_latch_default_dir)/dotfiles-dev-sweep-403-until}"
 }
 
 # gh_budget_latch_write [TTL_SECONDS]
@@ -90,9 +113,20 @@ gh_budget_latch_path() {
 # burst-backoff, not a long guess — because callers are expected to pass an explicit TTL from
 # gh_budget_reset_ttl() below once a real 403 has fired; this default only covers a caller that
 # skips that step.
+# Returns 0 on a confirmed write, 1 (with a message on stderr) if the write itself failed — e.g.
+# the marker path is owned by another user and not writable. dotfiles-dev#511 review: the old
+# version discarded this status entirely (`2>/dev/null` with nothing checking `$?`), so a failed
+# write meant the sweep silently kept re-running the full fan-out forever with no record of why
+# the latch never took. Callers decide what to do with a failure; this function's only job is to
+# stop hiding it.
 gh_budget_latch_write() {
-	local ttl="${1:-${GH_BUDGET_LATCH_TTL:-45}}"
-	printf '%s\n' "$(($(date +%s) + ttl))" >"$(gh_budget_latch_path)" 2>/dev/null
+	local ttl="${1:-${GH_BUDGET_LATCH_TTL:-45}}" path
+	path="$(gh_budget_latch_path)"
+	if ! printf '%s\n' "$(($(date +%s) + ttl))" >"$path" 2>/dev/null; then
+		echo "gh_budget_latch_write: could not write latch marker at $path" >&2
+		return 1
+	fi
+	return 0
 }
 
 # gh_budget_latch_active

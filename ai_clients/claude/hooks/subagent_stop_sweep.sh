@@ -355,6 +355,22 @@ free_dispatch_surface() {
 # out the expensive way every time.
 # A non-budget failure (bad repo, network blip) still returns 0: this gate only ever stops the
 # sweep for a BUDGET reason, it is not a general health check.
+# _gh_budget_latch_reason WHY
+# Writes the latch with the measured TTL and builds BUDGET_GATE_REASON around WHY — appending an
+# explicit "latch write FAILED" note when gh_budget_latch_write itself couldn't write the marker
+# (dotfiles-dev#511 review: a swallowed write failure left the sweep silently unable to ever
+# latch, indistinguishable from a healthy latch by anything reading BUDGET_GATE_REASON alone).
+# Always returns 1 — every caller latches (or tries to) only on a path that already means "stop".
+_gh_budget_latch_reason() {
+	local why="$1"
+	if gh_budget_latch_write "$(gh_budget_reset_ttl)"; then
+		BUDGET_GATE_REASON="$why — latched until reset"
+	else
+		BUDGET_GATE_REASON="$why — latch write FAILED, next sweep will re-probe"
+	fi
+	return 1
+}
+
 gh_budget_gate() {
 	local repo="$1" err rc
 	BUDGET_GATE_REASON=""
@@ -363,8 +379,7 @@ gh_budget_gate() {
 		return 1
 	fi
 	if gh_budget_quota_exhausted; then
-		gh_budget_latch_write "$(gh_budget_reset_ttl)"
-		BUDGET_GATE_REASON="GitHub API quota (core or graphql) already exhausted per rate_limit — latched until reset"
+		_gh_budget_latch_reason "GitHub API quota (core or graphql) already exhausted per rate_limit"
 		return 1
 	fi
 	err="$(mktemp)"
@@ -374,8 +389,7 @@ gh_budget_gate() {
 		gh_budget_classify "$(cat "$err" 2>/dev/null)"
 		rm -f "$err"
 		if gh_budget_is_terminal; then
-			gh_budget_latch_write "$(gh_budget_reset_ttl)"
-			BUDGET_GATE_REASON="GitHub API budget just returned 403/429 — latched until reset"
+			_gh_budget_latch_reason "GitHub API budget just returned 403/429"
 			return 1
 		fi
 		return 0

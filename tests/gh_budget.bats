@@ -185,3 +185,57 @@ STUB
     run gh_budget_quota_exhausted
     [ "$status" -ne 0 ]
 }
+
+# --- gh_budget_latch_default_dir / gh_budget_latch_path: never bare world-writable /tmp ----------
+# dotfiles-dev#511 review (Minor): the old default was a FIXED, PREDICTABLE filename directly
+# under /tmp. On a shared host another local user can pre-create that name with a far-future
+# timestamp and disable the sweep indefinitely. Every test here unsets the setup()-exported
+# GH_BUDGET_LATCH_FILE to exercise the real default-resolution path.
+
+@test "default latch dir prefers XDG_RUNTIME_DIR when it exists" {
+    unset GH_BUDGET_LATCH_FILE
+    export XDG_RUNTIME_DIR="$LATCH_DIR/xdg"
+    mkdir -p "$XDG_RUNTIME_DIR"
+    run gh_budget_latch_default_dir
+    [ "$output" = "$XDG_RUNTIME_DIR" ]
+}
+
+@test "default latch dir falls back to a private HOME/.cache, never bare /tmp" {
+    unset GH_BUDGET_LATCH_FILE
+    unset XDG_RUNTIME_DIR
+    export HOME="$LATCH_DIR/fakehome"
+    run gh_budget_latch_default_dir
+    [ "$output" = "$HOME/.cache" ]
+    [ -d "$HOME/.cache" ]
+}
+
+@test "gh_budget_latch_path never resolves under bare /tmp with no override and no XDG dir" {
+    unset GH_BUDGET_LATCH_FILE
+    unset XDG_RUNTIME_DIR
+    export HOME="$LATCH_DIR/fakehome2"
+    run gh_budget_latch_path
+    # $LATCH_DIR (mktemp -d's default TMPDIR) legitimately sits under /tmp in this test sandbox,
+    # so the real assertion is "resolves under the private HOME/.cache", not "contains no /tmp
+    # substring anywhere" -- the bug this guards against is a FIXED name directly at /tmp's own
+    # top level (world-writable, predictable), never a private dir that happens to live there.
+    [ "$output" = "$HOME/.cache/dotfiles-dev-sweep-403-until" ]
+}
+
+# --- gh_budget_latch_write: a real write failure must be reported, never swallowed ----------------
+# dotfiles-dev#511 review (Minor): the old version discarded the redirect's own exit status
+# entirely (`2>/dev/null`, nothing checking `$?`), so a failed write was indistinguishable from a
+# successful one to every caller.
+
+@test "gh_budget_latch_write succeeds and returns 0 when the path is writable" {
+    run gh_budget_latch_write 45
+    [ "$status" -eq 0 ]
+    [ -f "$GH_BUDGET_LATCH_FILE" ]
+}
+
+@test "gh_budget_latch_write reports failure instead of swallowing it" {
+    mkdir -p "$LATCH_DIR/blocked"
+    export GH_BUDGET_LATCH_FILE="$LATCH_DIR/blocked"
+    run gh_budget_latch_write 45
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"could not write latch marker"* ]]
+}

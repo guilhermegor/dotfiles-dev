@@ -427,6 +427,29 @@ STUB
     [ -f "$GH_BUDGET_LATCH_FILE" ]
 }
 
+# dotfiles-dev#511 review (Minor): the latch write can fail (marker path owned by another user,
+# read-only filesystem, ...) and the old gh_budget_gate never checked it, so BUDGET_GATE_REASON
+# claimed "latched until reset" even though nothing was written. Called directly (not via `run`,
+# which forks a subshell) so BUDGET_GATE_REASON is readable afterward in this test's own shell.
+@test "gh_budget_gate reports a failed latch write instead of hiding it" {
+    mkdir -p "$REPO/blocked"
+    export GH_BUDGET_LATCH_FILE="$REPO/blocked"
+    stub_gh_budget_probe 403
+
+    # Not `run` (a subshell — BUDGET_GATE_REASON would not survive it) and not a bare call either
+    # (bats runs test bodies under errexit, so an unguarded non-zero return would abort the test
+    # before `status=$?` ever ran) -- the `if` form is the exemption from errexit that still lets
+    # this run in the current shell.
+    if gh_budget_gate "o/r"; then
+        status=0
+    else
+        status=$?
+    fi
+
+    [ "$status" -eq 1 ]
+    [[ "$BUDGET_GATE_REASON" == *"latch write FAILED"* ]]
+}
+
 # --- sweep_no_automerge / sweep_behind_base: a raw 403 body must never read as PR numbers -------
 # dotfiles-dev#512: `gh api ... --jq` exits non-zero on an HTTP error WITHOUT ever running the
 # filter, but still writes the unfiltered JSON body to stdout. Piping that straight into

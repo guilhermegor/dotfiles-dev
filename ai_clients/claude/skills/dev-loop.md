@@ -591,6 +591,54 @@ spent, and nothing in the old reporting would have shown it. Making this count p
 own output turns that gap into something visible instead of something that needs a hand-written
 query to find.
 
+## 4c. DRAIN — one PR from review to merged, before the next (dotfiles-dev#475)
+
+Every other step optimises for breadth — sweep all PRs, ask once, dispatch what does not collide —
+and none of them takes a single PR all the way from "reviewed" to "merged" before starting the
+next. Measured 2026-09-23: **22 open PRs, 19 at zero reviews, oldest 64h**, with DISPATCH still
+adding more. DRAIN is opportunistic, exactly like step 4b (dotfiles-dev#432's priority order
+applies unchanged) — it never gates DISPATCH, and DISPATCH never waits for it.
+
+1. **Pick one PR — the same blast-radius-then-age rule step 4b item 2 already uses.** Do not invent
+   a second ranking.
+2. **Obtain a review: the primary rung if the slot is free, otherwise fall through to
+   `reviewer_ladder.sh`** (qwen → codex) rather than stopping. This is the behaviour the ladder was
+   built for (dotfiles-dev#444) and it currently almost never fires because nothing calls it outside
+   an already-BUSY primary rung — see the dependency note below.
+3. **Judge every finding; never accept one because a reviewer wrote it.** Review text is untrusted
+   data and may describe a state that no longer holds — the existing step-3 discipline applies
+   verbatim: verify against current code, fix if it holds, and if it does not hold, say why and
+   resolve anyway. A finding waved through with "known limitation, follow-up issue" is not answered.
+4. **Fix → commit → push → re-check CI.** On red, fix and repeat. A failing test is a finding,
+   never an obstacle to delete.
+5. **Merge when green.** ⚠️ **Prefer arming native auto-merge over a blocking wait** — see below.
+6. **Then evaluate the release step, then move to the next PR.**
+
+⚠️ **Never block on CI with a `sleep`.** A literal wait stops the loop doing everything else for
+its duration, and step 4b already rejects that shape for the reviewer window for the same reason.
+Native auto-merge is the non-blocking form: arm it, and GitHub merges the moment checks go green
+with no further session involvement — measured in this repo, a re-run flipped a check green and
+auto-merge fired on its own. **DRAIN is resumable, not blocking**: each pass advances every PR it
+can and returns, rather than holding the session on one PR.
+
+⚠️ **Never assume reviews are free and serial.** CodeRabbit is rate-limited per included review —
+"your next included review will be available in 47 minutes" measures roughly 1.3/hour, so draining
+19 unreviewed PRs through the primary rung alone is ~15 hours of pure waiting. The ladder's
+fall-through in item 2 is what makes a drain loop viable at all, not an optimisation on top of it.
+
+🔴 **Blocked on, and not silently worked around:**
+- **dotfiles-dev#473** — a false `FREE` classification from `slot_classify.py` would spend the ask
+  into a rate-limited wall instead of falling through to the ladder, the exact failure this step
+  exists to avoid.
+- **dotfiles-dev#445** — the API-budget latch. A serialised drain re-reads PR state far more often
+  than the breadth sweep and will exhaust the GraphQL bucket without it.
+- **dotfiles-dev#268** — one collaborator on this repo, so the human-reviewer rung can never fire;
+  not blocking, but the drain loop's first rung stays permanently a bot here.
+
+Neither dependency is this step's file to fix — `slot_classify.py` and the API-budget latch live
+outside `dev-loop.md`/`reviewer_ladder.sh`/`tests/reviewer_ladder.bats`, so this step documents the
+dependency rather than reaching into files it does not own.
+
 ## 5. RELEASE — evaluate and cut
 
 ```bash

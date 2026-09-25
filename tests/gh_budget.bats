@@ -233,9 +233,25 @@ STUB
 }
 
 @test "gh_budget_latch_write reports failure instead of swallowing it" {
-    mkdir -p "$LATCH_DIR/blocked"
-    export GH_BUDGET_LATCH_FILE="$LATCH_DIR/blocked"
+    # A read-only PARENT dir, not a directory standing in for the file: the write now goes to a
+    # temp file first (atomic rename, dotfiles-dev#511 CodeRabbit follow-up), and `mv` onto an
+    # existing directory MOVES INTO it rather than failing -- the write must be blocked at its
+    # source (no permission to create anything in the directory at all) to still reproduce.
+    mkdir -p "$LATCH_DIR/readonly"
+    chmod 500 "$LATCH_DIR/readonly"
+    export GH_BUDGET_LATCH_FILE="$LATCH_DIR/readonly/marker"
     run gh_budget_latch_write 45
     [ "$status" -ne 0 ]
     [[ "$output" == *"could not write latch marker"* ]]
+}
+
+@test "gh_budget_latch_write leaves no leftover temp file behind on success" {
+    # Confirms the temp-then-rename contract cleans up after itself -- a real concurrent-read
+    # race is inherently timing-dependent and not something this suite tries to reproduce
+    # deterministically; this checks the artifact the atomic write leaves (or doesn't).
+    gh_budget_latch_write 45
+    shopt -s nullglob
+    leftovers=("$GH_BUDGET_LATCH_FILE".tmp.*)
+    shopt -u nullglob
+    [ "${#leftovers[@]}" -eq 0 ]
 }

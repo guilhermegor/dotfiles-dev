@@ -113,17 +113,35 @@ gh_budget_latch_path() {
 # burst-backoff, not a long guess — because callers are expected to pass an explicit TTL from
 # gh_budget_reset_ttl() below once a real 403 has fired; this default only covers a caller that
 # skips that step.
-# Returns 0 on a confirmed write, 1 (with a message on stderr) if the write itself failed — e.g.
-# the marker path is owned by another user and not writable. dotfiles-dev#511 review: the old
-# version discarded this status entirely (`2>/dev/null` with nothing checking `$?`), so a failed
-# write meant the sweep silently kept re-running the full fan-out forever with no record of why
-# the latch never took. Callers decide what to do with a failure; this function's only job is to
-# stop hiding it.
+#
+# Writes to a TEMP file in the same directory, then `mv` over the real path — never `>` directly
+# on the marker (dotfiles-dev#511 review, CodeRabbit follow-up): a plain `>` truncates the file
+# the instant it opens, before `printf` has written anything, so a concurrent
+# gh_budget_latch_active() read in that window sees an EMPTY marker and treats the budget as not
+# latched, triggering exactly the extra probe this file exists to avoid. `mv` on the same
+# filesystem is atomic, so any concurrent reader sees either the old marker or the complete new
+# one, never a partial write. The temp file lives next to the target (not $TMPDIR) so the `mv` is
+# guaranteed same-filesystem — a cross-filesystem `mv` silently falls back to copy+unlink, which
+# is not atomic.
+#
+# Returns 0 on a confirmed write, 1 (with a message on stderr) if either the temp write or the
+# rename failed — e.g. the marker directory is owned by another user and not writable.
+# dotfiles-dev#511 review: the old version discarded this status entirely (`2>/dev/null` with
+# nothing checking `$?`), so a failed write meant the sweep silently kept re-running the full
+# fan-out forever with no record of why the latch never took. Callers decide what to do with a
+# failure; this function's only job is to stop hiding it.
 gh_budget_latch_write() {
-	local ttl="${1:-${GH_BUDGET_LATCH_TTL:-45}}" path
+	local ttl="${1:-${GH_BUDGET_LATCH_TTL:-45}}" path tmp
 	path="$(gh_budget_latch_path)"
-	if ! printf '%s\n' "$(($(date +%s) + ttl))" >"$path" 2>/dev/null; then
+	tmp="$path.tmp.$$"
+	if ! printf '%s\n' "$(($(date +%s) + ttl))" >"$tmp" 2>/dev/null; then
+		rm -f "$tmp" 2>/dev/null
 		echo "gh_budget_latch_write: could not write latch marker at $path" >&2
+		return 1
+	fi
+	if ! mv -f "$tmp" "$path" 2>/dev/null; then
+		rm -f "$tmp" 2>/dev/null
+		echo "gh_budget_latch_write: could not install latch marker at $path" >&2
 		return 1
 	fi
 	return 0

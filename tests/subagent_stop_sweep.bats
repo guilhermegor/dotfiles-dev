@@ -432,8 +432,13 @@ STUB
 # claimed "latched until reset" even though nothing was written. Called directly (not via `run`,
 # which forks a subshell) so BUDGET_GATE_REASON is readable afterward in this test's own shell.
 @test "gh_budget_gate reports a failed latch write instead of hiding it" {
-    mkdir -p "$REPO/blocked"
-    export GH_BUDGET_LATCH_FILE="$REPO/blocked"
+    # A read-only PARENT dir: the write goes to a temp file first (atomic rename, dotfiles-dev#511
+    # CodeRabbit follow-up), and `mv` onto an existing directory moves INTO it rather than failing
+    # -- the write must be blocked at its source (no permission to create anything in the
+    # directory) to still reproduce a failure.
+    mkdir -p "$REPO/readonly"
+    chmod 500 "$REPO/readonly"
+    export GH_BUDGET_LATCH_FILE="$REPO/readonly/marker"
     stub_gh_budget_probe 403
 
     # Not `run` (a subshell — BUDGET_GATE_REASON would not survive it) and not a bare call either

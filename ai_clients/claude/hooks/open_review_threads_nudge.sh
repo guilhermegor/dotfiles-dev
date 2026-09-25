@@ -90,6 +90,7 @@ command -v gh >/dev/null 2>&1 || exit 0
 ROSTER_FILE='.review-bots.yaml'
 : "${OPEN_THREADS_NUDGE_MAX_PRS:=50}"
 : "${OPEN_THREADS_NUDGE_CACHE_TTL:=300}"
+: "${OPEN_THREADS_NUDGE_CACHE_PRUNE_MULTIPLIER:=6}"
 
 # GraphQL query + classification live in one shared place (dotfiles-dev#167):
 # the SubagentStop board sweep (subagent_stop_sweep.sh) calls the identical
@@ -292,6 +293,32 @@ _emit_verdict() {
 	esac
 }
 
+# _prune_stale_cache_entries DIR
+# Deletes every cache file older than OPEN_THREADS_NUDGE_CACHE_TTL *
+# OPEN_THREADS_NUDGE_CACHE_PRUNE_MULTIPLIER seconds (dotfiles-dev#504). Entries are keyed by
+# session id and a session never returns, so the deploy-time clear (install_hooks() ->
+# invalidate_hook_caches(), #507) only handles the "logic changed" half -- a long-lived install
+# still accumulates one file per session forever otherwise (measured: 11 entries, 3 repos, 5
+# sessions, oldest several days stale). The multiplier (default 6, i.e. 30 min at the default
+# 300s TTL) is deliberately looser than the TTL itself: an active session's entry is rewritten
+# on every scan that finds its cache expired, so only a session that has genuinely gone quiet for
+# several TTL windows is a prune candidate -- pruning at exactly 1x TTL would race a session whose
+# Stop hook simply fires less often than the TTL. A file with an unreadable/missing `ts` is
+# treated as maximally stale and pruned the same way, never kept on the strength of a parse error.
+_prune_stale_cache_entries() {
+	local dir="$1" max_age now f ts age
+	[ -d "$dir" ] || return 0
+	max_age=$((OPEN_THREADS_NUDGE_CACHE_TTL * OPEN_THREADS_NUDGE_CACHE_PRUNE_MULTIPLIER))
+	now="$(date +%s)"
+	for f in "$dir"/*; do
+		[ -f "$f" ] || continue
+		ts="$(jq -r '.ts // 0' "$f" 2>/dev/null)"
+		[[ "$ts" =~ ^[0-9]+$ ]] || ts=0
+		age=$((now - ts))
+		[ "$age" -ge "$max_age" ] && rm -f "$f"
+	done
+}
+
 # _scan_cache_path SESSION_ID OWNER NAME
 # Prints the cache file path, or fails (empty stdout, non-zero return) when there is no session
 # id to key it by, or the cache directory cannot be created — either way the caller treats that
@@ -301,6 +328,7 @@ _scan_cache_path() {
 	[ -n "$session_id" ] || return 1
 	dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/open-threads-nudge"
 	mkdir -p "$dir" 2>/dev/null || return 1
+	_prune_stale_cache_entries "$dir"
 	printf '%s/%s-%s_%s\n' "$dir" "$session_id" "$owner" "$name"
 }
 

@@ -26,6 +26,24 @@ name: review_threads
 # door. Every trigger — including issue_comment — instead falls through to
 # the SAME live re-check of reviews/threads; the completion marker only ever
 # ADDS a positive "a reviewer has reported" signal, it never skips the check.
+#
+# ⚠️ dotfiles-dev#492: a push moves the PR head and NONE of the three
+# triggers above observe that — the required check stays stranded on the old
+# commit and the new head carries no check-run at all, which branch
+# protection reads as BLOCKED exactly like a red one, with nothing to
+# explain why. The fix for THAT is deliberately not `pull_request:
+# [synchronize]` on this file: adding it here would recompute this script's
+# full live verdict at push time, and the honest verdict at push time is
+# almost always "no reviewer has reported on this head yet" mixed with
+# whatever review state carried over from the OLD head — reopening
+# blueprintx#180 in the opposite direction (a stale pass surviving the push
+# that invalidated it). The push-triggered half lives in the sibling
+# workflow `review_threads_republish.yml`, which only ever publishes
+# `failure` (or the non-review "not required" scope skip) on a push, never a
+# review-based `success`. `workflow_dispatch` below is the manual escape
+# hatch instead: it re-runs this file's own live verdict computation
+# on-demand, the same computation a review/comment event would trigger,
+# so it can still legitimately publish `success`.
 on:
   pull_request_review:
     types: [submitted, edited, dismissed]
@@ -33,6 +51,11 @@ on:
     types: [created, edited]
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to recompute and republish the live verdict for
+        required: true
 
 permissions:
   contents: read
@@ -69,7 +92,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
           EVENT_NAME: ${{ github.event_name }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
           COMMENT_BODY: ${{ github.event.comment.body }}

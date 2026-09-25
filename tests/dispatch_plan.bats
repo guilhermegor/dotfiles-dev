@@ -333,6 +333,58 @@ field() {
     [ "$(field '.excluded | length')" -eq 0 ]
 }
 
+# --- PR #506 review: same-repo qualified references, and a truncated PR read fails loud -------
+
+@test "a same-repository qualified reference (owner/repo#N) excludes the same as bare #N" {
+    stub_gh "[$(issue_json 361 free/a.sh)]" "" "" 0 "" \
+        '[{"number":514,"title":"stacked follow-up","body":"see acme/widgets#361 for context","closingIssuesReferences":[]}]'
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 0 ]
+    [ "$(field '.excluded[0].issue')" = "361" ]
+    [[ "$(field '.excluded[0].reason')" == *"PR #514"* ]]
+}
+
+@test "a DIFFERENT repository's qualified reference never excludes this issue" {
+    stub_gh "[$(issue_json 361 free/a.sh)]" "" "" 0 "" \
+        '[{"number":514,"title":"unrelated","body":"see other/repo#361 for context","closingIssuesReferences":[]}]'
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable[0].issue')" = "361" ]
+    [ "$(field '.excluded | length')" -eq 0 ]
+}
+
+@test "a same-repository qualified reference matches case-insensitively" {
+    stub_gh "[$(issue_json 361 free/a.sh)]" "" "" 0 "" \
+        '[{"number":514,"title":"stacked follow-up","body":"see ACME/Widgets#361 for context","closingIssuesReferences":[]}]'
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable | length')" -eq 0 ]
+    [ "$(field '.excluded[0].issue')" = "361" ]
+}
+
+@test "a repo slug that is merely a suffix of a longer word does not match (near-miss)" {
+    stub_gh "[$(issue_json 361 free/a.sh)]" "" "" 0 "" \
+        '[{"number":514,"title":"noise","body":"notacme/widgets#361 should not count","closingIssuesReferences":[]}]'
+    run_planner
+    [ "$status" -eq 0 ]
+    [ "$(field '.dispatchable[0].issue')" = "361" ]
+    [ "$(field '.excluded | length')" -eq 0 ]
+}
+
+@test "an open PR list at the 200-PR cap refuses to print a plan, never a partial one" {
+    local prs="[" i
+    for ((i = 1; i <= 200; i++)); do
+        [ "$i" -gt 1 ] && prs+=","
+        prs+="{\"number\":$i,\"title\":\"\",\"body\":\"\",\"closingIssuesReferences\":[]}"
+    done
+    prs+="]"
+    stub_gh "[$(issue_json 1)]" "" "" 0 "" "$prs"
+    run_planner
+    [ "$status" -ne 0 ]
+    [[ "$output" != *'"dispatchable"'* ]]
+}
+
 # --- fail-closed half of the gate contract (dotfiles-dev#398) --------------------------------
 
 @test "a gate failure excludes every issue as UNKNOWN, never a partial free answer" {

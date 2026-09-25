@@ -76,6 +76,13 @@ GATE_TIMEOUT = 25
 # editable from here (dotfiles-dev#433 finding 2, see module docstring).
 FREE_SURFACE_ISSUE_CAP = 500
 
+# open_prs()'s own `--limit`, and the truncation-detection cap `build_plan` checks its read
+# against (PR #506 review): a truncated read can miss an open PR that mentions a later issue,
+# reading that issue as unmentioned rather than held — the same failure shape #433 finding 2
+# names for the issue read above, so it gets the same fix (fail loud at the cap, never silently
+# treat a possibly-truncated list as complete).
+OPEN_PR_LIST_CAP = 200
+
 SURFACE_BLOCK_RE = re.compile(r"```surface\s*\n(.*?)```", re.DOTALL)
 GLOB_CHARS = ("*", "?", "[")
 
@@ -240,7 +247,10 @@ def open_prs(slug: str) -> list[dict]:
 	graphql`` call ``gate_free_surface`` already makes for ``FREE_UNCLAIMED_ISSUES``, because
 	that call answers "does this PR close issue N" and never exposes the PR's own title/body
 	text this function needs to answer a different question: "does this PR merely NAME issue
-	N" (dotfiles-dev#413).
+	N" (dotfiles-dev#413). Capped at ``OPEN_PR_LIST_CAP`` — ``build_plan`` refuses to print a
+	plan when the result hits that cap, same contract as ``open_issues``/
+	``FREE_SURFACE_ISSUE_CAP`` (PR #506 review: a truncated read can miss a PR that mentions a
+	later issue, reading that issue as unmentioned rather than held).
 	"""
 	raw = _run(
 		[
@@ -254,20 +264,30 @@ def open_prs(slug: str) -> list[dict]:
 			"--json",
 			"number,title,body,closingIssuesReferences",
 			"--limit",
-			"200",
+			str(OPEN_PR_LIST_CAP),
 		]
 	)
 	return json.loads(raw) if raw else []
 
 
-def mentioned_without_closing(issue_numbers: set[int], prs: list[dict]) -> dict[int, str]:
+def mentioned_without_closing(issue_numbers: set[int], prs: list[dict], slug: str) -> dict[int, str]:
 	"""Return ``{issue: reason}`` for every issue an open PR names without closing it.
 
 	``closingIssuesReferences`` is the reliable oracle for "this PR WILL close that issue"
 	(module docstring); a bare ``#N`` in the same PR's title or body without a closing keyword
 	is neither closing it nor irrelevant — GitHub still renders it as a cross-reference, so
 	dispatching #N risks a duplicate PR against real, in-review work (dotfiles-dev#413).
+
+	Matches ``#N`` (word-boundary, so ``#12`` never matches inside ``#123``) and also ``<this
+	repo's slug>#N`` (e.g. ``acme/widgets#361``, GitHub's own same-repository qualified
+	reference syntax, matched case-insensitively the way GitHub itself treats a repo slug) —
+	never a *different* repo's qualified reference (``other/repo#361`` says nothing about this
+	repo's issue #361), and never a slug that is merely a SUFFIX of a longer word
+	(``notacme/widgets#361`` must not match ``acme/widgets#361`` — requiring a non-word,
+	non-slash character (or start of text) immediately before the slug rejects it, PR #506
+	review).
 	"""
+	slug_re = re.escape(slug)
 	reasons: dict[int, str] = {}
 	for pr in prs:
 		closing = {ref["number"] for ref in pr.get("closingIssuesReferences") or []}
@@ -275,7 +295,8 @@ def mentioned_without_closing(issue_numbers: set[int], prs: list[dict]) -> dict[
 		for number in issue_numbers - closing:
 			if number in reasons:
 				continue
-			if re.search(rf"(?<!\w)#{number}(?!\d)", text):
+			pattern = rf"(?<!\w)#{number}(?!\d)|(?<![\w/]){slug_re}#{number}(?!\d)"
+			if re.search(pattern, text, re.IGNORECASE):
 				reasons[number] = (
 					f"referenced by open PR #{pr['number']} without a closing keyword — "
 					"verify by hand (missing `Closes`, or a deliberate stacked follow-up)"
@@ -403,7 +424,15 @@ def build_plan() -> dict:
 		)
 
 	issue_numbers = {issue["number"] for issue in issues}
-	mention_reasons = mentioned_without_closing(issue_numbers, open_prs(slug)) if issues else {}
+	prs = open_prs(slug) if issue_numbers else []
+	if len(prs) >= OPEN_PR_LIST_CAP:
+		raise RuntimeError(
+			f"open PR count ({len(prs)}) is at or past the {OPEN_PR_LIST_CAP}-PR cap this "
+			"read shares with its own --limit (PR #506 review) — a truncated read can miss "
+			"a PR that mentions a later issue, misclassifying it as unmentioned; refusing to "
+			"print a plan rather than a possibly wrong one"
+		)
+	mention_reasons = mentioned_without_closing(issue_numbers, prs, slug) if issue_numbers else {}
 
 	default = default_branch(slug)
 	live_ok, live_held = live_agent_held_paths(root, default) if default else (False, [])

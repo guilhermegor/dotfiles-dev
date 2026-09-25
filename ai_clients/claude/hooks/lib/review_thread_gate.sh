@@ -15,8 +15,18 @@
 #
 # Contract: call `gate_pr_thread_state OWNER REPO NUMBER [ROSTER_FILE]`.
 # It sets two globals and returns nothing meaningful (check GATE_STATUS):
-#   GATE_STATUS = clean | problems | running | unreadable
+#   GATE_STATUS = clean | problems | running | unreviewed | unreadable
 #   GATE_DETAIL = human-readable multi-line detail (empty when clean)
+#
+# `unreviewed` (dotfiles-dev#505) is distinct from `clean`: `clean` means "no
+# unanswered thread was found", which is also true of a PR no roster reviewer
+# has ever looked at -- reviewThreads is empty either way, so the original
+# three-state verdict could not tell "reviewed, nothing to answer" apart from
+# "nobody has spoken". `unreviewed` fires only when no roster reviewer has
+# submitted a review AND posted no completion comment on the current head --
+# derived from the roster (_gate_roster_logins), never from `reviews | length`,
+# so a human review by the PR's own author or a bot outside the roster does
+# not count as a reviewer having reported.
 # shellcheck disable=SC2034 # both are read by every caller after the call returns
 set -u
 
@@ -48,7 +58,11 @@ query($owner:String!, $repo:String!, $number:Int!) {
       }
       comments(last:100) {
         totalCount
-        nodes { author { login } authorAssociation body createdAt }
+        nodes { id author { login __typename } authorAssociation body createdAt }
+      }
+      reviews(first:100) {
+        totalCount
+        nodes { author { login __typename } }
       }
       commits(last:1) {
         nodes {
@@ -163,8 +177,18 @@ JQ
 # qwen's output shapes differ, and the rung resolved at run time is not fixed). A ladder review
 # with neither is a clean report (dotfiles-dev#490's #438 fixture) and must not fire.
 #
-# "Answered" mirrors the thread path's own rule: a later comment from a DIFFERENT author, at least
-# $min chars, i.e. a substantive reply -- not merely a reply existing.
+# "Answered" mirrors the thread path's own rule: a later, substantive (>= $min chars) comment --
+# but the discriminator that stops a finding from being "answered" by ITSELF is comment IDENTITY
+# (this comment's `id` is not the ladder comment's own `id`), never author identity.
+#
+# ⚠️ dotfiles-dev#511 (measured, its own comment ids/timestamps): the ladder posts its fallback
+# review under the OPERATOR's own token (the only account authorAssociation trusts here), and the
+# operator is also the only account that can reply to it -- so an author-INEQUALITY test made every
+# ladder finding structurally unanswerable: ladder comment 5830451560 (guilhermegor, 09:55:56Z), a
+# 900+ char substantive reply at 5830636642 (guilhermegor, 10:09:02Z), and the filter still reported
+# `$answers == 0` because both share one login. `createdAt > $lc.createdAt` already excludes the
+# ladder comment from counting itself (a comment cannot postdate its own timestamp); `.id` is kept
+# as the explicit, unforgeable "not the same comment" guard the ordering alone does not name.
 _gate_comment_findings_filter() {
 	cat <<'JQ'
 (.data.repository.pullRequest.comments.nodes // []) as $cs
@@ -180,7 +204,7 @@ _gate_comment_findings_filter() {
   )
 | ($cs
    | map(select(
-       ((.author.login // "") != ($lc.author.login // ""))
+       ((.id // "__missing__") != ($lc.id // "__ladder__"))
        and ((.createdAt // "") > ($lc.createdAt // ""))
        and (((.body // "") | length) >= $min)))
    | length) as $answers
@@ -209,6 +233,33 @@ _gate_running_filter() {
       then ["\($c.totalCount - ($c.nodes | length)) further check(s) this page could not read"]
       else [] end))
 | join(", ")
+JQ
+}
+
+# The jq program behind `unreviewed` (dotfiles-dev#505): has ANY roster reviewer reported on this
+# PR at all -- via a submitted review object, a completion comment ("full review finished", the
+# CodeRabbit marker CI's own workflow greps for), or a verified ladder review comment. Prints
+# "true"/"false"; the caller reads it as a plain string, same pattern as the other filters.
+#
+# ⚠️ Derived from the ROSTER, never from `reviews | length` -- a human review by the PR's own
+# author, or a bot outside the roster, must not count (the issue's own warning). No roster
+# (__NO_ROSTER__) falls back to "any Bot account", the same fallback _gate_problems_filter already
+# uses, via __typename rather than a forgeable login substring (CWE-345, dotfiles-dev#455).
+_gate_reported_filter() {
+	cat <<'JQ'
+($roster | split("\n") | map(select(length > 0)) | map(ascii_downcase)) as $bots
+| ($bots | index("__no_roster__")) as $no_roster
+| (.data.repository.pullRequest.reviews.nodes // []) as $revs
+| (.data.repository.pullRequest.comments.nodes // []) as $cs
+| (def is_roster: . as $n
+     | if $no_roster then (($n.author.__typename // "") == "Bot")
+       else (($bots | index(($n.author.login // "") | ascii_downcase)) != null) end;
+   ($revs | any(is_roster))
+   or ($cs | any(is_roster and (((.body // "") | ascii_downcase) | test("full review finished"))))
+   or ($cs | any(
+        (((.body // "") | split("\n")[0]) | test($marker))
+        and ((.authorAssociation // "") | test("^(OWNER|MEMBER|COLLABORATOR)$"))
+      )))
 JQ
 }
 
@@ -241,7 +292,7 @@ _gate_filter_aborted() {
 
 gate_pr_thread_state() {
 	local owner="$1" repo="$2" number="$3" roster_file="${4:-.review-bots.yaml}"
-	local threads roster problems truncated running comment_problems
+	local threads roster problems truncated running comment_problems reported
 	GATE_STATUS="unreadable"
 	GATE_DETAIL="could not reach the GitHub API"
 
@@ -307,6 +358,15 @@ gate_pr_thread_state() {
 		return 0
 	}
 
+	# Has ANY roster reviewer reported at all (dotfiles-dev#505)? A PR nobody has looked at yet has
+	# no threads and no comment-channel findings either, so it reaches here indistinguishable from
+	# "reviewed, nothing to answer" unless this is checked as its own signal.
+	reported="$(_gate_run_jq "$threads" "$(_gate_reported_filter)" "$jq_err" \
+		--arg roster "$roster" --arg marker "$_gate_ladder_marker_re")" || {
+		_gate_filter_aborted "$jq_err" "reviewer-reported"
+		return 0
+	}
+
 	rm -f "$jq_err"
 
 	if [ -n "$problems" ]; then
@@ -315,6 +375,9 @@ gate_pr_thread_state() {
 	elif [ -n "$running" ]; then
 		GATE_STATUS="running"
 		GATE_DETAIL="$running"
+	elif [ "$reported" != "true" ]; then
+		GATE_STATUS="unreviewed"
+		GATE_DETAIL="no roster reviewer has submitted a review or posted a completion comment on this head"
 	else
 		GATE_STATUS="clean"
 		GATE_DETAIL=""

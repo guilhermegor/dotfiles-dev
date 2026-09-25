@@ -341,13 +341,18 @@ free_dispatch_surface() {
 }
 
 # gh_budget_gate REPO
-# ONE cheap gh call standing in for "can the sweep reach the API at all right now" — never a
+# ONE cheap REST call standing in for "can the sweep reach the API at all right now" — never a
 # re-run of the whole fan-out just to find out. Returns 0 to proceed. Returns 1 with
 # BUDGET_GATE_REASON set (shellcheck disable=SC2034 — read by main() after this returns) when
-# either an earlier 403 latch is still fresh, or THIS probe just came back 403/429 and wrote a
-# fresh latch itself. dotfiles-dev#445: 6 agents x a sweep per SubagentStop x ~6 gh calls each
-# burned the whole hourly budget on sweeps that read UNKNOWN either way — one cheap call here
-# replaces finding that out the expensive way every time.
+# any of: an earlier 403 latch is still fresh, THIS probe just came back 403/429, or the sweep's
+# OTHER budget (GraphQL) is already exhausted per gh_budget_quota_exhausted even though the REST
+# probe itself succeeded — dotfiles-dev#511 review finding: `sweep_review_gate()`'s fan-out is
+# GraphQL (via review_thread_gate.sh), a REST-only probe cannot see that budget going to zero, so
+# a purely-GraphQL exhaustion used to sail through this gate and fail one PR at a time with no
+# latch ever written — exactly the repeated fan-out #445 exists to stop.
+# dotfiles-dev#445: 6 agents x a sweep per SubagentStop x ~6 gh calls each burned the whole
+# hourly budget on sweeps that read UNKNOWN either way — these cheap calls replace finding that
+# out the expensive way every time.
 # A non-budget failure (bad repo, network blip) still returns 0: this gate only ever stops the
 # sweep for a BUDGET reason, it is not a general health check.
 gh_budget_gate() {
@@ -355,6 +360,11 @@ gh_budget_gate() {
 	BUDGET_GATE_REASON=""
 	if gh_budget_latch_active; then
 		BUDGET_GATE_REASON="403 latch active — GitHub API budget still exhausted"
+		return 1
+	fi
+	if gh_budget_quota_exhausted; then
+		gh_budget_latch_write "$(gh_budget_reset_ttl)"
+		BUDGET_GATE_REASON="GitHub API quota (core or graphql) already exhausted per rate_limit — latched until reset"
 		return 1
 	fi
 	err="$(mktemp)"

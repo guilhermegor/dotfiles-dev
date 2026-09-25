@@ -155,3 +155,33 @@ STUB
     ttl="$(gh_budget_reset_ttl 45)"
     [ "$ttl" -eq 45 ]
 }
+
+# --- gh_budget_quota_exhausted: dotfiles-dev#511 P1 -- GraphQL can be exhausted while core isn't --
+
+@test "quota_exhausted is true when graphql remaining is under the floor, core healthy" {
+    stub_gh_rate_limit 5000 9999999999 0 9999999999
+    run gh_budget_quota_exhausted
+    [ "$status" -eq 0 ]
+}
+
+@test "quota_exhausted is true when core remaining is under the floor, graphql healthy" {
+    stub_gh_rate_limit 0 9999999999 5000 9999999999
+    run gh_budget_quota_exhausted
+    [ "$status" -eq 0 ]
+}
+
+@test "quota_exhausted is false when both core and graphql are healthy" {
+    stub_gh_rate_limit 5000 9999999999 4977 9999999999
+    run gh_budget_quota_exhausted
+    [ "$status" -ne 0 ]
+}
+
+@test "quota_exhausted is false (fails closed to 'proceed') on an unreadable rate_limit call" {
+    cat > "$BIN/gh" <<'STUB'
+#!/bin/bash
+exit 1
+STUB
+    chmod +x "$BIN/gh"
+    run gh_budget_quota_exhausted
+    [ "$status" -ne 0 ]
+}

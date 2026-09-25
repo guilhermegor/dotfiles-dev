@@ -401,6 +401,32 @@ STUB
     [ ! -f "$GH_BUDGET_LATCH_FILE" ]
 }
 
+# PR #511 review finding (P1, codex/codex-auto-review): the probe above is REST-only. When
+# GraphQL alone is exhausted, that REST call still succeeds, the gate passes, and
+# sweep_review_gate()'s per-PR GraphQL calls (via review_thread_gate.sh) then fail one at a time
+# with no latch ever written — the exact repeated fan-out #445 exists to stop. This must latch
+# via gh_budget_quota_exhausted() BEFORE the REST probe even runs.
+@test "GraphQL quota exhausted while REST core is healthy still latches (dotfiles-dev#511 P1)" {
+    export GH_BUDGET_LATCH_FILE="$REPO/latch"
+    cat > "$BIN/gh" <<'STUB'
+#!/bin/bash
+touch "$BIN/CALLED"
+case "$*" in
+"api rate_limit")
+    cat <<'JSON'
+{"resources":{"core":{"remaining":5000,"reset":9999999999},"graphql":{"remaining":0,"reset":9999999999}}}
+JSON
+    ;;
+"api repos/o/r --jq .id") echo 12345 ;;
+*) exit 1 ;;
+esac
+STUB
+    chmod +x "$BIN/gh"
+    run gh_budget_gate "o/r"
+    [ "$status" -eq 1 ]
+    [ -f "$GH_BUDGET_LATCH_FILE" ]
+}
+
 # --- sweep_no_automerge / sweep_behind_base: a raw 403 body must never read as PR numbers -------
 # dotfiles-dev#512: `gh api ... --jq` exits non-zero on an HTTP error WITHOUT ever running the
 # filter, but still writes the unfiltered JSON body to stdout. Piping that straight into

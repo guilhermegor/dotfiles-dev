@@ -141,3 +141,28 @@ gh_budget_reset_ttl() {
 	done
 	printf '%s\n' "$burst_ttl"
 }
+
+# gh_budget_quota_exhausted [FLOOR]
+# True (0) when `gh api rate_limit` reports EITHER core or graphql `remaining` under FLOOR
+# (default 5) — the one place this file deliberately reads rate_limit to decide exhaustion
+# rather than only to size a TTL after a real call already failed (dotfiles-dev#511 review
+# finding): gh_budget_gate's REST-only probe passes cleanly while GraphQL alone is exhausted, so
+# every per-PR GraphQL call in the sweep's fan-out then fails one at a time with no latch ever
+# written — the exact repeated-fan-out #445 exists to stop.
+# This is safe against this file's OWN "never trust rate_limit alone" warning in only ONE
+# direction: rate_limit has been measured UNDER-reporting exhaustion (a real burst 403 with
+# remaining:5000/used:0 — see gh_budget_reset_ttl above), never OVER-reporting it, so a real,
+# near-zero `remaining` here is not a false positive. It does NOT catch a burst (remaining stays
+# high during one) — a burst still needs a real failed call, which is what the REST probe
+# provides for its own budget.
+gh_budget_quota_exhausted() {
+	local floor="${1:-5}" json remaining resource
+	json="$(gh api rate_limit 2>/dev/null)" || return 1
+	for resource in core graphql; do
+		remaining="$(printf '%s' "$json" | jq -r ".resources.$resource.remaining // empty" 2>/dev/null)"
+		if [[ "$remaining" =~ ^[0-9]+$ ]] && [ "$remaining" -lt "$floor" ]; then
+			return 0
+		fi
+	done
+	return 1
+}

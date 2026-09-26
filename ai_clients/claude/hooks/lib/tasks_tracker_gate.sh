@@ -66,7 +66,7 @@ gate_missing_tracker() {
 	local feature_slug hit report=""
 	while IFS= read -r feature_slug; do
 		[ -n "$feature_slug" ] || continue
-		hit="$(gh search issues --repo "$slug_repo" --state open --match title,body \
+		hit="$(gh search issues --repo "$slug_repo" --state open --include-prs --match title,body \
 			"$feature_slug" --json number,url --jq '(.[0] // empty) | "#\(.number) (\(.url))"' 2>/dev/null)" \
 			|| return 1
 		[ -n "$hit" ] || continue

@@ -212,7 +212,12 @@ _gate_comment_findings_filter() {
    | map(select(
        ((.id // "__missing__") != ($lc.id // "__ladder__"))
        and ((.createdAt // "") > ($lc.createdAt // ""))
-       and (((.body // "") | length) >= $min)))
+       and (((.body // "") | length) >= $min)
+       # A ladder review is a REPORT, never an answer to an earlier one. Excluding only
+       # $lc.id let the NEXT fallback review clear this finding: it carries a distinct id,
+       # a later timestamp and easily 100+ characters, so a second review saying "no issues
+       # found" would silently satisfy a finding nobody addressed.
+       and ((((.body // "") | split("\n")[0]) | test($marker)) | not)))
    | length) as $answers
 | if $answers == 0 then "  unanswered ladder finding (comment channel)" else empty end
 JQ

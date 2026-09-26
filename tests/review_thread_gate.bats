@@ -582,3 +582,14 @@ JSON
     [[ "$output" == *"status=problems"* ]]
     [[ "$output" == *"250 reviews exist"* ]]
 }
+
+@test "comment channel: a LATER ladder review never answers an earlier ladder finding" {
+    # Excluding only the finding's own id let the next fallback review clear it: distinct id,
+    # later timestamp, easily over the length floor. A review is a report, not an answer.
+    local first second
+    first=$'Fallback review — runtime: codex, model: gpt-5 (selected by: probe)\n\n## Findings\n\n- [P2] unhandled error path'
+    second=$'Fallback review — runtime: qwen, model: qwen3 (selected by: probe)\n\n## Findings\n\nNo issues found in this pass, everything below the threshold was ignored deliberately.'
+    run_comment_filter "$(ladder_comment_fixture MEMBER "$first" guilhermegor "$second")"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"unanswered ladder finding (comment channel)"* ]]
+}

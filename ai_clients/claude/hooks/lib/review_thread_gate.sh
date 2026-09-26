@@ -62,11 +62,13 @@ query($owner:String!, $repo:String!, $number:Int!) {
       }
       reviews(first:100) {
         totalCount
-        nodes { author { login __typename } }
+        nodes { author { login __typename } state commit { oid } }
       }
       commits(last:1) {
         nodes {
           commit {
+            oid
+            committedDate
             statusCheckRollup {
               contexts(first:100) {
                 totalCount
@@ -151,6 +153,7 @@ _gate_truncated_filter() {
 	cat <<'JQ'
 .data.repository.pullRequest.reviewThreads as $rt
 | .data.repository.pullRequest.comments as $pc
+| .data.repository.pullRequest.reviews as $rv
 | [ (if ($rt.totalCount // 0) > ($rt.nodes | length) then
        "  UNREADABLE: \($rt.totalCount) review threads exist, only \($rt.nodes | length) fit one page"
      else empty end),
@@ -159,6 +162,9 @@ _gate_truncated_filter() {
      | "  UNREADABLE: \(.path // "?"): \(.comments.totalCount) comments, only \(.comments.nodes | length) read"),
     (if ($pc.totalCount // 0) > ($pc.nodes | length) then
        "  UNREADABLE: \($pc.totalCount) PR comments exist, only \($pc.nodes | length) fit one page (comment channel)"
+     else empty end),
+    (if ($rv.totalCount // 0) > ($rv.nodes | length) then
+       "  UNREADABLE: \($rv.totalCount) reviews exist, only \($rv.nodes | length) fit one page (review channel)"
      else empty end) ]
 | join("\n")
 JQ
@@ -251,11 +257,22 @@ _gate_reported_filter() {
 | ($bots | index("__no_roster__")) as $no_roster
 | (.data.repository.pullRequest.reviews.nodes // []) as $revs
 | (.data.repository.pullRequest.comments.nodes // []) as $cs
+| (.data.repository.pullRequest.commits.nodes[0].commit // {}) as $head
+| ($head.oid // "") as $head_oid
+| ($head.committedDate // "") as $head_date
 | (def is_roster: . as $n
      | if $no_roster then (($n.author.__typename // "") == "Bot")
        else (($bots | index(($n.author.login // "") | ascii_downcase)) != null) end;
-   ($revs | any(is_roster))
-   or ($cs | any(is_roster and (((.body // "") | ascii_downcase) | test("full review finished"))))
+   # A report counts only if it is about the CURRENT head. A review carries the commit it
+   # judged, so compare oids; a completion comment carries none, so the head's commit date is
+   # the only available ordering. PENDING is a review the reviewer has not submitted -- it is
+   # not a report at all. Fail closed: an unknown oid/date never satisfies the gate.
+   ($revs | any(is_roster
+                and ((.state // "") != "PENDING")
+                and (($head_oid != "") and ((.commit.oid // "") == $head_oid))))
+   or ($cs | any(is_roster
+                 and (((.body // "") | ascii_downcase) | test("full review finished"))
+                 and (($head_date != "") and ((.createdAt // "") >= $head_date))))
    or ($cs | any(
         (((.body // "") | split("\n")[0]) | test($marker))
         and ((.authorAssociation // "") | test("^(OWNER|MEMBER|COLLABORATOR)$"))

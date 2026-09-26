@@ -83,11 +83,24 @@ run_reported_filter() {
 # reviewed_fixture <reviews-json-array> <comments-json-array>
 # The two channels _gate_reported_filter reads: submitted review objects and PR-level comments.
 # Empty reviewThreads/commits on purpose -- this fixture is only ever fed to the reported filter.
+# A report counts only if it is about the CURRENT head, so every fixture needs one. Reviews and
+# comments that do not pin their own head default to matching it -- a test about ROSTER matching
+# should not have to restate head identity, and a test about head staleness states it explicitly.
+HEAD_OID="headoid0"
+HEAD_DATE="2026-01-01T00:00:00Z"
+
 reviewed_fixture() {
-    jq -nc --argjson revs "$1" --argjson cmts "$2" '
+    jq -nc --argjson revs "$1" --argjson cmts "$2" \
+           --arg oid "$HEAD_OID" --arg date "$HEAD_DATE" '
       { data: { repository: { pullRequest: {
-          reviews: { totalCount: ($revs | length), nodes: $revs },
-          comments: { totalCount: ($cmts | length), nodes: $cmts } } } } }
+          reviews: { totalCount: ($revs | length),
+                     nodes: ($revs | map(
+                       (if has("state") then . else . + {state:"COMMENTED"} end)
+                       | (if has("commit") then . else . + {commit:{oid:$oid}} end))) },
+          comments: { totalCount: ($cmts | length),
+                      nodes: ($cmts | map(
+                        if has("createdAt") then . else . + {createdAt:$date} end)) },
+          commits: { nodes: [ { commit: { oid: $oid, committedDate: $date } } ] } } } } }
     '
 }
 
@@ -457,7 +470,7 @@ JSON
     local fixture
     fixture="$(mktemp)"
     cat > "$fixture" <<'JSON'
-{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"comments":{"totalCount":0,"nodes":[]},"reviews":{"totalCount":1,"nodes":[{"author":{"login":"coderabbitai","__typename":"Bot"}}]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}
+{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"comments":{"totalCount":0,"nodes":[]},"reviews":{"totalCount":1,"nodes":[{"author":{"login":"coderabbitai","__typename":"Bot"},"state":"COMMENTED","commit":{"oid":"deadbee"}}]},"commits":{"nodes":[{"commit":{"oid":"deadbee","committedDate":"2026-01-01T00:00:00Z","statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}
 JSON
 
     run env GH_FIXTURE="$fixture" GATE_LIB="$GATE" bash -c '
@@ -514,4 +527,58 @@ JSON
     run_comment_filter "$fixture"
     [ "$status" -eq 0 ]
     [[ "$output" == *"unanswered ladder finding (comment channel)"* ]]
+}
+
+# --- The three PR #520 findings: a report must be SUBMITTED, about the CURRENT head, and read
+# --- from a complete page. Each asserts the fail-closed direction, which is the one that matters:
+# --- reporting `clean` for a head nobody reviewed is the defect #505 exists to remove.
+
+@test "_gate_reported_filter: a PENDING roster review is not a report" {
+    run_reported_filter \
+        "$(reviewed_fixture '[{"author":{"login":"coderabbitai","__typename":"Bot"},"state":"PENDING"}]' '[]')" \
+        "coderabbitai"
+    [ "$status" -eq 0 ]
+    [ "$output" = "false" ]
+}
+
+@test "_gate_reported_filter: a roster review of an OLDER commit is not a report" {
+    run_reported_filter \
+        "$(reviewed_fixture '[{"author":{"login":"coderabbitai","__typename":"Bot"},"state":"COMMENTED","commit":{"oid":"stale123"}}]' '[]')" \
+        "coderabbitai"
+    [ "$status" -eq 0 ]
+    [ "$output" = "false" ]
+}
+
+@test "_gate_reported_filter: a completion comment PREDATING the head is not a report" {
+    run_reported_filter \
+        "$(reviewed_fixture '[]' '[{"author":{"login":"coderabbitai","__typename":"Bot"},"body":"Full review finished","createdAt":"2025-01-01T00:00:00Z"}]')" \
+        "coderabbitai"
+    [ "$status" -eq 0 ]
+    [ "$output" = "false" ]
+}
+
+@test "truncated: reviews that do not fit one page report UNREADABLE, never 'no reviewer'" {
+    local fixture
+    fixture="$(mktemp)"
+    cat > "$fixture" <<'JSON'
+{"data":{"repository":{"pullRequest":{"reviewThreads":{"totalCount":0,"nodes":[]},"comments":{"totalCount":0,"nodes":[]},"reviews":{"totalCount":250,"nodes":[{"author":{"login":"someone","__typename":"User"},"state":"COMMENTED","commit":{"oid":"x"}}]},"commits":{"nodes":[{"commit":{"oid":"x","committedDate":"2026-01-01T00:00:00Z","statusCheckRollup":{"contexts":{"totalCount":0,"nodes":[]}}}}]}}}}}
+JSON
+
+    run env GH_FIXTURE="$fixture" GATE_LIB="$GATE" bash -c '
+        gh() {
+            case "$*" in
+                *"-F owner=o -F repo=r -F number=378") cat "$GH_FIXTURE" ;;
+                *) return 1 ;;
+            esac
+        }
+        source "$GATE_LIB"
+        gate_pr_thread_state o r 378 ".review-bots.yaml"
+        echo "status=$GATE_STATUS"
+        echo "detail=$GATE_DETAIL"
+    '
+    rm -f "$fixture"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"status=problems"* ]]
+    [[ "$output" == *"250 reviews exist"* ]]
 }

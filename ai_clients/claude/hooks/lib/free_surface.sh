@@ -26,6 +26,14 @@
 #     empty FREE_HELD_PATHS on a failure — a guard that fails open here reads as "everything is
 #     free" and dispatches colliding agents.
 #
+#     ⚠️ dotfiles-dev#501: FREE_HELD_PATHS is the OPEN-PR union — an open PR is a frozen branch
+#     awaiting review, not a live writer. It answers the claimed-issue question
+#     (FREE_UNCLAIMED_ISSUES) and, read alongside free_classify_files below, a merge-risk
+#     annotation worth a note in a dispatched agent's brief. It is NEVER the dispatch-collision
+#     definition — that was the specific bug this issue exists to fix (7 of 10 dispatch
+#     candidates excluded for overlapping frozen, in-review branches with no live writer on
+#     them). The collision definition is `gate_live_agent_surface` below.
+#
 #   free_classify_files FILE...
 #     Pure, no network — classifies a candidate file list against the FREE_HELD_PATHS already
 #     set by a prior gate_free_surface call. Fails closed on FREE_STATUS != ok (prints UNKNOWN,
@@ -37,6 +45,34 @@
 #       would-need-a-held-file:<paths>    — some but not all candidate files are held (usually
 #                                           one trivial line; dispatch it anyway per s:dev-loop)
 #     Collapsing this third state into "held" is the specific failure this exists to avoid.
+#     ⚠️ This verdict is the open-PR merge-risk annotation (see FREE_HELD_PATHS above) — never
+#     read it as the dispatch-collision verdict. Use live_agent_classify_files for that.
+#
+#   gate_live_agent_surface CWD
+#     dotfiles-dev#501's answer to "what is a dispatch collision": two LIVE agents writing the
+#     same file right now, never a candidate vs. a frozen open PR (dotfiles-dev#433). Sets:
+#       LIVE_AGENT_STATUS = ok | unknown
+#       LIVE_AGENT_PATHS  = newline-separated exact paths any OTHER worktree of this checkout
+#                           is touching right now — its branch's committed diff against the
+#                           default branch, UNION its current uncommitted/untracked working-tree
+#                           state (a fresh worktree with no commits yet is still live).
+#     Local-only (no `gh` call) — a worktree IS the live-agent signal, same notion
+#     `hooks/lib/worktree_fanout.sh` walks for session_start_context.sh/quota_gap_rescue.sh, and
+#     the same notion `hooks/lib/dispatch_plan.py`'s `live_agent_held_paths()` already enforces
+#     via `round_dispatch_guard.sh` (dotfiles-dev#433/#476) — this is the shared, testable form
+#     of that same recipe for any caller working in bash (dev-loop.md's manual step 6 included),
+#     not a fourth, independently-drifting liveness heuristic. It deliberately does NOT reuse
+#     `worktree_fanout.sh`'s `classify_worktree_diff` staleness filter: that question ("should a
+#     human resume this worktree?") is not this one ("is a file being written right now?") — a
+#     worktree mid-revert is still a live writer for collision purposes even though it is not
+#     worth resuming. Returns 1 and sets LIVE_AGENT_STATUS=unknown on any read failure — never
+#     returns 0 with an empty LIVE_AGENT_PATHS on a failure, same fail-closed contract as above.
+#
+#   live_agent_classify_files FILE...
+#     Same free/held/would-need-a-held-file trichotomy as free_classify_files, against
+#     LIVE_AGENT_STATUS/LIVE_AGENT_PATHS instead — this is the verdict that actually blocks
+#     dispatch. `held` means do not dispatch; `would-need-a-held-file` still dispatches (the
+#     house pattern: land the one trivial overlapping line as its own follow-up commit).
 #
 # Deliberately out of scope (judgment, not data — see the issue): deciding WHICH free issue to
 # dispatch, writing the brief, and supplying the candidate file list an issue's solution would
@@ -149,17 +185,22 @@ gate_free_surface() {
 	return 0
 }
 
-# free_classify_files FILE...
-# Fails closed (prints UNKNOWN, returns 1) unless a prior gate_free_surface call left
-# FREE_STATUS=ok. Gating on that explicit sentinel — never on FREE_HELD_PATHS being
-# non-empty — is what tells "unset/unprimed" apart from "primed with a legitimately
-# empty held set" (a repo with zero open PRs, where every file really is free).
-# Under `set -u`, an unprimed call used to hit an unbound-variable error inside the loop,
-# fall through the untouched held_count=0, and print "free" for a fully held file list
-# (dotfiles-dev#414) — the exact input that causes a duplicate PR. Exact-path membership
-# only — never a prefix/substring test, which is the whole defect this gate exists to avoid.
-free_classify_files() {
-	if [ "${FREE_STATUS:-}" != "ok" ]; then
+# _classify_files_against STATUS HELD_PATHS FILE...
+# Pure exact-path set math shared by free_classify_files (open-PR surface) and
+# live_agent_classify_files (live-agent surface, dotfiles-dev#501) — one implementation of the
+# free/held/would-need-a-held-file trichotomy so the two callers can never independently drift
+# on what each state means. Fails closed (prints UNKNOWN, returns 1) unless STATUS is "ok" —
+# gating on that explicit sentinel, never on HELD_PATHS being non-empty, is what tells
+# "unset/unprimed" apart from "primed with a legitimately empty held set" (a repo with zero
+# open PRs/live agents, where every file really is free). Under `set -u`, an unprimed call used
+# to hit an unbound-variable error inside the loop, fall through the untouched held_count=0, and
+# print "free" for a fully held file list (dotfiles-dev#414) — the exact input that causes a
+# duplicate PR. Exact-path membership only — never a prefix/substring test, which is the whole
+# defect this gate exists to avoid.
+_classify_files_against() {
+	local status="$1" held="$2"
+	shift 2
+	if [ "$status" != "ok" ]; then
 		echo "UNKNOWN"
 		return 1
 	fi
@@ -167,7 +208,7 @@ free_classify_files() {
 	local total=0 held_count=0 f collided=""
 	for f in "$@"; do
 		total=$((total + 1))
-		if printf '%s\n' "$FREE_HELD_PATHS" | grep -qxF "$f"; then
+		if printf '%s\n' "$held" | grep -qxF "$f"; then
 			held_count=$((held_count + 1))
 			collided="$collided $f"
 		fi
@@ -180,4 +221,88 @@ free_classify_files() {
 	else
 		echo "would-need-a-held-file:$collided"
 	fi
+}
+
+# free_classify_files FILE... — see _classify_files_against; classifies against the open-PR
+# surface (FREE_STATUS/FREE_HELD_PATHS). Merge-risk annotation only — never the dispatch-
+# collision verdict (dotfiles-dev#501). Signature unchanged for existing callers.
+free_classify_files() {
+	_classify_files_against "${FREE_STATUS:-}" "${FREE_HELD_PATHS:-}" "$@"
+}
+
+# live_agent_classify_files FILE... — see _classify_files_against; classifies against the
+# live-agent surface (LIVE_AGENT_STATUS/LIVE_AGENT_PATHS, set by gate_live_agent_surface). This
+# is the verdict that actually blocks dispatch (dotfiles-dev#501).
+live_agent_classify_files() {
+	_classify_files_against "${LIVE_AGENT_STATUS:-}" "${LIVE_AGENT_PATHS:-}" "$@"
+}
+
+# _live_agent_held_paths CWD DEFAULT_BRANCH
+# Exact paths any OTHER worktree of CWD is touching right now: its branch's committed diff
+# against DEFAULT_BRANCH, union its current uncommitted/untracked working-tree state. See the
+# file header for why this does not reuse worktree_fanout.sh's staleness classifier. Fails
+# closed (returns 1) on anything but the documented "no shared history yet" no-op case — an
+# orphan branch that has never diverged from default is not a read failure, mirroring
+# _free_held_paths's own "No common ancestor" tolerance above, just against local git's wording
+# instead of the GitHub compare API's.
+_live_agent_held_paths() {
+	local cwd="$1" default="$2"
+	local path="" branch="" line held="" out out_lc untracked
+
+	git -C "$cwd" worktree list --porcelain >/dev/null 2>&1 || return 1
+
+	while IFS= read -r line; do
+		case "$line" in
+		"worktree "*)
+			path="${line#worktree }"
+			branch=""
+			;;
+		"branch "*)
+			branch="${line#branch refs/heads/}"
+			;;
+		"")
+			if [ -n "$path" ] && [ -d "$path" ] && [ -n "$branch" ] && [ "$branch" != "$default" ]; then
+				if out="$(git -C "$cwd" diff --name-only "$default...$branch" 2>&1)"; then
+					[ -n "$out" ] && held="$(printf '%s\n%s' "$held" "$out")"
+				else
+					out_lc="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+					case "$out_lc" in
+					*"no merge base"* | *"unrelated histories"* | *"unknown revision"* | *"bad revision"*) : ;;
+					*) return 1 ;;
+					esac
+				fi
+				out="$(git -C "$path" diff HEAD --name-only 2>/dev/null)"
+				[ -n "$out" ] && held="$(printf '%s\n%s' "$held" "$out")"
+				untracked="$(git -C "$path" ls-files --others --exclude-standard 2>/dev/null)"
+				[ -n "$untracked" ] && held="$(printf '%s\n%s' "$held" "$untracked")"
+			fi
+			path=""
+			branch=""
+			;;
+		esac
+	done < <(git -C "$cwd" worktree list --porcelain 2>/dev/null; printf '\n')
+
+	printf '%s\n' "$held" | sed '/^$/d' | sort -u
+}
+
+# gate_live_agent_surface CWD — see the file header contract. No `gh` call: local git only.
+gate_live_agent_surface() {
+	local cwd="$1"
+	LIVE_AGENT_STATUS="unknown"
+	LIVE_AGENT_PATHS=""
+
+	[ -d "$cwd" ] || return 1
+	git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+
+	local default_branch held
+	default_branch="$(git -C "$cwd" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+	default_branch="${default_branch#origin/}"
+	[ -n "$default_branch" ] || return 1
+
+	held="$(_live_agent_held_paths "$cwd" "$default_branch")" || return 1
+
+	LIVE_AGENT_PATHS="$held"
+	# shellcheck disable=SC2034 # read by callers after this returns, not within this file
+	LIVE_AGENT_STATUS="ok"
+	return 0
 }

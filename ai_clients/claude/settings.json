@@ -184,7 +184,7 @@
       "Bash(kill:*)",
       "Bash(pkill:*)",
       "Bash(fuser:*)",
-      "Bash(env)",
+      "Bash(env:*)",
       "Bash(printenv:*)",
       "Bash(sudo:*)",
       "Bash(pip install:*)",
@@ -236,7 +236,7 @@
       "Bash(chmod -R 777:*)",
       "Bash(cat ~/.ssh/*)",
       "Bash(printenv:*)",
-      "Bash(env)",
+      "Bash(env:*)",
       "Bash(cat /proc/*/environ)"
     ]
   },

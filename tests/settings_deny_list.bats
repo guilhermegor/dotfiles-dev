@@ -85,8 +85,21 @@ setup() {
     [ "$status" -ne 0 ]
 }
 
-@test "deny list contains Bash(env)" {
+@test "deny list contains Bash(env:*)" {
+    run jq -e '.permissions.deny | index("Bash(env:*)")' "$SETTINGS"
+    [ "$status" -eq 0 ]
+}
+
+# Bash(env) is an EXACT-command rule: it denies a bare `env` and nothing else, so
+# `env | grep -i token` walks straight past it. The prefix form above is the only
+# one that closes that, and it also still matches the bare `env`.
+@test "deny list does NOT contain the exact-match Bash(env) form" {
     run jq -e '.permissions.deny | index("Bash(env)")' "$SETTINGS"
+    [ "$status" -ne 0 ]
+}
+
+@test "the ask list spells env the same way the deny list does" {
+    run jq -e '.permissions.ask | index("Bash(env:*)")' "$SETTINGS"
     [ "$status" -eq 0 ]
 }
 

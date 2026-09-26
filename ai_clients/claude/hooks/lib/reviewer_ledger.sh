@@ -34,8 +34,13 @@
 set -u
 
 # The closed class vocabulary (issue: "the decision that makes or breaks the
-# store"). Kept as one array so the CLI's validation and the CHECK
-# constraint below can never independently drift from this list.
+# store"). This array is what the CLI validates against. reviewer_ledger_init's
+# `finding.class CHECK` constraint below is a SEPARATE, hand-written literal
+# list -- SQLite has no way to read a shell array into a CHECK clause -- so
+# adding a class here without also updating that CHECK (and migrating any
+# existing database, since CREATE TABLE IF NOT EXISTS never alters an
+# existing table) lets the CLI accept a class SQLite then rejects at insert
+# time. See docs/reviewer_ledger.md's vocabulary section.
 REVIEWER_LEDGER_CLASSES=(auth-bypass fail-open shell-robustness api-shape docs-vs-code test-gap other)
 
 _reviewer_ledger_db() {
@@ -53,6 +58,18 @@ _reviewer_ledger_class_valid() {
         [[ "$c" == "$class" ]] && return 0
     done
     return 1
+}
+
+# _reviewer_ledger_require_int NAME VALUE -- every numeric argument is
+# interpolated straight into a SQL string below (sqlite3's CLI has no bind-
+# parameter flag), so an unvalidated value is a SQL-injection vector, not
+# just a malformed-input risk (CodeRabbit, PR #521). Non-negative decimal
+# integers only -- a PR number, an ask id, and --min-asks are never
+# negative or fractional.
+_reviewer_ledger_require_int() {
+    local name="$1" value="$2"
+    [[ "$value" =~ ^[0-9]+$ ]] ||
+        _reviewer_ledger_die "$name must be a non-negative integer, got '$value'"
 }
 
 # reviewer_ledger_init [DB] -- idempotent: CREATE TABLE IF NOT EXISTS, safe
@@ -107,6 +124,7 @@ reviewer_ledger_record_ask() {
     done
     [[ -n "$rung" && -n "$pr" && -n "$sha" && -n "$outcome" ]] ||
         _reviewer_ledger_die "ask: --rung, --pr, --sha, --outcome are all required"
+    _reviewer_ledger_require_int "ask: --pr" "$pr"
     case "$outcome" in
     refused | clean | found) ;;
     *) _reviewer_ledger_die "ask: --outcome must be refused|clean|found, got '$outcome'" ;;
@@ -136,6 +154,7 @@ reviewer_ledger_record_finding() {
     done
     [[ -n "$ask_id" && -n "$severity" && -n "$verdict" && -n "$class" ]] ||
         _reviewer_ledger_die "finding: --ask-id, --severity, --verdict, --class are all required"
+    _reviewer_ledger_require_int "finding: --ask-id" "$ask_id"
     case "$verdict" in
     true | false | partial) ;;
     *) _reviewer_ledger_die "finding: --verdict must be true|false|partial, got '$verdict'" ;;
@@ -143,8 +162,12 @@ reviewer_ledger_record_finding() {
     _reviewer_ledger_class_valid "$class" ||
         _reviewer_ledger_die "finding: --class must be one of: ${REVIEWER_LEDGER_CLASSES[*]} -- got '$class'"
     reviewer_ledger_init "$db"
+    # PRAGMA foreign_keys is per-connection, not per-database -- the `init`
+    # call above enabled it on ITS OWN sqlite3 process, which already
+    # exited. Re-enable it here so an ask_id with no matching ask row is
+    # rejected instead of silently orphaning the finding (CodeRabbit, PR #521).
     sqlite3 "$db" \
-        "INSERT INTO finding (ask_id, severity, verdict, class, note) VALUES (${ask_id}, '${severity//\'/\'\'}', '${verdict//\'/\'\'}', '${class//\'/\'\'}', $( [[ -n "$note" ]] && printf "'%s'" "${note//\'/\'\'}" || printf 'NULL' ));" ||
+        "PRAGMA foreign_keys = ON; INSERT INTO finding (ask_id, severity, verdict, class, note) VALUES (${ask_id}, '${severity//\'/\'\'}', '${verdict//\'/\'\'}', '${class//\'/\'\'}', $( [[ -n "$note" ]] && printf "'%s'" "${note//\'/\'\'}" || printf 'NULL' ));" ||
         _reviewer_ledger_die "finding insert failed"
 }
 
@@ -158,16 +181,21 @@ reviewer_ledger_record_finding() {
 # ask outcomes and finding verdicts.
 _reviewer_ledger_report_rung_effectiveness() {
     local db="$1"
+    # COUNT(DISTINCT a.id)/CASE, never bare COUNT(*)/SUM(a.outcome=...): the
+    # LEFT JOIN produces one row per FINDING, so an ask with two findings
+    # would otherwise inflate its own asks/outcome counts to 2 (CodeRabbit,
+    # PR #521). f.verdict sums stay bare SUM() on purpose -- each joined row
+    # is exactly one real finding, so no finding is ever double-counted.
     sqlite3 -header -column "$db" <<'SQL'
 SELECT
     a.rung,
-    COUNT(*)                                            AS asks,
-    SUM(a.outcome = 'refused')                          AS refused,
-    SUM(a.outcome = 'clean')                             AS clean,
-    SUM(a.outcome = 'found')                              AS found,
-    COALESCE(SUM(f.verdict = 'true'), 0)                  AS true_findings,
-    COALESCE(SUM(f.verdict = 'false'), 0)                 AS false_findings,
-    COALESCE(SUM(f.verdict = 'partial'), 0)               AS partial_findings
+    COUNT(DISTINCT a.id)                                                   AS asks,
+    COUNT(DISTINCT CASE WHEN a.outcome = 'refused' THEN a.id END)          AS refused,
+    COUNT(DISTINCT CASE WHEN a.outcome = 'clean'   THEN a.id END)          AS clean,
+    COUNT(DISTINCT CASE WHEN a.outcome = 'found'   THEN a.id END)          AS found,
+    COALESCE(SUM(f.verdict = 'true'), 0)                                   AS true_findings,
+    COALESCE(SUM(f.verdict = 'false'), 0)                                  AS false_findings,
+    COALESCE(SUM(f.verdict = 'partial'), 0)                                AS partial_findings
 FROM ask a
 LEFT JOIN finding f ON f.ask_id = a.id
 GROUP BY a.rung
@@ -186,15 +214,18 @@ _reviewer_ledger_report_ladder_order() {
 # without any significance test, per the issue.
 _reviewer_ledger_report_zero_true() {
     local db="$1" min_asks="$2"
+    # COUNT(DISTINCT a.id), not COUNT(*): same multi-finding-per-ask
+    # inflation as rung-effectiveness above -- an ask with 2+ findings would
+    # otherwise satisfy --min-asks prematurely (CodeRabbit, PR #521).
     sqlite3 -header -column "$db" <<SQL
 SELECT
     a.rung,
-    COUNT(*) AS asks,
+    COUNT(DISTINCT a.id) AS asks,
     COALESCE(SUM(f.verdict = 'true'), 0) AS true_findings
 FROM ask a
 LEFT JOIN finding f ON f.ask_id = a.id
 GROUP BY a.rung
-HAVING COUNT(*) >= ${min_asks} AND true_findings = 0
+HAVING COUNT(DISTINCT a.id) >= ${min_asks} AND true_findings = 0
 ORDER BY a.rung;
 SQL
 }
@@ -214,6 +245,7 @@ reviewer_ledger_report() {
         esac
     done
     [[ -f "$db" ]] || _reviewer_ledger_die "report: no ledger at $db -- run 'init' first"
+    _reviewer_ledger_require_int "report: --min-asks" "$min_asks"
     case "$report" in
     rung-effectiveness) _reviewer_ledger_report_rung_effectiveness "$db" ;;
     ladder-order) _reviewer_ledger_report_ladder_order "$db" ;;

@@ -28,13 +28,23 @@ look identical to an ineffective one. So:
 auth-bypass  fail-open  shell-robustness  api-shape  docs-vs-code  test-gap  other
 ```
 
-Defined once, in `REVIEWER_LEDGER_CLASSES` inside `reviewer_ledger.sh`, and
-enforced twice from that single array: the CLI's own validation and the
-table's `CHECK` constraint. Adding a class means editing that one array;
-there is no second place to keep in sync. `other` always requires a
-`--note`-worthy reason in practice, even though the schema does not force
-one — re-classifying retroactively means re-reading every finding, so pick
-a real class when one applies.
+Defined in `REVIEWER_LEDGER_CLASSES` inside `reviewer_ledger.sh`, and
+checked against it by the CLI's own validation before every insert.
+
+⚠️ **Two places, not one, must change together when the vocabulary
+changes.** The `finding.class` `CHECK` constraint inside
+`reviewer_ledger_init`'s schema is a separate, hand-written literal list —
+it is not derived from `REVIEWER_LEDGER_CLASSES` (SQLite has no way to read
+a shell array into a `CHECK` clause). Adding a class only to the array lets
+the CLI accept it, then SQLite rejects the insert at the `CHECK` boundary —
+the two must be edited together. Additionally, `CREATE TABLE IF NOT EXISTS`
+never alters an existing table's schema: a database created under an older
+vocabulary needs an explicit migration (`ALTER TABLE finding` to redefine
+the constraint, since SQLite can't `ALTER ... CHECK` directly — recreate the
+table, copy the rows, and swap it in) before it will accept a newly added
+class. `other` always requires a `--note`-worthy reason in practice, even
+though the schema does not force one — re-classifying retroactively means
+re-reading every finding, so pick a real class when one applies.
 
 ## Where the data lives
 

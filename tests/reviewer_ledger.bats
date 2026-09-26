@@ -110,3 +110,66 @@ teardown() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"no ledger"* ]]
 }
+
+# --- CodeRabbit findings on PR #521 (regression pins) ----------------------------
+
+@test "an ask with two findings is not double-counted as two asks" {
+	"$LEDGER" init
+	ask_id="$("$LEDGER" ask --rung codex --pr 453 --sha aaa111 --outcome found | tail -1)"
+	"$LEDGER" finding --ask-id "$ask_id" --severity major --verdict true --class fail-open
+	"$LEDGER" finding --ask-id "$ask_id" --severity minor --verdict false --class api-shape
+
+	run "$LEDGER" report rung-effectiveness
+	[ "$status" -eq 0 ]
+	# 1 ask (not 2), 0 refused, 0 clean, 1 found, 1 true, 1 false, 0 partial
+	[[ "$output" =~ codex[[:space:]]+1[[:space:]]+0[[:space:]]+0[[:space:]]+1[[:space:]]+1[[:space:]]+1[[:space:]]+0 ]]
+}
+
+@test "a rung with one ask and two findings does not satisfy --min-asks 2" {
+	"$LEDGER" init
+	ask_id="$("$LEDGER" ask --rung kimi --pr 453 --sha aaa111 --outcome found | tail -1)"
+	"$LEDGER" finding --ask-id "$ask_id" --severity minor --verdict false --class api-shape
+	"$LEDGER" finding --ask-id "$ask_id" --severity minor --verdict partial --class test-gap
+
+	run "$LEDGER" report zero-true --min-asks 2
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"kimi"* ]]
+}
+
+@test "a finding referencing a nonexistent ask is rejected (foreign key enforced)" {
+	"$LEDGER" init
+
+	run "$LEDGER" finding --ask-id 9999 --severity major --verdict true --class fail-open
+	[ "$status" -ne 0 ]
+
+	run "$LEDGER" report rung-effectiveness
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"9999"* ]]
+}
+
+@test "ask rejects a --pr value shaped like SQL instead of an integer" {
+	run "$LEDGER" ask --rung codex --pr "1); DROP TABLE ask;--" --sha aaa111 --outcome found
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"non-negative integer"* ]]
+}
+
+@test "finding rejects an --ask-id value shaped like SQL instead of an integer" {
+	"$LEDGER" init
+	run "$LEDGER" finding --ask-id "1 OR 1=1" --severity major --verdict true --class fail-open
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"non-negative integer"* ]]
+}
+
+@test "report rejects a --min-asks value shaped like SQL instead of an integer" {
+	"$LEDGER" init
+	"$LEDGER" ask --rung codex --pr 1 --sha aaa111 --outcome clean
+
+	run "$LEDGER" report zero-true --min-asks "0; DROP TABLE ask;--"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"non-negative integer"* ]]
+
+	# the injected statement must never have run
+	run "$LEDGER" report rung-effectiveness
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"codex"* ]]
+}

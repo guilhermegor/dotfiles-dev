@@ -647,12 +647,24 @@ notice** on that PR (the ack comment item 4 above already tracks, not the roster
 reads) instead of assuming the verdict is still in flight:
 
 ```bash
-gh pr view <n> --json comments --jq '.comments[-1].body' | grep -o 'exceed the limit of [0-9]*'
+gh pr view <n> --json comments \
+  --jq '[.comments[] | select(.author.login | test("coderabbit";"i"))] | last | .body' \
+  | grep -o 'exceed the limit of [0-9]*'
 ```
+
+⚠️ **Filter by author before taking the last comment.** A bare `.comments[-1]` reads whoever
+commented most recently — and this loop itself comments on PRs (thread replies, the ask, a ladder
+review), so the reviewer's refusal is routinely no longer last. Reading it unfiltered reports a
+structurally refused PR as `requested — verdict pending` and re-asks it every round, spending the
+scarce slot on a PR the vendor has already declined.
 
 A match means the prior ask was **structurally refused** (file cap or another vendor limit) —
 report it as `#<n> structurally refused (file cap)`, not `requested — verdict pending`, and
-never re-ask it (the item-2 filter above now excludes it from candidacy going forward regardless).
+never re-ask it. ⚠️ **Exclude it by the refusal, not by the file cap.** The item-2 filter drops
+PRs at or over `CODERABBIT_FILE_CAP`, which catches only one of the vendor limits that produce this
+refusal — a below-cap PR refused for a different limit stays a candidate and is re-asked forever.
+Candidacy must exclude any PR whose most recent reviewer notice is a structural refusal, whatever
+limit it names.
 No match with no submitted review is genuinely pending — report it as such.
 
 🔴 **Report the count of open PRs with zero submitted reviews, every invocation — not only when

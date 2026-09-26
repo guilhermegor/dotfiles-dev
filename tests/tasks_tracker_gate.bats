@@ -52,7 +52,7 @@ setup() {
 
     gh() {
         case "$*" in
-            "search issues --repo o/r --state open --match title,body widget-export"*)
+            "search issues --repo o/r --state open --include-prs --match title,body widget-export"*)
                 echo '#512 (https://github.com/o/r/issues/512)'
                 ;;
             *) return 1 ;;
@@ -73,7 +73,7 @@ setup() {
 
     gh() {
         case "$*" in
-            "search issues --repo o/r --state open --match title,body shipped-thing"*)
+            "search issues --repo o/r --state open --include-prs --match title,body shipped-thing"*)
                 echo ""
                 ;;
             *) return 1 ;;
@@ -108,5 +108,22 @@ setup() {
 
     [ "$rc" -eq 0 ]
     [ "$TRACKER_STATUS" = "ok" ]
+    [ -z "$TRACKER_REPORT" ]
+}
+
+@test "gate_missing_tracker: more candidates than the search cap fails closed, never partial" {
+    for i in 1 2 3; do
+        mkdir -p "$BATS_TEST_TMPDIR/.specs/features/feat-$i"
+        : > "$BATS_TEST_TMPDIR/.specs/features/feat-$i/plan.md"
+    done
+
+    # Any search call here would be a bug: the cap must be checked BEFORE spending one.
+    gh() { return 1; }
+
+    local rc=0
+    TRACKER_MAX_SEARCHES=2 gate_missing_tracker o r "$BATS_TEST_TMPDIR" || rc=$?
+
+    [ "$rc" -eq 1 ]
+    [ "$TRACKER_STATUS" = "unknown" ]
     [ -z "$TRACKER_REPORT" ]
 }

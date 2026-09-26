@@ -63,6 +63,17 @@ gate_missing_tracker() {
 	local slugs
 	slugs="$(_tracker_feature_dirs "$root")"
 
+	# Each candidate slug below costs one `gh search issues` call, and the search API's limit is
+	# 30/minute -- an order of magnitude tighter than core's 5000/hour. This gate runs from
+	# SubagentStop, so several agents finishing together multiply the burst. Refuse to spend an
+	# unbounded number of calls: report unknown rather than a partial answer, since a truncated
+	# candidate list is indistinguishable from "no candidate" to every caller.
+	local slug_count
+	slug_count="$(printf '%s\n' "$slugs" | sed '/^$/d' | wc -l)"
+	if [ "$slug_count" -gt "${TRACKER_MAX_SEARCHES:-25}" ]; then
+		return 1
+	fi
+
 	local feature_slug hit report=""
 	while IFS= read -r feature_slug; do
 		[ -n "$feature_slug" ] || continue

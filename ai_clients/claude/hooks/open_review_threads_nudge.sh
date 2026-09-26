@@ -272,6 +272,18 @@ _emit_verdict() {
 		} >&2
 		return 0
 		;;
+	unreviewed)
+		# Not a thread finding, and this hook only ever blocked on thread findings. The gate
+		# gained this status with #505; the catch-all below would have reported "still has
+		# unfinished review threads" for a PR with none, which is simply untrue. Reported so
+		# the gap stays visible, never blocking -- an unreviewed PR is the reviewer-slot step's
+		# problem, not a reason to refuse to end a turn.
+		{
+			echo "${prefix}PR #${number}: no reviewer has reported on this head yet — so its"
+			echo "threads being empty is not yet a verdict. Not blocking."
+		} >&2
+		return 0
+		;;
 	clean)
 		return 0
 		;;
@@ -363,6 +375,12 @@ _repo_wide_scan() {
 		# it never blocks, so it must not be mistaken for the one finding this scan is looking
 		# for (dotfiles-dev#491). Keep looking at the rest of the open PRs.
 		if [ "$GATE_STATUS" = "pending_indefinite" ]; then
+			continue
+		fi
+		# Same reasoning one status along: "nobody has reviewed PR #N yet" is not the open-thread
+		# finding this scan looks for, and stopping the scan on it would hide a real finding on a
+		# later PR behind an unreviewed earlier one.
+		if [ "$GATE_STATUS" = "unreviewed" ]; then
 			continue
 		fi
 		if [ "$GATE_STATUS" != "clean" ]; then

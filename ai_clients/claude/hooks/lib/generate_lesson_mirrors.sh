@@ -91,6 +91,19 @@ generate_store_mirror() {
 			render_entry "$file"
 		done
 	} >"$mirror"
+
+	# The mirror moved to .specs/_lessons/ in dotfiles-dev#386 and nothing cleaned up behind it,
+	# so repos still carry a pre-move copy that no longer regenerates -- a stale doc a reader can
+	# open and trust. Warn, never delete: this may run from a hook, and a generator that removes
+	# files would also remove a legitimately hand-written docs/<base>.md that merely collides.
+	# ⚠️ Advisory ONLY -- the exit status stays untouched. Failing the run over a leftover would
+	# break the unrelated flows this is called from.
+	local retired
+	retired="$cwd/$(retired_mirror_rel_path "$mirror_base")"
+	if [ -f "$retired" ]; then
+		printf '⚠ RETIRED mirror still present: %s\n' "$(retired_mirror_rel_path "$mirror_base")" >&2
+		printf '  (pre-#386 path; nothing regenerates it — delete it)\n' >&2
+	fi
 }
 
 main() {

@@ -160,3 +160,37 @@ lesson() {
 	run bash "$GEN" "$REPO"
 	[ "$status" -ne 0 ]
 }
+
+# --- The mirror moved in #386 and nothing cleaned up behind it, so repos still carry a pre-move
+# --- docs/<base>.md that no longer regenerates. Warn, never delete, and never alter the status.
+
+@test "a retired docs/<base>.md still present is reported on stderr" {
+	lesson "$BX_STORE" "matches-repo" "dotfiles-dev"
+	mkdir -p "$REPO/docs"
+	printf 'stale pre-#386 mirror\n' >"$REPO/docs/blueprintx-lessons.md"
+
+	run bash "$GEN" "$REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"RETIRED mirror still present"* ]]
+	[[ "$output" == *"docs/blueprintx-lessons.md"* ]]
+}
+
+@test "the retired path is NEVER deleted — the generator only warns" {
+	lesson "$BX_STORE" "matches-repo" "dotfiles-dev"
+	mkdir -p "$REPO/docs"
+	printf 'stale pre-#386 mirror\n' >"$REPO/docs/blueprintx-lessons.md"
+
+	run bash "$GEN" "$REPO"
+	[ "$status" -eq 0 ]
+	[ -f "$REPO/docs/blueprintx-lessons.md" ]
+	run grep -qF 'stale pre-#386 mirror' "$REPO/docs/blueprintx-lessons.md"
+	[ "$status" -eq 0 ]
+}
+
+@test "no retired copy means no warning, and the status is unchanged either way" {
+	lesson "$BX_STORE" "matches-repo" "dotfiles-dev"
+
+	run bash "$GEN" "$REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"RETIRED mirror"* ]]
+}
